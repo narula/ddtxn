@@ -403,6 +403,6 @@ func (w *Worker) Go() {
 
 func (w *Worker) nextTID() TID {
 	w.next++
-	x := uint64(w.next<<8) | uint64(w.ID)
+	x := uint64(w.next<<16) | uint64(w.ID)<<8 | uint64(w.next%CHUNKS)
 	return TID(x)
 }
