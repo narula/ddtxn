@@ -1,0 +1,6 @@
+*~
+*.test
+*.out
+*.err
+benchmarks/rubis
+benchmarks/buy

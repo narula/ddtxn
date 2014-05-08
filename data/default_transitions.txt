@@ -1,0 +1,51 @@
+RUBiS Transition Table	Default transition set																											
+																												
+"To >>>
+From vvvv  "	Home	RegisterItem	RegisterUser	Browse	BrowseCategories	Search Items Cat.	Br. Reg.	Br. Cat. Reg.	Search Items Reg.	View Item	View User Info	View Bid Hist.	Buy Now Auth	Buy Now	Store Buy Now	Put Bid Auth	Put Bid	Store Bid	Put Com. Auth	Put Comment	Store Comment	Sell	Cat. Sell Item	Sell Item Form	Reg. Item	About Me (auth)	About Me	Transition waiting time
+Home	0	0.0001	0.01	0.0001	0.0001	0.0001	0.0001	0.0001	0.0001	0.0001	0.0001	0.0001	0.0001	0.0001	0.01	0.0001	0.0001	0.01	0.0001	0.0001	0.01	0.0001	0.0001	0.0001	0.01	0.0001	0.002	3000
+Register	0.07	0	0	0.01	0.01	0.01	0.01	0.01	0.01	0.01	0.01	0.01	0.01	0.01	0.01	0.01	0.01	0.01	0.01	0.01	0.01	0.01	0.01	0.01	0.01	0.01	0.01	10000
+RegisterUser	0	0.99	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	3000
+Browse	0.7	0.0058	0.58	0	0.0058	0.0058	0.0058	0.0058	0.0058	0.0058	0.0058	0.0058	0.0058	0.0058	0.58	0.0058	0.0058	0.58	0.0058	0.0058	0.58	0.0058	0.0058	0.0058	0.58	0.0058	0.116	2000
+BrowseCategories	0	0	0	0.7	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	3000
+SearchItemsInCategory	0	0	0	0	0.99	0.4	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	7000
+BrowseRegions	0	0	0	0.29	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	3000
+BrowseCategoriesInRegion	0	0	0	0	0	0	0.99	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	3000
+SearchItemsInRegion	0	0	0	0	0	0	0	0.99	0.4	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	7000
+ViewItem	0	0	0	0	0	0.5	0	0	0.5	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0.65	7000
+ViewUserInfo	0	0	0	0	0	0	0	0	0	0.1	0.19	0.19	0	0	0	0	0.05	0	0	0	0	0	0	0	0	0	0.05	7000
+ViewBidHistory	0	0	0	0	0	0	0	0	0	0.05	0	0	0	0	0	0	0.15	0	0	0	0	0	0	0	0	0	0	7000
+BuyNowAuth	0	0	0	0	0	0	0	0	0	0.1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	5000
+BuyNow	0	0	0	0	0	0	0	0	0	0	0	0	0.99	0	0	0	0	0	0	0	0	0	0	0	0	0	0	5000
+StoreBuyBow	0	0	0	0	0	0	0	0	0	0	0	0	0	0.99	0	0	0	0	0	0	0	0	0	0	0	0	0	2000
+PutBidAuth	0	0	0	0	0	0.09	0	0	0.09	0.22	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0.1	5000
+PutBid	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0.99	0	0	0	0	0	0	0	0	0	0	0	5000
+StoreBid	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0.74	0	0	0	0	0	0	0	0	0	0	2000
+PutCommentAuth	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	5000
+PutComment	0	0	0	0	0	0	0	0	0	0.02	0	0	0	0	0	0	0.05	0	0.99	0	0	0	0	0	0	0	0	5000
+StoreComment	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0.99	0	0	0	0	0	0	0	2000
+Sell	0.05	0.0005	0.05	0.0005	0.0005	0.0005	0.0005	0.0005	0.0005	0.0005	0.0005	0.0005	0.0005	0.0005	0.05	0.0005	0.0005	0.05	0.0005	0.0005	0.05	0.0005	0.0005	0.0005	0.05	0.0005	0.01	5000
+SelectCategoryToSellItem	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0.99	0	0	0	0	0	3000
+SellItemForm	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0.99	0	0	0	0	7000
+RegisterItem	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0.99	0	0	0	2000
+AboutMe (auth form)	0.15	0.0015	0.15	0.0015	0.0015	0.0015	0.0015	0.0015	0.0015	0.0015	0.0015	0.0015	0.0015	0.0015	0.15	0.0015	0.0015	0.15	0.0015	0.0015	0.15	0.0015	0.0015	0.0015	0.15	0.0015	0.03	3000
+AboutMe	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0.99	0	7000
+Back probability	0	0	0	0	0	0	0	0	0	0.5	0.8	0.8	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+End of Session	0	0	0.2	0	0	0.2	0	0	0.2	0.2	0.2	0	0	0	0.2	0	0	0.2	0	0	0.2	0	0	0	0.2	0	0.2	0
+Header probability	0	0.01	1	0.01	0.01	0.01	0.01	0.01	0.01	0.01	0.01	0.01	0.01	0.01	1	0.01	0.01	1	0.01	0.01	1	0.01	0.01	0.01	1	0.01	0.2
+
+																											
+Probabilities for header																											
+HomeProb	0.01			0	Value that is automatically computed																						
+RegisterProb	0.01			0	Value that has to be set manually																						
+BrowseProb	0.58			0	State where we can potentially go back (value must be set to 0)																						
+SellProb	0.05																										
+AboutMeProb	0.15																										
+EndOfSessionProb	0.2																										
+Total	1																										
+																											
+Probabilities for home page																											
+RegisterProb	0.07																										
+BrowseProb	0.7																										
+SellProb	0.08																										
+AboutMeProb	0.15
+Total	1
