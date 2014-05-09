@@ -109,6 +109,21 @@ type Result struct {
 	C bool // committed?
 }
 
+func (w *Worker) BuyTxn2(t *Transaction) *Result {
+	var r *Result = nil
+	if *Allocate {
+		r = &Result{C: false}
+	}
+	user := t.U
+	product := t.P
+	amt := t.A
+	tx := StartTransaction(t, w)
+	tx.Write(user, "x")
+	tx.Write(product, amt)
+	tx.Commit()
+	return r
+}
+
 // Microbenchmark BUY
 func (w *Worker) BuyTxn(user Key, amt int32, product Key) *Result {
 	var r *Result = nil
@@ -132,6 +147,8 @@ func (w *Worker) BuyTxn(user Key, amt int32, product Key) *Result {
 			return r
 		}
 	}
+
+	// COMMIT POINT
 	txid := t | w.epoch
 	//br.value = product
 	if *Global_writes {

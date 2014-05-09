@@ -24,6 +24,7 @@ const (
 type Worker struct {
 	ID           int
 	store        *Store
+	local_store  *LocalStore
 	coordinator  *Coordinator
 	derived_sums map[Key]int32
 	derived_max  map[Key]int32
@@ -399,4 +400,8 @@ func (w *Worker) nextTID() TID {
 	w.next++
 	x := uint64(w.next<<16) | uint64(w.ID)<<8 | uint64(w.next%CHUNKS)
 	return TID(x)
+}
+
+func (w *Worker) commitTID() TID {
+	return w.nextTID() | w.epoch
 }

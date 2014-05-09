@@ -87,6 +87,19 @@ func (s *Store) getOrCreateTypedKey(k Key, v Value, kt KeyType) *BRecord {
 	return br
 }
 
+func (s *Store) Set(br *BRecord, v Value) {
+	switch br.key_type {
+	case SUM:
+		br.int_value = v.(int32)
+	case MAX:
+		br.int_value = v.(int32)
+	case WRITE:
+		br.value = v
+	case LIST:
+		br.AddOneToList(v.(Entry))
+	}
+}
+
 var UseRLocks = flag.Bool("rlock", true, "Use Rlocks\n")
 
 func (s *Store) getKey(k Key) (*BRecord, error) {
