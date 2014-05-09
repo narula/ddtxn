@@ -227,8 +227,6 @@ func main() {
 		nbids = nbids + coord.Workers[i].Nstats[ddtxn.RUBIS_BID]
 		naborts = naborts + coord.Workers[i].Naborts
 		ncopies = ncopies + coord.Workers[i].Ncopy
-		nfound = nfound + coord.Workers[i].Nfound
-		nentered = nentered + coord.Workers[i].Nentered
 	}
 	for i := 0; i < len(stats); i++ {
 		nitr = nitr + stats[i]
@@ -237,7 +235,7 @@ func main() {
 		ddtxn.ValidateRubis(s, users, items)
 	}
 
-	out := fmt.Sprintf(" sys: %v, nworkers: %v, nbidders: %v, nitems: %v, contention: %v, done: %v, actual time: %v, nviews: %v, nbids: %v, epoch changes: %v, total/sec: %v, throughput ns/txn: %v, naborts: %v, ncopies: %v, nmoved: %v, nfound: %v, nentered: %v\n", *ddtxn.SysType, *nworkers, *nbidders, nitems, *contention, nitr, end, "xx", nbids, ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, naborts, ncopies, ddtxn.Moved, nfound, nentered)
+	out := fmt.Sprintf(" sys: %v, nworkers: %v, nbidders: %v, nitems: %v, contention: %v, done: %v, actual time: %v, nviews: %v, nbids: %v, epoch changes: %v, total/sec: %v, throughput ns/txn: %v, naborts: %v, ncopies: %v, nmoved: %v, nfound: %v, nentered: %v", *ddtxn.SysType, *nworkers, *nbidders, nitems, *contention, nitr, end, "xx", nbids, ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, naborts, ncopies, ddtxn.Moved, nfound, nentered)
 	fmt.Printf(out)
 
 	st := strings.Split(out, ",")
@@ -270,4 +268,5 @@ func main() {
 		}
 		f.WriteString(fmt.Sprint("25: %v\n50: %v\n75: %v\n99: %v\n", lh[0].GetPercentile(25), lh[0].GetPercentile(50), lh[0].GetPercentile(75), lh[0].GetPercentile(99)))
 	}
+	f.WriteString("\n")
 }

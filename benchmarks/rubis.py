@@ -23,7 +23,7 @@ LATENCY_PART = "-latency=%s" % options.latency
 DYNAMIC_PART = " -dynamic=%s" % options.dynamic
 SKEWED_PART = " -skewed=%s" % options.skewed
 
-BASE_CMD = "GOGC=off numactl -C `list-cpus seq -n %d %s` ./benchmark-rubis -ngo %d -nprocs %d -nsec %d -contention %d -allocate=%s -sys=%d -rlock=%s "+ LATENCY_PART + DYNAMIC_PART + SKEWED_PART
+BASE_CMD = "GOGC=off numactl -C `list-cpus seq -n %d %s` ./rubis -ngo %d -nprocs %d -nsec %d -contention %d -allocate=%s -sys=%d -rlock=%s "+ LATENCY_PART + DYNAMIC_PART + SKEWED_PART
 
 def run_one(fn, cmd):
     if options.dprint:

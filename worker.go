@@ -33,21 +33,17 @@ type Worker struct {
 	candidates   map[Key]int
 	next         TID
 	epoch        TID
-	safe         TID
 	Incoming     chan Transaction
 	txn_funcs    []func([]interface{}) *Result
 	waiters      *TStore
 	// Stats
-	Nstats   []int64
-	Nreads   int64
-	Nbuys    int64
-	Nbids    int64
-	Naborts  int64
-	Ncopy    int64
-	Nfound   int64
-	Nentered int64
-	ddmu     sync.RWMutex
-	keymap   [](func(uint64) Key)
+	Nstats  []int64
+	Nreads  int64
+	Nbuys   int64
+	Nbids   int64
+	Naborts int64
+	Ncopy   int64
+	ddmu    sync.RWMutex
 
 	lasts []uint64
 	recs  []*BRecord
@@ -373,8 +369,6 @@ func (w *Worker) Go() {
 			w.epoch = msg.T
 			msg.C <- true
 			msg = <-w.coordinator.wsafe[w.ID]
-			//dlog.Printf("[w %v] Safe change %x->%x\n", w.ID, w.safe, msg.T)
-			w.safe = msg.T
 			for i := 0; i < len(w.waiters.t); i++ {
 				t := w.waiters.t[i]
 				w.doRead(t)

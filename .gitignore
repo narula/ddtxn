@@ -4,3 +4,4 @@
 *.err
 benchmarks/rubis
 benchmarks/buy
+benchmarks/tmp
