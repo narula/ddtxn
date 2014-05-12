@@ -7,7 +7,10 @@ import (
 	"flag"
 	"fmt"
 	"math/rand"
+	"os"
+	"os/exec"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,6 +28,7 @@ var readrate = flag.Int("rr", 0, "Read rate %.  Rest are buys")
 var notcontended_readrate = flag.Int("ncrr", 25, "Uncontended read rate %.  Default to half reads uncontended\n")
 
 var latency = flag.Bool("latency", false, "Measure latency")
+var dataFile = flag.String("out", "buy-data.out", "Filename for output")
 
 var nitr int64
 var nreads int64
@@ -153,6 +157,7 @@ func main() {
 	coord.Finish()
 	end := time.Since(start)
 	p.Stop()
+
 	for i := 0; i < *nworkers; i++ {
 		nreads = nreads + coord.Workers[i].Nstats[ddtxn.D_READ_BUY]
 		nbuys = nbuys + coord.Workers[i].Nstats[ddtxn.D_BUY]
@@ -164,14 +169,39 @@ func main() {
 		ddtxn.Validate(coord, s, *nbidders, nproducts, val, int(nitr))
 	}
 
-	fmt.Printf("sys: %v nworkers: %v, nbids: %v, nproducts: %v, contention: %v, done: %v, actual time: %v, nreads: %v, nbuys: %v, epoch changes: %v, total/sec %v, throughput ns/txn: %v, naborts %v, ncopies %v, nmoved %v.\n", *ddtxn.SysType, *nworkers, *nbidders, nproducts, *contention, nitr, end, nreads, nbuys, ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, naborts, ncopies, ddtxn.Moved)
-	//ddtxn.PrintLockCounts(s, *nbidders, nproducts, true)
+	out := fmt.Sprintf(" sys: %v, nworkers: %v, nbids: %v, nproducts: %v, contention: %v, done: %v, actual time: %v, nreads: %v, nbuys: %v, epoch changes: %v, total/sec %v, throughput ns/txn: %v, naborts %v, ncopies %v, nmoved %v", *ddtxn.SysType, *nworkers, *nbidders, nproducts, *contention, nitr, end, nreads, nbuys, ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, naborts, ncopies, ddtxn.Moved)
+	fmt.Printf(out)
+
+	st := strings.Split(out, ",")
+	f, err := os.OpenFile(*dataFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	f.WriteString("# ")
+	o2, err := exec.Command("git", "describe", "--always", "HEAD").Output()
+	f.WriteString(string(o2))
+	f.WriteString("# ")
+	f.WriteString(strings.Join(os.Args, " "))
+	f.WriteString("\n")
+	for i := range st {
+		if _, err = f.WriteString(st[i]); err != nil {
+			panic(err)
+		}
+		f.WriteString("\n")
+	}
+
+	f.WriteString(fmt.Sprintf("txn%v: %v\n", ddtxn.D_BUY, nbuys))
+	f.WriteString(fmt.Sprintf("txn%v: %v\n", ddtxn.D_READ_BUY, nreads))
+
 	if *latency {
 		for i := 1; i < *clientGoRoutines; i++ {
 			lhr[0].Combine(lhr[i])
 			lhw[0].Combine(lhw[i])
 		}
-		fmt.Printf("Read 25: %v, 50: %v, 75: %v, 99: %v\n", lhr[0].GetPercentile(25), lhr[0].GetPercentile(50), lhr[0].GetPercentile(75), lhr[0].GetPercentile(99))
-		fmt.Printf("Write 25: %v, 50: %v, 75: %v, 99: %v\n", lhw[0].GetPercentile(25), lhw[0].GetPercentile(50), lhw[0].GetPercentile(75), lhw[0].GetPercentile(99))
+		f.WriteString(fmt.Sprint("Read 25: %v\nRead 50: %v\nRead 75: %v\nRead 99: %v\n", lhr[0].GetPercentile(25), lhr[0].GetPercentile(50), lhr[0].GetPercentile(75), lhr[0].GetPercentile(99)))
+		f.WriteString(fmt.Sprint("Write 25: %v\nWrite 50: %v\nWrite 75: %v\nWrite 99: %v\n", lhw[0].GetPercentile(25), lhw[0].GetPercentile(50), lhw[0].GetPercentile(75), lhw[0].GetPercentile(99)))
 	}
+	f.WriteString("\n")
+	//ddtxn.PrintLockCounts(s, *nbidders, nproducts, true)
 }

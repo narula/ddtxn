@@ -28,7 +28,7 @@ var nbidders = flag.Int("nb", 1000000, "Bidders in store, default is 1M")
 var latency = flag.Bool("latency", false, "Measure latency")
 
 var skewed = flag.Bool("skewed", false, "Skewed workload")
-var dataFile = flag.String("out", "data.out", "Filename for output")
+var dataFile = flag.String("out", "rubis-data.out", "Filename for output")
 
 var nitr int64
 var nviews int64
