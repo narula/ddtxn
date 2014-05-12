@@ -6,7 +6,6 @@ import (
 	"ddtxn/stats"
 	"flag"
 	"fmt"
-	"log"
 	"math/rand"
 	"runtime"
 	"sync"
@@ -52,12 +51,12 @@ func main() {
 	bidder_keys := make([]ddtxn.Key, *nbidders)
 
 	for i := 0; i < nproducts; i++ {
-		k := ddtxn.DistProductKey(i, nproducts)
+		k := ddtxn.ProductKey(i)
 		dd[i] = k
 	}
 	data := make(map[ddtxn.Key]ddtxn.Value)
 	for i := 0; i < *nbidders; i++ {
-		k := ddtxn.DistUserKey(i, *nbidders)
+		k := ddtxn.UserKey(i)
 		data[k] = int32(0)
 		bidder_keys[i] = k
 	}
@@ -100,60 +99,30 @@ func main() {
 					product := int(ddtxn.RandN(&local_seed, uint32(nproducts)))
 					x := int(ddtxn.RandN(&local_seed, uint32(100)))
 
-					var txn ddtxn.Transaction
+					var txn ddtxn.Query
 					if x < *readrate {
-						txn = ddtxn.Transaction{
-							TXN: ddtxn.D_READ_FRESH,
-							P:   dd[product],
+						txn = ddtxn.Query{
+							TXN: ddtxn.D_READ_BUY,
+							K1:  dd[product],
 						}
 						if *latency {
 							txn.W = make(chan *ddtxn.Result)
 						}
 						if x >= *notcontended_readrate {
 							// Contended read; must execute in join phase
-							switch *ddtxn.SysType {
-							case ddtxn.OCC:
-								txn.TXN = ddtxn.OCC_READ_FRESH
-							case ddtxn.DOPPEL:
-								txn.TXN = ddtxn.D_READ_FRESH
-							case ddtxn.LOCKING:
-								txn.TXN = ddtxn.LOCK_READ
-							default:
-								log.Fatalf("No such system %v\n", *ddtxn.SysType)
-							}
 						} else {
 							// Uncontended read
-							txn.P = bidder_keys[bidder]
-							switch *ddtxn.SysType {
-							case ddtxn.OCC:
-								txn.TXN = ddtxn.OCC_READ_FRESH
-							case ddtxn.DOPPEL:
-								txn.TXN = ddtxn.D_READ_NP
-							case ddtxn.LOCKING:
-								txn.TXN = ddtxn.LOCK_READ
-							default:
-								log.Fatalf("No such system %v\n", *ddtxn.SysType)
-							}
+							txn.K1 = bidder_keys[bidder]
 						}
 					} else {
-						txn = ddtxn.Transaction{
+						txn = ddtxn.Query{
 							TXN: ddtxn.D_BUY,
-							U:   bidder_keys[bidder],
+							K1:  bidder_keys[bidder],
 							A:   amt,
-							P:   dd[product],
+							K2:  dd[product],
 						}
 						if *latency {
 							txn.W = make(chan *ddtxn.Result)
-						}
-						switch *ddtxn.SysType {
-						case ddtxn.OCC:
-							txn.TXN = ddtxn.OCC_BUY
-						case ddtxn.DOPPEL:
-							txn.TXN = ddtxn.D_BUY
-						case ddtxn.LOCKING:
-							txn.TXN = ddtxn.LOCK_BUY
-						default:
-							log.Fatalf("No such system %v\n", *ddtxn.SysType)
 						}
 						if !*latency && *doValidate {
 							atomic.AddInt32(&val[product], amt)
@@ -185,14 +154,14 @@ func main() {
 	end := time.Since(start)
 	p.Stop()
 	for i := 0; i < *nworkers; i++ {
-		nreads = nreads + coord.Workers[i].Nreads
-		nbuys = nbuys + coord.Workers[i].Nbuys
+		nreads = nreads + coord.Workers[i].Nstats[ddtxn.D_READ_BUY]
+		nbuys = nbuys + coord.Workers[i].Nstats[ddtxn.D_BUY]
 		naborts = naborts + coord.Workers[i].Naborts
 		ncopies = naborts + coord.Workers[i].Ncopy
 	}
 	nitr = nreads + nbuys
 	if *doValidate {
-		ddtxn.DistValidate(coord, s, *nbidders, nproducts, val, int(nitr))
+		ddtxn.Validate(coord, s, *nbidders, nproducts, val, int(nitr))
 	}
 
 	fmt.Printf("sys: %v nworkers: %v, nbids: %v, nproducts: %v, contention: %v, done: %v, actual time: %v, nreads: %v, nbuys: %v, epoch changes: %v, total/sec %v, throughput ns/txn: %v, naborts %v, ncopies %v, nmoved %v.\n", *ddtxn.SysType, *nworkers, *nbidders, nproducts, *contention, nitr, end, nreads, nbuys, ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, naborts, ncopies, ddtxn.Moved)

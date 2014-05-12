@@ -1,7 +1,6 @@
 package ddtxn
 
 import (
-	"ddtxn/dlog"
 	"errors"
 	"flag"
 	"log"
@@ -21,6 +20,7 @@ type Chunk struct {
 var (
 	ENOKEY = errors.New("doppel: no key")
 	EABORT = errors.New("doppel: abort")
+	ESTASH = errors.New("doppel: stash")
 )
 
 const (
@@ -87,12 +87,15 @@ func (s *Store) getOrCreateTypedKey(k Key, v Value, kt KeyType) *BRecord {
 	return br
 }
 
-func (s *Store) Set(br *BRecord, v Value) {
-	switch br.key_type {
+func (s *Store) Set(br *BRecord, v Value, op KeyType) {
+	switch op {
 	case SUM:
-		br.int_value = v.(int32)
+		br.int_value += v.(int32)
 	case MAX:
-		br.int_value = v.(int32)
+		x := v.(int32)
+		if x > br.int_value {
+			br.int_value = v.(int32)
+		}
 	case WRITE:
 		br.value = v
 	case LIST:
@@ -111,7 +114,6 @@ func (s *Store) getKey(k Key) (*BRecord, error) {
 		x, err := s.getKeyStatic(k)
 		return x, err
 	}
-	dlog.Printf("key %v\n", k)
 	chunk := s.store[k[0]]
 	if chunk == nil {
 		log.Fatalf("[store] Didn't initialize chunk for key %v byte %v\n", k, k[0])
@@ -123,7 +125,7 @@ func (s *Store) getKey(k Key) (*BRecord, error) {
 		return vr, ENOKEY
 	}
 	chunk.RUnlock()
-	if *Dynamic && *SysType == DOPPEL {
+	if *SysType == DOPPEL {
 		if vr.locked > THRESHOLD {
 			s.lock_candidates.Lock()
 			s.candidates[k] = true
@@ -146,7 +148,7 @@ func (s *Store) getKeyStatic(k Key) (*BRecord, error) {
 	if !ok {
 		return vr, ENOKEY
 	}
-	if *Dynamic && *SysType == DOPPEL {
+	if *SysType == DOPPEL {
 		if vr.locked > THRESHOLD {
 			s.lock_candidates.Lock()
 			s.candidates[k] = true

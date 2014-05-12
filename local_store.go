@@ -1,6 +1,7 @@
 package ddtxn
 
 import (
+	"ddtxn/dlog"
 	"log"
 	"runtime/debug"
 )
@@ -27,8 +28,12 @@ func NewLocalStore(s *Store) *LocalStore {
 	return ls
 }
 
-func (ls *LocalStore) Apply(br *BRecord, v Value) {
-	switch br.key_type {
+func (ls *LocalStore) Apply(br *BRecord, v Value, op KeyType) {
+	if op != br.key_type {
+		// Perhaps do something.  When is this set?
+		dlog.Printf("Different op types %v %v %v\n", br.key_type, op, br)
+	}
+	switch op {
 	case SUM:
 		ls.sums[br.key] += v.(int32)
 	case MAX:
@@ -116,11 +121,17 @@ func (ls *LocalStore) Merge() {
 //   - abort
 //   - stash
 
+type Write struct {
+	br     *BRecord
+	v      Value
+	op     KeyType
+	create bool
+}
+
 type ETransaction struct {
-	t      *Transaction
+	q      *Query
 	lasts  map[*BRecord]uint64
-	writes map[Key]*BRecord
-	values map[Key]Value
+	writes map[Key]Write
 	locked map[*BRecord]bool
 	w      *Worker
 	s      *Store
@@ -128,12 +139,11 @@ type ETransaction struct {
 }
 
 // Re-use this?
-func StartTransaction(t *Transaction, w *Worker) *ETransaction {
+func StartTransaction(q *Query, w *Worker) *ETransaction {
 	tx := &ETransaction{
-		t:      t,
+		q:      q,
 		lasts:  make(map[*BRecord]uint64),
-		writes: make(map[Key]*BRecord),
-		values: make(map[Key]Value),
+		writes: make(map[Key]Write),
 		locked: make(map[*BRecord]bool),
 		w:      w,
 		s:      w.store,
@@ -144,10 +154,13 @@ func StartTransaction(t *Transaction, w *Worker) *ETransaction {
 
 func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	br, err := tx.s.getKey(k)
+	if err != nil {
+		return nil, err
+	}
 	if br.dd {
 		//
-		tx.w.stashTxn(*tx.t)
-		return nil, nil
+		tx.w.stashTxn(*tx.q)
+		return nil, ESTASH
 	}
 	if err != nil {
 		return nil, err
@@ -163,7 +176,7 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	return br, nil
 }
 
-func (tx *ETransaction) Write(k Key, v Value) {
+func (tx *ETransaction) Write(k Key, v Value, op KeyType) {
 	// Optimization: check to see if tx already tried to read or write
 	// it and it's in tx.lasts or tx.writes map.
 	br, err := tx.s.getKey(k)
@@ -171,8 +184,12 @@ func (tx *ETransaction) Write(k Key, v Value) {
 		debug.PrintStack()
 		log.Fatalf("no key %v %v\n", k, v)
 	}
-	tx.values[k] = v
-	tx.writes[k] = br
+	tx.writes[k] = Write{br, v, op, false}
+}
+
+func (tx *ETransaction) WriteOrCreate(k Key, v Value, kt KeyType) {
+	br := tx.s.getOrCreateTypedKey(k, v, kt)
+	tx.writes[k] = Write{br, v, kt, true}
 }
 
 func (tx *ETransaction) Abort() TID {
@@ -186,7 +203,8 @@ func (tx *ETransaction) Commit() TID {
 	// for each write key
 	//  if global get from global store and lock
 	// TODO: if br is nil, create the key
-	for _, br := range tx.writes {
+	for _, w := range tx.writes {
+		br := w.br
 		if !br.dd {
 			if !br.Lock() {
 				return tx.Abort()
@@ -209,12 +227,12 @@ func (tx *ETransaction) Commit() TID {
 	// for each write key
 	//  if dd, apply locally
 	//  else apply globally and unlock
-	for k, br := range tx.writes {
-		if br.dd {
-			tx.ls.Apply(br, tx.values[k])
+	for _, w := range tx.writes {
+		if w.br.dd {
+			tx.ls.Apply(w.br, w.v, w.op)
 		} else {
-			tx.s.Set(br, tx.values[k])
-			br.Unlock(tid)
+			tx.s.Set(w.br, w.v, w.op)
+			w.br.Unlock(tid)
 		}
 	}
 	return tid

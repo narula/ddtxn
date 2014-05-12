@@ -71,7 +71,7 @@ func (br *BRecord) Value() Value {
 // Used during "normal" phase
 func (br *BRecord) Lock() bool {
 	x := br.last.Lock()
-	if *Dynamic && *SysType == DOPPEL {
+	if *SysType == DOPPEL {
 		if !x {
 			br.locked++
 		}
@@ -80,7 +80,7 @@ func (br *BRecord) Lock() bool {
 }
 
 func (br *BRecord) Unlock(tid TID) {
-	if *Dynamic && *SysType == DOPPEL {
+	if *SysType == DOPPEL {
 		x := CLEAR_TID & uint64(tid)
 		if x > br.lastEpoch {
 			br.lastEpoch = x
@@ -93,7 +93,7 @@ func (br *BRecord) Unlock(tid TID) {
 func (br *BRecord) IsUnlocked() (bool, uint64) {
 	x := br.last.Read()
 	if x&wfmutex.LOCKED != 0 {
-		if *Dynamic && *SysType == DOPPEL {
+		if *SysType == DOPPEL {
 			// warning!  turning a read-only thing into a read/write!
 			br.locked++
 		}
@@ -104,7 +104,7 @@ func (br *BRecord) IsUnlocked() (bool, uint64) {
 
 func (br *BRecord) Verify(last uint64) bool {
 	ok, new_last := br.IsUnlocked()
-	if *Dynamic && *SysType == DOPPEL {
+	if *SysType == DOPPEL {
 		x := CLEAR_TID & last
 		if x > br.lastEpoch {
 			// warning!  turning a read-only thing into a read/write!
@@ -154,33 +154,31 @@ const (
 	DEFAULT_LIST_SIZE = 10
 )
 
-func AddToList(k Key, w *Worker, e Entry) {
-	lst := w.derived_list[k]
+func AddToList(k Key, lst []Entry, e Entry) {
 	added := false
 	for i := 0; i < len(lst); i++ {
 		if lst[i].order < e.order {
 			lst = append(lst, Entry{})
 			copy(lst[i+1:], lst[i:])
 			lst[i] = e
-			w.derived_list[k] = lst
 			added = true
 			break
 		}
 	}
 
 	if added {
-		if len(w.derived_list[k]) <= DEFAULT_LIST_SIZE {
+		if len(lst) <= DEFAULT_LIST_SIZE {
 			return
 		} else {
-			w.derived_list[k] = w.derived_list[k][:DEFAULT_LIST_SIZE]
+			lst = lst[:DEFAULT_LIST_SIZE]
 		}
-	} else if len(w.derived_list[k]) < DEFAULT_LIST_SIZE {
-		w.derived_list[k] = append(w.derived_list[k], e)
-	} else if len(w.derived_list[k]) > DEFAULT_LIST_SIZE {
-		w.derived_list[k] = w.derived_list[k][:DEFAULT_LIST_SIZE]
+	} else if len(lst) < DEFAULT_LIST_SIZE {
+		lst = append(lst, e)
+	} else if len(lst) > DEFAULT_LIST_SIZE {
+		lst = lst[:DEFAULT_LIST_SIZE]
 	}
-	if len(w.derived_list[k]) > DEFAULT_LIST_SIZE {
-		log.Fatalf("How did this happen AddToList?  %v %v %v\n", e, w.derived_list[k], w.derived_list[k][:DEFAULT_LIST_SIZE])
+	if len(lst) > DEFAULT_LIST_SIZE {
+		log.Fatalf("How did this happen AddToList?  %v %v %v\n", e, lst, lst[:DEFAULT_LIST_SIZE])
 	}
 }
 

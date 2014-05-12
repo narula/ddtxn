@@ -61,7 +61,6 @@ var NextEpoch int64
 func (c *Coordinator) NextGlobalTID() TID {
 	NextEpoch++
 	x := atomic.AddUint64((*uint64)(unsafe.Pointer(&c.epochTID)), EPOCH_INCR)
-	//dlog.Printf("Bumping epoch to... %x\n", x)
 	return TID(x)
 }
 
@@ -85,7 +84,7 @@ func (c *Coordinator) IncrementEpoch() {
 	for i := 0; i < c.n; i++ {
 		<-m[i].C
 	}
-	if *Dynamic && *SysType == DOPPEL {
+	if *SysType == DOPPEL {
 		// Find out if anything should be added to DD
 		keys := make(map[Key]bool)
 		s := c.Workers[0].store
@@ -130,7 +129,7 @@ func (c *Coordinator) Process() {
 		select {
 		case d := <-c.Done:
 			for i := 0; i < c.n; i++ {
-				txn := Transaction{TXN: LAST_TXN, W: make(chan *Result)}
+				txn := Query{TXN: LAST_TXN, W: make(chan *Result)}
 				dlog.Printf("Finishing, waiting on %d\n", i)
 				c.Workers[i].Incoming <- txn
 				<-txn.W
@@ -139,10 +138,14 @@ func (c *Coordinator) Process() {
 			d <- true
 			return
 		case <-tm:
-			c.IncrementEpoch()
+			if *SysType == DOPPEL {
+				c.IncrementEpoch()
+			}
 		case <-c.Accelerate:
-			dlog.Printf("Accelerating\n")
-			c.IncrementEpoch()
+			if *SysType == DOPPEL {
+				dlog.Printf("Accelerating\n")
+				c.IncrementEpoch()
+			}
 		}
 	}
 }

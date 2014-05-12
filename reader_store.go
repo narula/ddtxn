@@ -1,15 +1,15 @@
 package ddtxn
 
 type TStore struct {
-	t []Transaction
+	t []Query
 }
 
 func TSInit(n int) *TStore {
-	ts := &TStore{t: make([]Transaction, 0, n)}
+	ts := &TStore{t: make([]Query, 0, n)}
 	return ts
 }
 
-func (ts *TStore) Add(t Transaction) {
+func (ts *TStore) Add(t Query) {
 	ts.t = append(ts.t, t)
 }
 
