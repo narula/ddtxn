@@ -4,6 +4,7 @@ import (
 	crand "crypto/rand"
 	"ddtxn/dlog"
 	"fmt"
+	"math"
 )
 
 func CKey(x uint64, ch rune) Key {
@@ -184,4 +185,31 @@ func PrintLockCounts(s *Store, nkeys int, nproducts int, dist bool) {
 			}
 		}
 	}
+}
+
+func StddevChunks(nc []int64) (int64, float64) {
+	var total int64
+	var n int64
+	var i int64
+	n = int64(len(nc))
+	for i = 0; i < n; i++ {
+		total += nc[i]
+	}
+	mean := total / n
+	variances := make([]int64, n)
+
+	for i = 0; i < n; i++ {
+		x := nc[i] - mean
+		if x < 0 {
+			x = x * -1
+		}
+		x = x * x
+		variances[i] = x
+	}
+
+	var stddev int64
+	for i = 0; i < n; i++ {
+		stddev += variances[i]
+	}
+	return mean, math.Sqrt(float64(stddev / n))
 }

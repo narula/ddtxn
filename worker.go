@@ -72,6 +72,7 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 	} else {
 		w.waiters = TSInit(1)
 	}
+	w.local_store.stash = true
 	w.Register(D_BUY, BuyTxn)
 	w.Register(D_BUY_NC, BuyNCTxn)
 	w.Register(D_BID, BidTxn)
@@ -92,6 +93,9 @@ func (w *Worker) doTxn(t Query) {
 	}
 	x, err := w.txns[t.TXN](&t, w)
 	if err == ESTASH {
+		if w.local_store.stash == false {
+			log.Fatalf("Stashing when I shouldn't be\n")
+		}
 		w.stashTxn(t)
 		return
 	}
@@ -114,11 +118,13 @@ func (w *Worker) Go() {
 			w.epoch = msg.T
 			msg.C <- true
 			msg = <-w.coordinator.wsafe[w.ID]
+			w.local_store.stash = false
 			for i := 0; i < len(w.waiters.t); i++ {
 				t := w.waiters.t[i]
 				w.doTxn(t)
 			}
 			w.waiters.clear()
+			w.local_store.stash = true
 			msg.C <- true
 			<-w.coordinator.wgo[w.ID]
 		// New transactions.  Do if possible.
@@ -126,6 +132,7 @@ func (w *Worker) Go() {
 			if t.TXN == LAST_TXN {
 				if *SysType == DOPPEL {
 					w.local_store.Merge()
+					w.local_store.stash = false
 					for i := 0; i < len(w.waiters.t); i++ {
 						t := w.waiters.t[i]
 						w.doTxn(t)

@@ -1,7 +1,6 @@
 package ddtxn
 
 import (
-	"ddtxn/dlog"
 	"errors"
 	"flag"
 	"log"
@@ -124,7 +123,6 @@ func (s *Store) readKey(k Key) (*BRecord, error) {
 func (s *Store) writeKey(k Key) (*BRecord, error) {
 	vr, err := s.getKey(k)
 	if *SysType == DOPPEL && err == nil {
-		dlog.Printf("Checking %v %v threshold %v\n", vr.dd, vr.locked, THRESHOLD)
 		if !vr.dd && vr.locked > THRESHOLD {
 			s.lock_candidates.Lock()
 			s.candidates[k] = vr
@@ -140,6 +138,7 @@ func (s *Store) getKey(k Key) (*BRecord, error) {
 		debug.PrintStack()
 		log.Fatalf("[store] getKey(): Empty key\n")
 	}
+	//s.NChunksAccessed[k[0]]++
 	if !*UseRLocks {
 		x, err := s.getKeyStatic(k)
 		return x, err

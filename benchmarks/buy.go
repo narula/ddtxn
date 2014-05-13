@@ -113,7 +113,7 @@ func main() {
 							txn.W = make(chan *ddtxn.Result)
 						}
 						if x >= *notcontended_readrate {
-							// Contended read; must execute in join phase
+							// Contended read; already set K1
 						} else {
 							// Uncontended read
 							txn.K1 = bidder_keys[bidder]
@@ -162,7 +162,6 @@ func main() {
 		nreads = nreads + coord.Workers[i].Nstats[ddtxn.D_READ_BUY]
 		nbuys = nbuys + coord.Workers[i].Nstats[ddtxn.D_BUY]
 		naborts = naborts + coord.Workers[i].Naborts
-		ncopies = naborts + coord.Workers[i].Ncopy
 	}
 	nitr = nreads + nbuys
 	if *doValidate {
@@ -171,6 +170,7 @@ func main() {
 
 	out := fmt.Sprintf(" sys: %v, nworkers: %v, nbids: %v, nproducts: %v, contention: %v, done: %v, actual time: %v, nreads: %v, nbuys: %v, epoch changes: %v, total/sec %v, throughput ns/txn: %v, naborts %v, ncopies %v, nmoved %v", *ddtxn.SysType, *nworkers, *nbidders, nproducts, *contention, nitr, end, nreads, nbuys, ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, naborts, ncopies, ddtxn.Moved)
 	fmt.Printf(out)
+	fmt.Printf("\n")
 
 	st := strings.Split(out, ",")
 	f, err := os.OpenFile(*dataFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
@@ -201,6 +201,18 @@ func main() {
 		}
 		f.WriteString(fmt.Sprint("Read 25: %v\nRead 50: %v\nRead 75: %v\nRead 99: %v\n", lhr[0].GetPercentile(25), lhr[0].GetPercentile(50), lhr[0].GetPercentile(75), lhr[0].GetPercentile(99)))
 		f.WriteString(fmt.Sprint("Write 25: %v\nWrite 50: %v\nWrite 75: %v\nWrite 99: %v\n", lhw[0].GetPercentile(25), lhw[0].GetPercentile(50), lhw[0].GetPercentile(75), lhw[0].GetPercentile(99)))
+	}
+
+	mean, stddev := ddtxn.StddevChunks(s.NChunksAccessed)
+	f.WriteString(fmt.Sprintf("mean: %v\nstddev: %v\n", mean, stddev))
+	for i := 0; i < len(s.NChunksAccessed); i++ {
+		x := float64(mean) - float64(s.NChunksAccessed[i])
+		if x < 0 {
+			x = x * -1
+		}
+		if x > stddev {
+			f.WriteString(fmt.Sprintf("Chunk %v: %v\n", i, s.NChunksAccessed[i]))
+		}
 	}
 	f.WriteString("\n")
 	//ddtxn.PrintLockCounts(s, *nbidders, nproducts, true)

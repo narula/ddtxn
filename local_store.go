@@ -15,6 +15,7 @@ type LocalStore struct {
 	bw    map[Key]Value
 	lists map[Key][]Entry
 	s     *Store
+	stash bool
 }
 
 func NewLocalStore(s *Store) *LocalStore {
@@ -157,9 +158,7 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	if br.dd {
-		// Increment something
-		tx.w.stashTxn(*tx.q)
+	if br.dd && tx.ls.stash {
 		return nil, ESTASH
 	}
 	if err != nil {

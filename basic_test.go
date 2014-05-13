@@ -111,3 +111,13 @@ func TestTStore(t *testing.T) {
 		t.Errorf("Wrong value %v\n", ts.t)
 	}
 }
+
+func TestStddev(t *testing.T) {
+	x := make([]int64, 10)
+	for i := 0; i < 10; i++ {
+		x[i] = int64(i)
+	}
+	mean, stddev := StddevChunks(x)
+	_ = mean
+	_ = stddev
+}

@@ -150,7 +150,6 @@ func ReadBuyTxn(t *Query, w *Worker) (*Result, error) {
 	tx := StartTransaction(t, w)
 	v1, err := tx.Read(t.K1)
 	if err != nil {
-		dlog.Printf("Error?  %v %v\n", t.K2, err)
 		return r, err
 	}
 	var txid TID
