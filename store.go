@@ -1,6 +1,7 @@
 package ddtxn
 
 import (
+	"ddtxn/dlog"
 	"errors"
 	"flag"
 	"log"
@@ -30,7 +31,8 @@ const (
 // Global data
 type Store struct {
 	store           []*Chunk
-	candidates      map[Key]bool
+	candidates      map[Key]*BRecord
+	rcandidates     map[Key]*BRecord
 	lock_candidates sync.Mutex
 	NChunksAccessed []int64
 }
@@ -38,7 +40,8 @@ type Store struct {
 func NewStore() *Store {
 	s := &Store{
 		store:           make([]*Chunk, CHUNKS),
-		candidates:      make(map[Key]bool),
+		candidates:      make(map[Key]*BRecord),
+		rcandidates:     make(map[Key]*BRecord),
 		NChunksAccessed: make([]int64, CHUNKS),
 	}
 	var bb byte
@@ -54,7 +57,7 @@ func NewStore() *Store {
 }
 
 func (s *Store) getOrCreateKey(k Key) *BRecord {
-	br, err := s.getKey(k)
+	br, err := s.writeKey(k)
 	if err == ENOKEY {
 		// Create key
 		chunk := s.store[k[0]]
@@ -71,7 +74,7 @@ func (s *Store) getOrCreateKey(k Key) *BRecord {
 }
 
 func (s *Store) getOrCreateTypedKey(k Key, v Value, kt KeyType) *BRecord {
-	br, err := s.getKey(k)
+	br, err := s.writeKey(k)
 	if err == ENOKEY {
 		// Create key
 		chunk := s.store[k[0]]
@@ -105,6 +108,33 @@ func (s *Store) Set(br *BRecord, v Value, op KeyType) {
 
 var UseRLocks = flag.Bool("rlock", true, "Use Rlocks\n")
 
+func (s *Store) readKey(k Key) (*BRecord, error) {
+	vr, err := s.getKey(k)
+	if *SysType == DOPPEL && err == nil {
+		if vr.dd && vr.stashed > RTHRESHOLD {
+			s.lock_candidates.Lock()
+			s.rcandidates[k] = vr
+			vr.stashed = 0
+			s.lock_candidates.Unlock()
+		}
+	}
+	return vr, err
+}
+
+func (s *Store) writeKey(k Key) (*BRecord, error) {
+	vr, err := s.getKey(k)
+	if *SysType == DOPPEL && err == nil {
+		dlog.Printf("Checking %v %v threshold %v\n", vr.dd, vr.locked, THRESHOLD)
+		if !vr.dd && vr.locked > THRESHOLD {
+			s.lock_candidates.Lock()
+			s.candidates[k] = vr
+			vr.locked = 0
+			s.lock_candidates.Unlock()
+		}
+	}
+	return vr, err
+}
+
 func (s *Store) getKey(k Key) (*BRecord, error) {
 	if len(k) == 0 {
 		debug.PrintStack()
@@ -125,14 +155,6 @@ func (s *Store) getKey(k Key) (*BRecord, error) {
 		return vr, ENOKEY
 	}
 	chunk.RUnlock()
-	if *SysType == DOPPEL {
-		if vr.locked > THRESHOLD {
-			s.lock_candidates.Lock()
-			s.candidates[k] = true
-			vr.locked = 0
-			s.lock_candidates.Unlock()
-		}
-	}
 	return vr, nil
 }
 
@@ -148,13 +170,6 @@ func (s *Store) getKeyStatic(k Key) (*BRecord, error) {
 	if !ok {
 		return vr, ENOKEY
 	}
-	if *SysType == DOPPEL {
-		if vr.locked > THRESHOLD {
-			s.lock_candidates.Lock()
-			s.candidates[k] = true
-			vr.locked = 0
-			s.lock_candidates.Unlock()
-		}
-	}
+	// TODO: mark candidates
 	return vr, nil
 }

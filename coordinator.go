@@ -85,19 +85,21 @@ func (c *Coordinator) IncrementEpoch() {
 		<-m[i].C
 	}
 	if *SysType == DOPPEL {
-		// Find out if anything should be added to DD
-		keys := make(map[Key]bool)
 		s := c.Workers[0].store
 		s.lock_candidates.Lock()
-		for k, _ := range s.candidates {
-			keys[k] = true
+		for _, br := range s.candidates {
+			br.dd = true
+			Moved += 1
+			dlog.Printf("Moving %v to dd\n", br.key)
 		}
-		s.candidates = make(map[Key]bool)
+		for _, br := range s.rcandidates {
+			br.dd = false
+			Moved += 1
+			dlog.Printf("Moving %v from dd\n", br.key)
+		}
+		s.candidates = make(map[Key]*BRecord)
+		s.rcandidates = make(map[Key]*BRecord)
 		s.lock_candidates.Unlock()
-		Moved += int64(len(keys))
-		for _, w := range c.Workers {
-			w.AddDD(keys)
-		}
 	}
 
 	// All merged.  The previous epoch is now safe; tell everyone to

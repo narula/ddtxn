@@ -14,7 +14,6 @@ type Query struct {
 	T   TID
 	K1  Key
 	K2  Key
-	K3  Key
 	A   int32
 	U1  uint64
 	U2  uint64
@@ -56,6 +55,38 @@ func BuyTxn(t *Query, w *Worker) (*Result, error) {
 		return r, EABORT
 	}
 	w.Nstats[D_BUY]++
+	if *Allocate {
+		r.C = true
+	}
+	return r, nil
+}
+
+// Verison of BUY that puts total in read set
+func BuyNCTxn(t *Query, w *Worker) (*Result, error) {
+	var r *Result = nil
+	if *Allocate {
+		r = &Result{C: false}
+	}
+	tx := StartTransaction(t, w)
+	tx.WriteOrCreate(t.K1, "x", WRITE)
+	br, err := tx.Read(t.K2)
+	if err == ESTASH {
+		return nil, ESTASH
+	}
+	if err == EABORT {
+		dlog.Println(br, err, t.K2)
+		return r, EABORT
+	}
+	var sum int32
+	if err == nil {
+		sum = br.value.(int32)
+	}
+	tx.WriteOrCreate(t.K2, t.A+sum, WRITE)
+	if tx.Commit() == 0 {
+		w.Naborts++
+		return r, EABORT
+	}
+	w.Nstats[D_BUY_NC]++
 	if *Allocate {
 		r.C = true
 	}

@@ -153,12 +153,12 @@ func StartTransaction(q *Query, w *Worker) *ETransaction {
 }
 
 func (tx *ETransaction) Read(k Key) (*BRecord, error) {
-	br, err := tx.s.getKey(k)
+	br, err := tx.s.readKey(k)
 	if err != nil {
 		return nil, err
 	}
 	if br.dd {
-		//
+		// Increment something
 		tx.w.stashTxn(*tx.q)
 		return nil, ESTASH
 	}
@@ -179,7 +179,7 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 func (tx *ETransaction) Write(k Key, v Value, op KeyType) {
 	// Optimization: check to see if tx already tried to read or write
 	// it and it's in tx.lasts or tx.writes map.
-	br, err := tx.s.getKey(k)
+	br, err := tx.s.writeKey(k)
 	if err != nil {
 		debug.PrintStack()
 		log.Fatalf("no key %v %v\n", k, v)
