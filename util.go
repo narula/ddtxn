@@ -108,34 +108,16 @@ func Randstr(sz int) string {
 	return string(bytes)
 }
 
-func (s *Store) LoadBuy(keys []Key, m map[Key]Value) {
-	for _, k := range keys {
-		s.getOrCreateTypedKey(k, int32(0), SUM)
-	}
-	for k, v := range m {
-		b, err := s.getKey(k)
-		if err == ENOKEY {
-			b = MakeBR(k, v, WRITE)
-			s.store[k[0]].rows[k] = b
-		}
-		b.value = v
-	}
-	dlog.Printf("Done loading\n")
-}
-
 // For BUY and MAX tests
 func loadStore(nb, np int) *Store {
 	s := NewStore()
 	// Load
-	dd := make([]Key, np)
-	m := make(map[Key]Value)
 	for i := 0; i < np; i++ {
-		dd[i] = ProductKey(i)
+		s.CreateKey(ProductKey(i), int32(0), SUM)
 	}
 	for i := 0; i < nb; i++ {
-		m[UserKey(i)] = "x"
+		s.CreateKey(UserKey(i), "x", WRITE)
 	}
-	s.LoadBuy(dd, m)
 	return s
 }
 
@@ -155,7 +137,7 @@ func Validate(c *Coordinator, s *Store, nkeys int, nproducts int, val []int32, n
 			continue
 		}
 		if *SysType != DOPPEL {
-			x = v.value.(int32)
+			x = v.Value().(int32)
 		} else {
 			x = v.Value().(int32)
 			dlog.Printf("Validate: %v %v\n", k, x)

@@ -48,7 +48,6 @@ func BuyTxn(t *Query, w *Worker) (*Result, error) {
 		r = &Result{C: false}
 	}
 	tx := w.ctxn
-	tx.Reset(t)
 	tx.WriteOrCreate(t.K1, "x", WRITE)
 	tx.WriteOrCreate(t.K2, t.A, SUM)
 	if tx.Commit() == 0 {
@@ -69,14 +68,13 @@ func BuyNCTxn(t *Query, w *Worker) (*Result, error) {
 		r = &Result{C: false}
 	}
 	tx := w.ctxn
-	tx.Reset(t)
 	tx.WriteOrCreate(t.K1, "x", WRITE)
 	br, err := tx.Read(t.K2)
 	if err == ESTASH {
 		return nil, ESTASH
 	}
 	if err == EABORT {
-		dlog.Println(br, err, t.K2)
+		dlog.Println("Abort", br, err, t.K2)
 		return r, EABORT
 	}
 	var sum int32
@@ -102,7 +100,6 @@ func BidTxn(t *Query, w *Worker) (*Result, error) {
 		r = &Result{C: false}
 	}
 	tx := w.ctxn
-	tx.Reset(t)
 	tx.WriteOrCreate(t.K1, t.S1, WRITE)
 	tx.WriteOrCreate(t.K2, t.A, MAX)
 	if tx.Commit() == 0 {
@@ -122,14 +119,13 @@ func BidNCTxn(t *Query, w *Worker) (*Result, error) {
 		r = &Result{C: false}
 	}
 	tx := w.ctxn
-	tx.Reset(t)
 	tx.WriteOrCreate(t.K1, t.S1, WRITE)
 	high_bid, err := tx.Read(t.K2)
 	if err == ESTASH {
 		return nil, ESTASH
 	}
 	if err == EABORT {
-		dlog.Println(high_bid, err, t.K2)
+		dlog.Println("Abort", high_bid, err, t.K2)
 		return r, EABORT
 	}
 	if err == ENOKEY || t.A > high_bid.value.(int32) {
@@ -152,7 +148,6 @@ func ReadBuyTxn(t *Query, w *Worker) (*Result, error) {
 	}
 
 	tx := w.ctxn
-	tx.Reset(t)
 	v1, err := tx.Read(t.K1)
 	if err != nil {
 		return r, err

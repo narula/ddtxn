@@ -6,6 +6,7 @@ import (
 	"ddtxn/stats"
 	"flag"
 	"fmt"
+	"log"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -47,6 +48,11 @@ func main() {
 		*nworkers = *nprocs
 	}
 
+	if *doValidate {
+		if !*ddtxn.Allocate {
+			log.Fatalf("Cannot correctly validate without waiting for results; add -allocate\n")
+		}
+	}
 	nproducts := *nbidders / *contention
 	s := ddtxn.NewStore()
 	portion_sz := *nbidders / *nworkers
@@ -57,14 +63,18 @@ func main() {
 	for i := 0; i < nproducts; i++ {
 		k := ddtxn.ProductKey(i)
 		dd[i] = k
+		s.CreateKey(k, int32(0), ddtxn.SUM)
 	}
-	data := make(map[ddtxn.Key]ddtxn.Value)
+	// Uncontended keys
+	for i := nproducts; i < *nbidders/10; i++ {
+		k := ddtxn.ProductKey(i)
+		s.CreateKey(k, int32(0), ddtxn.SUM)
+	}
 	for i := 0; i < *nbidders; i++ {
 		k := ddtxn.UserKey(i)
-		data[k] = int32(0)
 		bidder_keys[i] = k
+		s.CreateKey(k, "x", ddtxn.WRITE)
 	}
-	s.LoadBuy(dd, data)
 	coord := ddtxn.NewCoordinator(*nworkers, s)
 
 	val := make([]int32, nproducts)
@@ -109,7 +119,7 @@ func main() {
 							TXN: ddtxn.D_READ_BUY,
 							K1:  dd[product],
 						}
-						if *latency {
+						if *latency || *doValidate {
 							txn.W = make(chan *ddtxn.Result)
 						}
 						if x >= *notcontended_readrate {
@@ -125,11 +135,8 @@ func main() {
 							A:   amt,
 							K2:  dd[product],
 						}
-						if *latency {
+						if *latency || *doValidate {
 							txn.W = make(chan *ddtxn.Result)
-						}
-						if !*latency && *doValidate {
-							atomic.AddInt32(&val[product], amt)
 						}
 					}
 					if *latency {
@@ -146,6 +153,12 @@ func main() {
 							atomic.AddInt32(&val[product], amt)
 						}
 
+					} else if *doValidate {
+						w.Incoming <- txn
+						r := <-txn.W
+						if r.C == true && x >= *readrate {
+							atomic.AddInt32(&val[product], amt)
+						}
 					} else {
 						w.Incoming <- txn
 					}

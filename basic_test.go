@@ -9,8 +9,11 @@ func TestBasic(t *testing.T) {
 	s := NewStore()
 	c := NewCoordinator(1, s)
 	w := c.Workers[0]
-	s.LoadBuy([]Key{ProductKey(4), ProductKey(5)}, map[Key]Value{UserKey(1): "u1", UserKey(2): "u2", UserKey(3): "u3"})
-
+	s.CreateKey(ProductKey(4), int32(0), SUM)
+	s.CreateKey(ProductKey(5), int32(0), SUM)
+	s.CreateKey(UserKey(1), "u1", WRITE)
+	s.CreateKey(UserKey(2), "u2", WRITE)
+	s.CreateKey(UserKey(3), "u3", WRITE)
 	tx := Query{TXN: D_BUY, K1: UserKey(1), A: int32(5), K2: ProductKey(4), W: make(chan *Result), T: 0}
 	w.Incoming <- tx
 	r := <-tx.W

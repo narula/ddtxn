@@ -132,11 +132,12 @@ type Write struct {
 type ETransaction struct {
 	q      *Query
 	lasts  map[*BRecord]uint64
-	writes map[Key]Write
+	writes []Write
 	locked map[*BRecord]bool
 	w      *Worker
 	s      *Store
 	ls     *LocalStore
+	idxs   map[Key]int
 }
 
 // Re-use this?
@@ -144,20 +145,28 @@ func StartTransaction(q *Query, w *Worker) *ETransaction {
 	tx := &ETransaction{
 		q:      q,
 		lasts:  make(map[*BRecord]uint64),
-		writes: make(map[Key]Write),
+		writes: make([]Write, 0, 30),
 		locked: make(map[*BRecord]bool),
 		w:      w,
 		s:      w.store,
 		ls:     w.local_store,
+		idxs:   make(map[Key]int),
 	}
 	return tx
 }
 
 func (tx *ETransaction) Reset(q *Query) {
 	tx.q = q
-	tx.lasts = make(map[*BRecord]uint64)
-	tx.writes = make(map[Key]Write)
-	tx.locked = make(map[*BRecord]bool)
+	for k, _ := range tx.lasts {
+		delete(tx.lasts, k)
+	}
+	for k, _ := range tx.locked {
+		delete(tx.locked, k)
+	}
+	for k, _ := range tx.idxs {
+		delete(tx.idxs, k)
+	}
+	tx.writes = tx.writes[:0]
 }
 
 func (tx *ETransaction) Read(k Key) (*BRecord, error) {
@@ -182,6 +191,20 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	return br, nil
 }
 
+func (tx *ETransaction) add(k Key, br *BRecord, v Value, op KeyType, create bool) {
+	if len(tx.writes) == cap(tx.writes) {
+		// TODO: extend
+		log.Fatalf("Ran out of room\n")
+	}
+	n := len(tx.writes)
+	tx.writes = tx.writes[0 : n+1]
+	tx.writes[n].br = br
+	tx.writes[n].v = v
+	tx.writes[n].op = op
+	tx.writes[n].create = create
+	tx.idxs[k] = n
+}
+
 func (tx *ETransaction) Write(k Key, v Value, op KeyType) {
 	// Optimization: check to see if tx already tried to read or write
 	// it and it's in tx.lasts or tx.writes map.
@@ -190,12 +213,12 @@ func (tx *ETransaction) Write(k Key, v Value, op KeyType) {
 		debug.PrintStack()
 		log.Fatalf("no key %v %v\n", k, v)
 	}
-	tx.writes[k] = Write{br, v, op, false}
+	tx.add(k, br, v, op, false)
 }
 
 func (tx *ETransaction) WriteOrCreate(k Key, v Value, kt KeyType) {
 	br := tx.s.getOrCreateTypedKey(k, v, kt)
-	tx.writes[k] = Write{br, v, kt, true}
+	tx.add(k, br, v, kt, true)
 }
 
 func (tx *ETransaction) Abort() TID {
@@ -209,7 +232,8 @@ func (tx *ETransaction) Commit() TID {
 	// for each write key
 	//  if global get from global store and lock
 	// TODO: if br is nil, create the key
-	for _, w := range tx.writes {
+	for _, i := range tx.idxs {
+		w := tx.writes[i]
 		br := w.br
 		if !br.dd {
 			if !br.Lock() {
@@ -233,7 +257,8 @@ func (tx *ETransaction) Commit() TID {
 	// for each write key
 	//  if dd, apply locally
 	//  else apply globally and unlock
-	for _, w := range tx.writes {
+	for _, i := range tx.idxs {
+		w := tx.writes[i]
 		if w.br.dd {
 			tx.ls.Apply(w.br, w.v, w.op)
 		} else {

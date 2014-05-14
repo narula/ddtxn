@@ -89,6 +89,14 @@ func (s *Store) getOrCreateTypedKey(k Key, v Value, kt KeyType) *BRecord {
 	return br
 }
 
+func (s *Store) CreateKey(k Key, v Value, kt KeyType) {
+	chunk := s.store[k[0]]
+	chunk.Lock()
+	br := MakeBR(k, v, kt)
+	chunk.rows[k] = br
+	chunk.Unlock()
+}
+
 func (s *Store) Set(br *BRecord, v Value, op KeyType) {
 	switch op {
 	case SUM:

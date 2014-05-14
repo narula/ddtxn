@@ -1,6 +1,7 @@
 package ddtxn
 
 import (
+	"ddtxn/dlog"
 	"flag"
 	"log"
 	"runtime/debug"
@@ -93,6 +94,7 @@ func (w *Worker) doTxn(t Query) {
 		debug.PrintStack()
 		log.Fatalf("Unknown transaction number %v\n", t.TXN)
 	}
+	w.ctxn.Reset(&t)
 	x, err := w.txns[t.TXN](&t, w)
 	if err == ESTASH {
 		if w.local_store.stash == false {
@@ -142,6 +144,7 @@ func (w *Worker) Go() {
 					w.waiters.clear()
 				}
 				t.W <- nil
+				dlog.Printf("%v Done\n", w.ID)
 				return
 			}
 			w.doTxn(t)
