@@ -21,7 +21,7 @@ ben_list_cpus = "socket@0,1,2,7,3-6"
 
 LATENCY_PART = " -latency=%s" % options.latency
 
-BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./buy -ngo %d -nprocs %d -nsec %d -contention %d -rr %d -allocate=%s -sys=%d" + LATENCY_PART
+BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./buy -ngo %d -nprocs %d -nsec %d -contention %d -rr %d -allocate=%s -sys=%d -rlock=%s" + LATENCY_PART
 
 def run_one(fn, cmd):
     if options.dprint:
@@ -48,7 +48,7 @@ def get_cpus(host):
         ncpus=[2, 4]
     return ncpus
 
-def fill_cmd(rr, contention, ncpus, systype,cpus_arg=""):
+def fill_cmd(rr, contention, ncpus, systype, cpus_arg=""):
     nsec = 5
     if options.short:
         nsec = 1

@@ -49,7 +49,6 @@ type Worker struct {
 	// Stats
 	Nstats  []int64
 	Naborts int64
-	Ncopy   int64
 
 	txns []TransactionFunc
 }

@@ -16,6 +16,7 @@ type LocalStore struct {
 	lists map[Key][]Entry
 	s     *Store
 	stash bool
+	Ncopy int64
 }
 
 func NewLocalStore(s *Store) *LocalStore {
@@ -70,6 +71,7 @@ func (ls *LocalStore) Merge() {
 		d := ls.s.getOrCreateTypedKey(k, int32(0), SUM)
 		d.Apply(v)
 		ls.sums[k] = 0
+		ls.Ncopy++
 	}
 
 	for k, v := range ls.max {
@@ -83,6 +85,7 @@ func (ls *LocalStore) Merge() {
 		}
 		d := ls.s.getOrCreateTypedKey(k, int32(0), MAX)
 		d.Apply(v)
+		ls.Ncopy++
 	}
 
 	for k, v := range ls.bw {
@@ -93,6 +96,7 @@ func (ls *LocalStore) Merge() {
 
 		d := ls.s.getOrCreateTypedKey(k, "", WRITE)
 		d.Apply(v)
+		ls.Ncopy++
 	}
 
 	for k, v := range ls.lists {
@@ -107,6 +111,7 @@ func (ls *LocalStore) Merge() {
 		d := ls.s.getOrCreateTypedKey(k, nil, LIST)
 		d.Apply(v)
 		delete(ls.lists, k)
+		ls.Ncopy++
 	}
 }
 
