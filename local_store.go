@@ -153,6 +153,13 @@ func StartTransaction(q *Query, w *Worker) *ETransaction {
 	return tx
 }
 
+func (tx *ETransaction) Reset(q *Query) {
+	tx.q = q
+	tx.lasts = make(map[*BRecord]uint64)
+	tx.writes = make(map[Key]Write)
+	tx.locked = make(map[*BRecord]bool)
+}
+
 func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	br, err := tx.s.readKey(k)
 	if err != nil {

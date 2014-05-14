@@ -47,7 +47,8 @@ func BuyTxn(t *Query, w *Worker) (*Result, error) {
 	if *Allocate {
 		r = &Result{C: false}
 	}
-	tx := StartTransaction(t, w)
+	tx := w.ctxn
+	tx.Reset(t)
 	tx.WriteOrCreate(t.K1, "x", WRITE)
 	tx.WriteOrCreate(t.K2, t.A, SUM)
 	if tx.Commit() == 0 {
@@ -67,7 +68,8 @@ func BuyNCTxn(t *Query, w *Worker) (*Result, error) {
 	if *Allocate {
 		r = &Result{C: false}
 	}
-	tx := StartTransaction(t, w)
+	tx := w.ctxn
+	tx.Reset(t)
 	tx.WriteOrCreate(t.K1, "x", WRITE)
 	br, err := tx.Read(t.K2)
 	if err == ESTASH {
@@ -99,7 +101,8 @@ func BidTxn(t *Query, w *Worker) (*Result, error) {
 	if *Allocate {
 		r = &Result{C: false}
 	}
-	tx := StartTransaction(t, w)
+	tx := w.ctxn
+	tx.Reset(t)
 	tx.WriteOrCreate(t.K1, t.S1, WRITE)
 	tx.WriteOrCreate(t.K2, t.A, MAX)
 	if tx.Commit() == 0 {
@@ -118,7 +121,8 @@ func BidNCTxn(t *Query, w *Worker) (*Result, error) {
 	if *Allocate {
 		r = &Result{C: false}
 	}
-	tx := StartTransaction(t, w)
+	tx := w.ctxn
+	tx.Reset(t)
 	tx.WriteOrCreate(t.K1, t.S1, WRITE)
 	high_bid, err := tx.Read(t.K2)
 	if err == ESTASH {
@@ -147,7 +151,8 @@ func ReadBuyTxn(t *Query, w *Worker) (*Result, error) {
 		r = &Result{C: false}
 	}
 
-	tx := StartTransaction(t, w)
+	tx := w.ctxn
+	tx.Reset(t)
 	v1, err := tx.Read(t.K1)
 	if err != nil {
 		return r, err

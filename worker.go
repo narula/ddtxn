@@ -44,6 +44,7 @@ type Worker struct {
 	epoch       TID
 	Incoming    chan Query
 	waiters     *TStore
+	ctxn        *ETransaction
 	// Stats
 	Nstats  []int64
 	Naborts int64
@@ -73,6 +74,7 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 		w.waiters = TSInit(1)
 	}
 	w.local_store.stash = true
+	w.ctxn = StartTransaction(nil, w)
 	w.Register(D_BUY, BuyTxn)
 	w.Register(D_BUY_NC, BuyNCTxn)
 	w.Register(D_BID, BidTxn)
