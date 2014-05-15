@@ -135,7 +135,6 @@ type Write struct {
 }
 
 type ETransaction struct {
-	q      *Query
 	lasts  map[*BRecord]uint64
 	writes []Write
 	locked map[*BRecord]bool
@@ -146,9 +145,8 @@ type ETransaction struct {
 }
 
 // Re-use this?
-func StartTransaction(q *Query, w *Worker) *ETransaction {
+func StartTransaction(w *Worker) *ETransaction {
 	tx := &ETransaction{
-		q:      q,
 		lasts:  make(map[*BRecord]uint64),
 		writes: make([]Write, 0, 30),
 		locked: make(map[*BRecord]bool),
@@ -160,8 +158,7 @@ func StartTransaction(q *Query, w *Worker) *ETransaction {
 	return tx
 }
 
-func (tx *ETransaction) Reset(q *Query) {
-	tx.q = q
+func (tx *ETransaction) Reset() {
 	for k, _ := range tx.lasts {
 		delete(tx.lasts, k)
 	}

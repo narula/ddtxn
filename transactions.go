@@ -42,7 +42,7 @@ func IsRead(t int) bool {
 	return false
 }
 
-func BuyTxn(t *Query, w *Worker) (*Result, error) {
+func BuyTxn(t Query, w *Worker) (*Result, error) {
 	var r *Result = nil
 	if *Allocate {
 		r = &Result{C: false}
@@ -62,7 +62,7 @@ func BuyTxn(t *Query, w *Worker) (*Result, error) {
 }
 
 // Verison of BUY that puts total in read set
-func BuyNCTxn(t *Query, w *Worker) (*Result, error) {
+func BuyNCTxn(t Query, w *Worker) (*Result, error) {
 	var r *Result = nil
 	if *Allocate {
 		r = &Result{C: false}
@@ -94,7 +94,7 @@ func BuyNCTxn(t *Query, w *Worker) (*Result, error) {
 }
 
 // Commutative BID
-func BidTxn(t *Query, w *Worker) (*Result, error) {
+func BidTxn(t Query, w *Worker) (*Result, error) {
 	var r *Result = nil
 	if *Allocate {
 		r = &Result{C: false}
@@ -113,7 +113,7 @@ func BidTxn(t *Query, w *Worker) (*Result, error) {
 }
 
 // Version of Bid that puts bid in read set
-func BidNCTxn(t *Query, w *Worker) (*Result, error) {
+func BidNCTxn(t Query, w *Worker) (*Result, error) {
 	var r *Result = nil
 	if *Allocate {
 		r = &Result{C: false}
@@ -141,7 +141,7 @@ func BidNCTxn(t *Query, w *Worker) (*Result, error) {
 	return r, nil
 }
 
-func ReadBuyTxn(t *Query, w *Worker) (*Result, error) {
+func ReadBuyTxn(t Query, w *Worker) (*Result, error) {
 	var r *Result = nil
 	if *Allocate {
 		r = &Result{C: false}

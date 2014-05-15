@@ -20,7 +20,7 @@ const (
 	RTHRESHOLD = 500
 )
 
-type TransactionFunc func(*Query, *Worker) (*Result, error)
+type TransactionFunc func(Query, *Worker) (*Result, error)
 
 const (
 	BUFFER     = 10000
@@ -74,7 +74,7 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 		w.waiters = TSInit(1)
 	}
 	w.local_store.stash = true
-	w.ctxn = StartTransaction(nil, w)
+	w.ctxn = StartTransaction(w)
 	w.Register(D_BUY, BuyTxn)
 	w.Register(D_BUY_NC, BuyNCTxn)
 	w.Register(D_BID, BidTxn)
@@ -93,8 +93,8 @@ func (w *Worker) doTxn(t Query) {
 		debug.PrintStack()
 		log.Fatalf("Unknown transaction number %v\n", t.TXN)
 	}
-	w.ctxn.Reset(&t)
-	x, err := w.txns[t.TXN](&t, w)
+	w.ctxn.Reset()
+	x, err := w.txns[t.TXN](t, w)
 	if err == ESTASH {
 		if w.local_store.stash == false {
 			log.Fatalf("Stashing when I shouldn't be\n")
