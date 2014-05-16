@@ -17,6 +17,7 @@ const (
 )
 
 type BRecord struct {
+	dd        bool
 	mu        sync.RWMutex
 	key       Key
 	value     Value
@@ -24,10 +25,10 @@ type BRecord struct {
 	entries   []Entry
 	last      wfmutex.WFMutex
 	key_type  KeyType
+	lastEpoch uint64
+	padding   [32]byte
 	locked    int32 // how many times was the lock already held when someone wanted it
 	stashed   int32 // how many times did we have to stash a txn bc of this key
-	dd        bool
-	lastEpoch uint64
 }
 
 func MakeBR(k Key, val Value, kt KeyType) *BRecord {

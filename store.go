@@ -6,6 +6,7 @@ import (
 	"log"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 )
 
 type TID uint64
@@ -56,25 +57,8 @@ func NewStore() *Store {
 	return s
 }
 
-func (s *Store) getOrCreateKey(k Key) *BRecord {
-	br, err := s.writeKey(k)
-	if err == ENOKEY {
-		// Create key
-		chunk := s.store[k[0]]
-		var ok bool
-		chunk.Lock()
-		br, ok = chunk.rows[k]
-		if !ok {
-			br = MakeBR(k, nil, WRITE)
-			chunk.rows[k] = br
-		}
-		chunk.Unlock()
-	}
-	return br
-}
-
 func (s *Store) getOrCreateTypedKey(k Key, v Value, kt KeyType) *BRecord {
-	br, err := s.writeKey(k)
+	br, err := s.getKey(k)
 	if err == ENOKEY {
 		// Create key
 		chunk := s.store[k[0]]
@@ -90,15 +74,62 @@ func (s *Store) getOrCreateTypedKey(k Key, v Value, kt KeyType) *BRecord {
 	return br
 }
 
-func (s *Store) CreateKey(k Key, v Value, kt KeyType) {
+func (s *Store) CreateKey(k Key, v Value, kt KeyType) *BRecord {
 	chunk := s.store[k[0]]
 	chunk.Lock()
 	br := MakeBR(k, v, kt)
 	chunk.rows[k] = br
 	chunk.Unlock()
+	return br
+}
+
+func (s *Store) CreateInt32Key(k Key, v int32, kt KeyType) *BRecord {
+	chunk := s.store[k[0]]
+	chunk.Lock()
+	br := MakeBR(k, v, kt)
+	chunk.rows[k] = br
+	chunk.Unlock()
+	return br
+}
+
+func (s *Store) checkLock(br *BRecord) {
+	if !br.dd && br.locked > THRESHOLD {
+		s.lock_candidates.Lock()
+		s.candidates[br.key] = br
+		br.locked = 0
+		s.lock_candidates.Unlock()
+	}
+}
+
+// TODO:  Race condition on br.dd and br.stashed
+func (s *Store) addStash(br *BRecord) {
+	atomic.AddInt32(&br.stashed, 1)
+	if br.dd && br.stashed > RTHRESHOLD {
+		s.lock_candidates.Lock()
+		s.rcandidates[br.key] = br
+		br.stashed = 0
+		s.lock_candidates.Unlock()
+	}
+}
+
+func (s *Store) SetInt32(br *BRecord, v int32, op KeyType) {
+	if *SysType == DOPPEL {
+		s.checkLock(br)
+	}
+	switch op {
+	case SUM:
+		br.int_value += v
+	case MAX:
+		if v > br.int_value {
+			br.int_value = v
+		}
+	}
 }
 
 func (s *Store) Set(br *BRecord, v Value, op KeyType) {
+	if *SysType == DOPPEL {
+		s.checkLock(br)
+	}
 	switch op {
 	case SUM:
 		br.int_value += v.(int32)
@@ -115,32 +146,6 @@ func (s *Store) Set(br *BRecord, v Value, op KeyType) {
 }
 
 var UseRLocks = flag.Bool("rlock", true, "Use Rlocks\n")
-
-func (s *Store) readKey(k Key) (*BRecord, error) {
-	vr, err := s.getKey(k)
-	if *SysType == DOPPEL && err == nil {
-		if vr.dd && vr.stashed > RTHRESHOLD {
-			s.lock_candidates.Lock()
-			s.rcandidates[k] = vr
-			vr.stashed = 0
-			s.lock_candidates.Unlock()
-		}
-	}
-	return vr, err
-}
-
-func (s *Store) writeKey(k Key) (*BRecord, error) {
-	vr, err := s.getKey(k)
-	if *SysType == DOPPEL && err == nil {
-		if !vr.dd && vr.locked > THRESHOLD {
-			s.lock_candidates.Lock()
-			s.candidates[k] = vr
-			vr.locked = 0
-			s.lock_candidates.Unlock()
-		}
-	}
-	return vr, err
-}
 
 func (s *Store) getKey(k Key) (*BRecord, error) {
 	if len(k) == 0 {

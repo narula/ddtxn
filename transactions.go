@@ -48,8 +48,8 @@ func BuyTxn(t Query, w *Worker) (*Result, error) {
 		r = &Result{C: false}
 	}
 	tx := w.ctxn
-	tx.WriteOrCreate(t.K1, "x", WRITE)
-	tx.WriteOrCreate(t.K2, t.A, SUM)
+	tx.WriteInt32(t.K1, 1, SUM)
+	tx.WriteInt32(t.K2, t.A, SUM)
 	if tx.Commit() == 0 {
 		w.Naborts++
 		return r, EABORT
@@ -68,7 +68,7 @@ func BuyNCTxn(t Query, w *Worker) (*Result, error) {
 		r = &Result{C: false}
 	}
 	tx := w.ctxn
-	tx.WriteOrCreate(t.K1, "x", WRITE)
+	tx.Write(t.K1, "x", WRITE)
 	br, err := tx.Read(t.K2)
 	if err == ESTASH {
 		return nil, ESTASH
@@ -81,7 +81,7 @@ func BuyNCTxn(t Query, w *Worker) (*Result, error) {
 	if err == nil {
 		sum = br.value.(int32)
 	}
-	tx.WriteOrCreate(t.K2, t.A+sum, WRITE)
+	tx.Write(t.K2, t.A+sum, WRITE)
 	if tx.Commit() == 0 {
 		w.Naborts++
 		return r, EABORT
@@ -100,8 +100,8 @@ func BidTxn(t Query, w *Worker) (*Result, error) {
 		r = &Result{C: false}
 	}
 	tx := w.ctxn
-	tx.WriteOrCreate(t.K1, t.S1, WRITE)
-	tx.WriteOrCreate(t.K2, t.A, MAX)
+	tx.Write(t.K1, t.S1, WRITE)
+	tx.Write(t.K2, t.A, MAX)
 	if tx.Commit() == 0 {
 		return r, EABORT
 	}
@@ -119,7 +119,7 @@ func BidNCTxn(t Query, w *Worker) (*Result, error) {
 		r = &Result{C: false}
 	}
 	tx := w.ctxn
-	tx.WriteOrCreate(t.K1, t.S1, WRITE)
+	tx.Write(t.K1, t.S1, WRITE)
 	high_bid, err := tx.Read(t.K2)
 	if err == ESTASH {
 		return nil, ESTASH
@@ -129,7 +129,7 @@ func BidNCTxn(t Query, w *Worker) (*Result, error) {
 		return r, EABORT
 	}
 	if err == ENOKEY || t.A > high_bid.value.(int32) {
-		tx.WriteOrCreate(t.K2, t.A, WRITE)
+		tx.Write(t.K2, t.A, WRITE)
 	}
 	if tx.Commit() == 0 {
 		return r, EABORT

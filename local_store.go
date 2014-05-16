@@ -132,51 +132,46 @@ type Write struct {
 	v      Value
 	op     KeyType
 	create bool
+	locked bool
+	vint32 int32
 }
 
 type ETransaction struct {
-	lasts  map[*BRecord]uint64
-	writes []Write
-	locked map[*BRecord]bool
+	read   []*BRecord
+	lasts  []uint64
 	w      *Worker
 	s      *Store
 	ls     *LocalStore
-	idxs   map[Key]int
+	writes []Write
 }
 
 // Re-use this?
 func StartTransaction(w *Worker) *ETransaction {
 	tx := &ETransaction{
-		lasts:  make(map[*BRecord]uint64),
+		read:   make([]*BRecord, 0, 30),
+		lasts:  make([]uint64, 0, 30),
 		writes: make([]Write, 0, 30),
-		locked: make(map[*BRecord]bool),
 		w:      w,
 		s:      w.store,
 		ls:     w.local_store,
-		idxs:   make(map[Key]int),
 	}
 	return tx
 }
 
 func (tx *ETransaction) Reset() {
-	for k, _ := range tx.lasts {
-		delete(tx.lasts, k)
-	}
-	for k, _ := range tx.locked {
-		delete(tx.locked, k)
-	}
-	for k, _ := range tx.idxs {
-		delete(tx.idxs, k)
-	}
+	tx.lasts = tx.lasts[:0]
+	tx.read = tx.read[:0]
 	tx.writes = tx.writes[:0]
 }
 
 func (tx *ETransaction) Read(k Key) (*BRecord, error) {
-	br, err := tx.s.readKey(k)
+	br, err := tx.s.getKey(k)
 	if err != nil {
 		return nil, err
 	}
+	// Technically this is a race condition
 	if br.dd && tx.ls.stash {
+		tx.s.addStash(br)
 		return nil, ESTASH
 	}
 	if err != nil {
@@ -189,7 +184,11 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 		tx.Abort()
 		return nil, EABORT
 	}
-	tx.lasts[br] = last
+	n := len(tx.read)
+	tx.read = tx.read[0 : n+1]
+	tx.read[n] = br
+	tx.lasts = tx.lasts[0 : n+1]
+	tx.lasts[n] = last
 	return br, nil
 }
 
@@ -204,28 +203,45 @@ func (tx *ETransaction) add(k Key, br *BRecord, v Value, op KeyType, create bool
 	tx.writes[n].v = v
 	tx.writes[n].op = op
 	tx.writes[n].create = create
-	tx.idxs[k] = n
+	tx.writes[n].locked = false
 }
 
-func (tx *ETransaction) Write(k Key, v Value, op KeyType) {
-	// Optimization: check to see if tx already tried to read or write
-	// it and it's in tx.lasts or tx.writes map.
-	br, err := tx.s.writeKey(k)
-	if err != nil {
-		debug.PrintStack()
-		log.Fatalf("no key %v %v\n", k, v)
+func (tx *ETransaction) addInt32(k Key, br *BRecord, v int32, op KeyType, create bool) {
+	if len(tx.writes) == cap(tx.writes) {
+		// TODO: extend
+		log.Fatalf("Ran out of room\n")
 	}
-	tx.add(k, br, v, op, false)
+	n := len(tx.writes)
+	tx.writes = tx.writes[0 : n+1]
+	tx.writes[n].br = br
+	tx.writes[n].vint32 = v
+	tx.writes[n].op = op
+	tx.writes[n].create = create
+	tx.writes[n].locked = false
 }
 
-func (tx *ETransaction) WriteOrCreate(k Key, v Value, kt KeyType) {
+func (tx *ETransaction) WriteInt32(k Key, a int32, op KeyType) {
+	br, err := tx.s.getKey(k)
+	if err != nil {
+		br = tx.s.CreateInt32Key(k, a, op)
+	}
+	tx.addInt32(k, br, a, op, false)
+}
+
+func (tx *ETransaction) Write(k Key, v Value, kt KeyType) {
 	br := tx.s.getOrCreateTypedKey(k, v, kt)
+	if kt == SUM || kt == MAX {
+		tx.addInt32(k, br, v.(int32), kt, true)
+		return
+	}
 	tx.add(k, br, v, kt, true)
 }
 
 func (tx *ETransaction) Abort() TID {
-	for br, _ := range tx.locked {
-		br.Unlock(0)
+	for _, w := range tx.writes {
+		if w.locked {
+			w.br.Unlock(0)
+		}
 	}
 	return 0
 }
@@ -234,14 +250,13 @@ func (tx *ETransaction) Commit() TID {
 	// for each write key
 	//  if global get from global store and lock
 	// TODO: if br is nil, create the key
-	for _, i := range tx.idxs {
-		w := tx.writes[i]
+	for i, w := range tx.writes {
 		br := w.br
 		if !br.dd {
 			if !br.Lock() {
 				return tx.Abort()
 			}
-			tx.locked[br] = true
+			tx.writes[i].locked = true
 		}
 	}
 	// TODO: acquire timestamp higher than anything i've read or am
@@ -250,21 +265,34 @@ func (tx *ETransaction) Commit() TID {
 
 	// for each read key
 	//  verify
-	for br, last := range tx.lasts {
-		if ok, _ := tx.locked[br]; !ok && !br.Verify(last) {
+	for i, br := range tx.read {
+		if !br.Verify(tx.lasts[i]) {
+			// Check to make sure we aren't writing the key as well
 			return tx.Abort()
 		}
 	}
-
 	// for each write key
 	//  if dd, apply locally
 	//  else apply globally and unlock
-	for _, i := range tx.idxs {
-		w := tx.writes[i]
+	for _, w := range tx.writes {
 		if w.br.dd {
-			tx.ls.Apply(w.br, w.v, w.op)
+			switch w.op {
+			case SUM:
+				tx.ls.Apply(w.br, w.vint32, w.op)
+			case MAX:
+				tx.ls.Apply(w.br, w.vint32, w.op)
+			default:
+				tx.ls.Apply(w.br, w.v, w.op)
+			}
 		} else {
-			tx.s.Set(w.br, w.v, w.op)
+			switch w.op {
+			case SUM:
+				tx.s.SetInt32(w.br, w.vint32, w.op)
+			case MAX:
+				tx.s.SetInt32(w.br, w.vint32, w.op)
+			default:
+				tx.s.Set(w.br, w.v, w.op)
+			}
 			w.br.Unlock(tid)
 		}
 	}
