@@ -170,7 +170,7 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 		return nil, err
 	}
 	// Technically this is a race condition
-	if br.dd && tx.ls.stash {
+	if *SysType == DOPPEL && br.dd && tx.ls.stash {
 		tx.s.addStash(br)
 		return nil, ESTASH
 	}
@@ -275,6 +275,9 @@ func (tx *ETransaction) Commit() TID {
 	//  if dd, apply locally
 	//  else apply globally and unlock
 	for _, w := range tx.writes {
+		if tx.w.ID == 0 && *SysType == DOPPEL {
+			tx.s.checkLock(w.br)
+		}
 		if w.br.dd {
 			switch w.op {
 			case SUM:

@@ -113,9 +113,6 @@ func (s *Store) addStash(br *BRecord) {
 }
 
 func (s *Store) SetInt32(br *BRecord, v int32, op KeyType) {
-	if *SysType == DOPPEL {
-		s.checkLock(br)
-	}
 	switch op {
 	case SUM:
 		br.int_value += v
@@ -127,9 +124,6 @@ func (s *Store) SetInt32(br *BRecord, v int32, op KeyType) {
 }
 
 func (s *Store) Set(br *BRecord, v Value, op KeyType) {
-	if *SysType == DOPPEL {
-		s.checkLock(br)
-	}
 	switch op {
 	case SUM:
 		br.int_value += v.(int32)
