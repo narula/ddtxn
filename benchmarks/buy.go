@@ -36,6 +36,8 @@ var nreads int64
 var nbuys int64
 var naborts int64
 var ncopies int64
+var nwait time.Duration
+var nwait2 time.Duration
 
 func main() {
 	flag.Parse()
@@ -175,13 +177,15 @@ func main() {
 		nreads = nreads + coord.Workers[i].Nstats[ddtxn.D_READ_BUY]
 		nbuys = nbuys + coord.Workers[i].Nstats[ddtxn.D_BUY]
 		naborts = naborts + coord.Workers[i].Naborts
+		nwait = nwait + coord.Workers[i].Nwait
+		nwait2 = nwait2 + coord.Workers[i].Nwait2
 	}
 	nitr = nreads + nbuys
 	if *doValidate {
 		ddtxn.Validate(coord, s, *nbidders, nproducts, val, int(nitr))
 	}
 
-	out := fmt.Sprintf(" sys: %v, nworkers: %v, nbids: %v, nproducts: %v, contention: %v, done: %v, actual time: %v, nreads: %v, nbuys: %v, epoch changes: %v, total/sec %v, throughput ns/txn: %v, naborts %v, ncopies %v, nmoved %v", *ddtxn.SysType, *nworkers, *nbidders, nproducts, *contention, nitr, end, nreads, nbuys, ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, naborts, ncopies, ddtxn.Moved)
+	out := fmt.Sprintf(" sys: %v, nworkers: %v, nbids: %v, nproducts: %v, contention: %v, done: %v, actual time: %v, nreads: %v, nbuys: %v, epoch changes: %v, total/sec %v, throughput ns/txn: %v, naborts: %v, ncopies: %v, nwmoved: %v, nrmoved: %v, ietime: %v, etime: %v, etime2: %v", *ddtxn.SysType, *nworkers, *nbidders, nproducts, *contention, nitr, end, nreads, nbuys, ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, naborts, ncopies, ddtxn.WMoved, ddtxn.RMoved, ddtxn.Time_in_IE.Seconds(), nwait.Seconds()/float64(*nworkers), nwait2.Seconds()/float64(*nworkers))
 	fmt.Printf(out)
 	fmt.Printf("\n")
 

@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	BUMP_EPOCH_MS = 20
+	BUMP_EPOCH_MS = 40
 	EPOCH_INCR    = 1 << 32
 	TXID_MASK     = 0x00000000ffffffff
 	CLEAR_TID     = 0xffffffff00000000
@@ -69,9 +69,12 @@ func (c *Coordinator) GetEpoch() TID {
 	return TID(x)
 }
 
-var Moved int64
+var RMoved int64
+var WMoved int64
+var Time_in_IE time.Duration
 
 func (c *Coordinator) IncrementEpoch() {
+	start := time.Now()
 	e := c.NextGlobalTID()
 
 	// Tell everyone about the new epoch, wait for them to
@@ -89,12 +92,12 @@ func (c *Coordinator) IncrementEpoch() {
 		s.lock_candidates.Lock()
 		for _, br := range s.candidates {
 			br.dd = true
-			Moved += 1
+			WMoved += 1
 			dlog.Printf("Moving %v to dd\n", br.key)
 		}
 		for _, br := range s.rcandidates {
 			br.dd = false
-			Moved += 1
+			RMoved += 1
 			dlog.Printf("Moving %v from dd\n", br.key)
 		}
 		s.candidates = make(map[Key]*BRecord)
@@ -117,6 +120,8 @@ func (c *Coordinator) IncrementEpoch() {
 	for i := 0; i < c.n; i++ {
 		c.wgo[i] <- true
 	}
+	end := time.Since(start)
+	Time_in_IE += end
 }
 
 func (c *Coordinator) Finish() {

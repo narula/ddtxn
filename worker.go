@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log"
 	"runtime/debug"
+	"time"
 )
 
 const (
@@ -49,8 +50,9 @@ type Worker struct {
 	// Stats
 	Nstats  []int64
 	Naborts int64
-
-	txns []TransactionFunc
+	Nwait   time.Duration
+	Nwait2  time.Duration
+	txns    []TransactionFunc
 }
 
 func (w *Worker) Register(fn int, transaction TransactionFunc) {
@@ -119,8 +121,11 @@ func (w *Worker) Go() {
 				w.local_store.Merge()
 			}
 			w.epoch = msg.T
+			start := time.Now()
 			msg.C <- true
 			msg = <-w.coordinator.wsafe[w.ID]
+			end := time.Since(start)
+			w.Nwait += end
 			w.local_store.stash = false
 			for i := 0; i < len(w.waiters.t); i++ {
 				t := w.waiters.t[i]
@@ -128,8 +133,11 @@ func (w *Worker) Go() {
 			}
 			w.waiters.clear()
 			w.local_store.stash = true
+			start = time.Now()
 			msg.C <- true
 			<-w.coordinator.wgo[w.ID]
+			end = time.Since(start)
+			w.Nwait2 += end
 		// New transactions.  Do if possible.
 		case t := <-w.Incoming:
 			if t.TXN == LAST_TXN {
