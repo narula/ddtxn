@@ -37,13 +37,15 @@ def run_one(fn, cmd):
     fn.write("%0.2f\t" % tps)
 
 def get_cpus(host):
-    ncpus = [1, 4, 10, 20, 30, 40, 50, 60, 70, 80]
+    ncpus = [1, 2, 4, 8]
     if host == "mat":
         ncpus = [1, 2, 4, 8, 12, 24]
     elif host == "tbilisi":
         ncpus = [1, 2, 4, 8, 12]
     elif host == "tom":
         ncpus = [1, 2, 6, 12, 18, 24, 30, 42, 48]
+    elif host == "ben":
+        ncpus = [1, 4, 10, 20, 30, 40, 50, 60, 70, 80]
     if options.short:
         ncpus=[2, 4]
     return ncpus
@@ -184,8 +186,4 @@ if __name__ == "__main__":
         contention_exp(fnpath, host, options.default_contention, 10)
         contention_exp(fnpath, host, options.default_contention, 50)
         rw_exp(fnpath, host, options.default_contention, options.default_ncores)
-        #rw_exp(fnpath, host, options.default_contention, options.default_ncores/2)
-        #rw_exp(fnpath, host, options.default_contention, options.default_ncores/4)
         products_exp(fnpath, host, options.read_rate, options.default_ncores)
-        #products_exp(fnpath, host, options.read_rate, options.default_ncores/2)
-        #products_exp(fnpath, host, options.read_rate, options.default_ncores/4)
