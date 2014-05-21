@@ -109,11 +109,7 @@ def rw_exp(fnpath, host, contention, ncores):
         system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 def products_exp(fnpath, host, rr, ncores):
-    fnn = ""
-    if options.dynamic:
-        fnn = '%s-products-%d-%d-%s.data' % (host, rr, ncores, options.dynamic)
-    else:
-        fnn = '%s-products-%d-%d.data' % (host, rr, ncores)
+    fnn = '%s-products-%d-%d-True.data' % (host, rr, ncores)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     cont = [1, 10, 100, 1000, 5000, 10000, 100000, 200000, 500000, 1000000]
