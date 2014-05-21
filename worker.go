@@ -1,7 +1,6 @@
 package ddtxn
 
 import (
-	"ddtxn/dlog"
 	"flag"
 	"log"
 	"runtime/debug"
@@ -110,36 +109,41 @@ func (w *Worker) doTxn(t Query) {
 	}
 }
 
+func (w *Worker) Transition(e TID) {
+	w.epoch = TID(e)
+	if *SysType == DOPPEL {
+		w.local_store.Merge()
+		start := time.Now()
+		w.coordinator.wepoch[w.ID] <- true
+		<-w.coordinator.wsafe[w.ID]
+		end := time.Since(start)
+		w.Nwait += end
+		w.local_store.stash = false
+		for i := 0; i < len(w.waiters.t); i++ {
+			t := w.waiters.t[i]
+			w.doTxn(t)
+		}
+		w.waiters.clear()
+		w.local_store.stash = true
+		start = time.Now()
+		w.coordinator.wdone[w.ID] <- true
+		<-w.coordinator.wgo[w.ID]
+		end = time.Since(start)
+		w.Nwait2 += end
+	}
+}
+
 // epoch -> merged -> safe -> read -> readers done
 func (w *Worker) Go() {
 	for {
 		select {
-
-		// New epoch; copy over derived from previous epoch
-		case msg := <-w.coordinator.wepoch[w.ID]:
-			if *SysType == DOPPEL {
-				w.local_store.Merge()
-			}
-			w.epoch = msg.T
-			start := time.Now()
-			msg.C <- true
-			msg = <-w.coordinator.wsafe[w.ID]
-			end := time.Since(start)
-			w.Nwait += end
-			w.local_store.stash = false
-			for i := 0; i < len(w.waiters.t); i++ {
-				t := w.waiters.t[i]
-				w.doTxn(t)
-			}
-			w.waiters.clear()
-			w.local_store.stash = true
-			start = time.Now()
-			msg.C <- true
-			<-w.coordinator.wgo[w.ID]
-			end = time.Since(start)
-			w.Nwait2 += end
-		// New transactions.  Do if possible.
 		case t := <-w.Incoming:
+			if *SysType == DOPPEL {
+				e := w.coordinator.GetEpoch()
+				if w.epoch != e {
+					w.Transition(e)
+				}
+			}
 			if t.TXN == LAST_TXN {
 				if *SysType == DOPPEL {
 					w.local_store.Merge()
@@ -151,10 +155,16 @@ func (w *Worker) Go() {
 					w.waiters.clear()
 				}
 				t.W <- nil
-				dlog.Printf("%v Done\n", w.ID)
 				return
 			}
 			w.doTxn(t)
+		default:
+			if *SysType == DOPPEL {
+				e := w.coordinator.GetEpoch()
+				if w.epoch != e {
+					w.Transition(e)
+				}
+			}
 		}
 	}
 }

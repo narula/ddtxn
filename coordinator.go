@@ -21,9 +21,10 @@ type Coordinator struct {
 	safeTID  TID // Guaranteed no more writes at or before this point
 
 	// Notify workers
-	wsafe  []chan Msg
-	wepoch []chan Msg
+	wsafe  []chan bool
+	wepoch []chan bool
 	wgo    []chan bool
+	wdone  []chan bool
 
 	Done       chan chan bool
 	Accelerate chan bool
@@ -39,16 +40,18 @@ func NewCoordinator(n int, s *Store) *Coordinator {
 		n:          n,
 		Workers:    make([]*Worker, n),
 		epochTID:   EPOCH_INCR,
-		wepoch:     make([]chan Msg, n),
-		wsafe:      make([]chan Msg, n),
+		wepoch:     make([]chan bool, n),
+		wsafe:      make([]chan bool, n),
 		wgo:        make([]chan bool, n),
+		wdone:      make([]chan bool, n),
 		Done:       make(chan chan bool),
 		Accelerate: make(chan bool),
 	}
 	for i := 0; i < n; i++ {
-		c.wepoch[i] = make(chan Msg)
-		c.wsafe[i] = make(chan Msg)
+		c.wepoch[i] = make(chan bool)
+		c.wsafe[i] = make(chan bool)
 		c.wgo[i] = make(chan bool)
+		c.wdone[i] = make(chan bool)
 		c.Workers[i] = NewWorker(i, s, c)
 	}
 	dlog.Printf("[coordinator] %v workers\n", n)
@@ -75,48 +78,36 @@ var Time_in_IE time.Duration
 
 func (c *Coordinator) IncrementEpoch() {
 	start := time.Now()
-	e := c.NextGlobalTID()
+	c.NextGlobalTID()
 
-	// Tell everyone about the new epoch, wait for them to
-	// merge the previous epoch
-	m := make(map[int]Msg)
+	// Wait for everyone to merge the previous epoch
 	for i := 0; i < c.n; i++ {
-		m[i] = Msg{e, make(chan bool)}
-		c.wepoch[i] <- m[i]
+		<-c.wepoch[i]
 	}
-	for i := 0; i < c.n; i++ {
-		<-m[i].C
+
+	s := c.Workers[0].store
+	s.lock_candidates.Lock()
+	for _, br := range s.candidates {
+		br.dd = true
+		WMoved += 1
 	}
-	if *SysType == DOPPEL {
-		s := c.Workers[0].store
-		s.lock_candidates.Lock()
-		for _, br := range s.candidates {
-			br.dd = true
-			WMoved += 1
-			dlog.Printf("Moving %v to dd\n", br.key)
-		}
-		for _, br := range s.rcandidates {
-			br.dd = false
-			RMoved += 1
-			dlog.Printf("Moving %v from dd\n", br.key)
-		}
-		s.candidates = make(map[Key]*BRecord)
-		s.rcandidates = make(map[Key]*BRecord)
-		s.lock_candidates.Unlock()
+	for _, br := range s.rcandidates {
+		br.dd = false
+		RMoved += 1
 	}
+	s.candidates = make(map[Key]*BRecord)
+	s.rcandidates = make(map[Key]*BRecord)
+	s.lock_candidates.Unlock()
 
 	// All merged.  The previous epoch is now safe; tell everyone to
 	// do their reads.
-	c.safeTID = e - EPOCH_INCR
-	m = make(map[int]Msg)
 	for i := 0; i < c.n; i++ {
-		m[i] = Msg{c.safeTID, make(chan bool)}
-		c.wsafe[i] <- m[i]
+		c.wsafe[i] <- true
 	}
 	for i := 0; i < c.n; i++ {
-		<-m[i].C
+		<-c.wdone[i]
 	}
-	// Reads done!  Now we can do the next
+	// Reads done!
 	for i := 0; i < c.n; i++ {
 		c.wgo[i] <- true
 	}
