@@ -14,6 +14,7 @@ parser.add_option("-c", "--contention", action="store", type="int", dest="defaul
 parser.add_option("-r", "--rr", action="store", type="int", dest="read_rate", default=50)
 parser.add_option("-l", "--latency", action="store_true", dest="latency", default=False)
 parser.add_option("-x", "--rlock", action="store_false", dest="rlock", default=True)
+parser.add_option("-m", "--scp", action="store_true", dest="scp", default=False)
 
 (options, args) = parser.parse_args()
 
@@ -80,8 +81,9 @@ def contention_exp(fnpath, host, contention, rr):
         do(f, rr, contention, i, cpu_args, 1)
         f.write("\n")
     f.close()
-    system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
-    system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
+    if options.scp:
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 
 def rw_exp(fnpath, host, contention, ncores):
@@ -102,8 +104,9 @@ def rw_exp(fnpath, host, contention, ncores):
         do(f, i, contention, ncores, cpu_args, 1)
         f.write("\n")
     f.close()
-    system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
-    system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
+    if options.scp:
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 def products_exp(fnpath, host, rr, ncores):
     fnn = ""
@@ -128,8 +131,9 @@ def products_exp(fnpath, host, rr, ncores):
         do(f, rr, i, ncores, cpu_args, 1)
         f.write("\n")
     f.close()
-    system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
-    system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
+    if options.scp:
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 def print_output(output, prefix, sys):
     x = output.split("Read ")[1]
