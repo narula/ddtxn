@@ -175,7 +175,7 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	ok, last := br.IsUnlocked()
+	ok, last := br.IsUnlockedNoCount()
 	// if locked, abort
 	// else note the last timestamp, save it, return value
 	if !ok {

@@ -17,16 +17,20 @@ const (
 )
 
 type BRecord struct {
-	dd        bool
+	key      Key
+	key_type KeyType
+
+	padding1 [128]byte
+	dd       bool
+	padding2 [128]byte
+
 	mu        sync.RWMutex
-	key       Key
 	value     Value
 	int_value int32
 	entries   []Entry
 	last      wfmutex.WFMutex
-	key_type  KeyType
 	lastEpoch uint64
-	padding   [32]byte
+	padding   [128]byte
 	locked    int32 // how many times was the lock already held when someone wanted it
 	stashed   int32 // how many times did we have to stash a txn bc of this key
 }
