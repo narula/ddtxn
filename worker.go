@@ -23,8 +23,8 @@ const (
 type TransactionFunc func(Query, *Worker) (*Result, error)
 
 const (
-	BUFFER     = 1000000
-	START_SIZE = 100000
+	BUFFER     = 100000
+	START_SIZE = 1000000
 )
 
 const (
