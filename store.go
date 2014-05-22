@@ -101,7 +101,9 @@ func (s *Store) checkLock(br *BRecord) {
 	}
 }
 
-// TODO:  Race condition on br.dd and br.stashed
+// TODO: Race condition on br.dd and br.stashed This just ends up
+// moving keys back and forth.  I need a better way of determining if
+// a key should be dd.  For now, never change a key back to not-dd.
 func (s *Store) addStash(br *BRecord) {
 	atomic.AddInt32(&br.stashed, 1)
 	if br.dd && br.stashed > RTHRESHOLD {
