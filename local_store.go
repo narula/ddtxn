@@ -171,7 +171,7 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	}
 	// Technically this is a race condition
 	if *SysType == DOPPEL && br.dd && tx.ls.stash {
-		tx.s.addStash(br)
+		//tx.s.addStash(br)
 		return nil, ESTASH
 	}
 	if err != nil {
