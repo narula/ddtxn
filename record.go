@@ -78,7 +78,7 @@ func (br *BRecord) Value() Value {
 func (br *BRecord) Lock() bool {
 	x := br.last.Lock()
 	if *SysType == DOPPEL && !br.dd {
-		if !x {
+		if !x && !br.dd {
 			atomic.AddInt32(&br.locked, 1)
 		}
 	}
