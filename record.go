@@ -105,8 +105,16 @@ func (br *BRecord) IsUnlocked() (bool, uint64) {
 	return true, x
 }
 
+func (br *BRecord) IsUnlockedNoCount() (bool, uint64) {
+	x := br.last.Read()
+	if x&wfmutex.LOCKED != 0 {
+		return false, x
+	}
+	return true, x
+}
+
 func (br *BRecord) Verify(last uint64) bool {
-	ok, new_last := br.IsUnlocked()
+	ok, new_last := br.IsUnlockedNoCount()
 	if *SysType == DOPPEL && !br.dd {
 		x := CLEAR_TID & last
 		lt := atomic.LoadUint64(&br.lastEpoch)

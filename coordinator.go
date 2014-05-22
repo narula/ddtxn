@@ -85,19 +85,23 @@ func (c *Coordinator) IncrementEpoch() {
 		<-c.wepoch[i]
 	}
 
-	s := c.Workers[0].store
-	s.lock_candidates.Lock()
-	for _, br := range s.candidates {
-		br.dd = true
-		WMoved += 1
+	if c.epochTID%(10*EPOCH_INCR) == 0 {
+		s := c.Workers[0].store
+		s.lock_candidates.Lock()
+		for _, br := range s.candidates {
+			br.dd = true
+			WMoved += 1
+			dlog.Printf("Moved %v to split\n", br.key)
+		}
+		for _, br := range s.rcandidates {
+			br.dd = false
+			RMoved += 1
+			dlog.Printf("Moved %v to not split\n", br.key)
+		}
+		s.candidates = make(map[Key]*BRecord)
+		s.rcandidates = make(map[Key]*BRecord)
+		s.lock_candidates.Unlock()
 	}
-	for _, br := range s.rcandidates {
-		br.dd = false
-		RMoved += 1
-	}
-	s.candidates = make(map[Key]*BRecord)
-	s.rcandidates = make(map[Key]*BRecord)
-	s.lock_candidates.Unlock()
 
 	// All merged.  The previous epoch is now safe; tell everyone to
 	// do their reads.
