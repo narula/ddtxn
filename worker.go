@@ -23,8 +23,8 @@ const (
 type TransactionFunc func(Query, *Worker) (*Result, error)
 
 const (
-	BUFFER     = 10000
-	START_SIZE = 1000000
+	BUFFER     = 1000000
+	START_SIZE = 100000
 )
 
 const (
@@ -135,9 +135,10 @@ func (w *Worker) Transition(e TID) {
 
 // epoch -> merged -> safe -> read -> readers done
 func (w *Worker) Go() {
+	var t Query
 	for {
 		select {
-		case t := <-w.Incoming:
+		case t = <-w.Incoming:
 			if *SysType == DOPPEL {
 				e := w.coordinator.GetEpoch()
 				if w.epoch != e {
