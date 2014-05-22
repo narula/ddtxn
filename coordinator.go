@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	BUMP_EPOCH_MS = 40
+	BUMP_EPOCH_MS = 80
 	EPOCH_INCR    = 1 << 32
 	TXID_MASK     = 0x00000000ffffffff
 	CLEAR_TID     = 0xffffffff00000000
