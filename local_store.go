@@ -248,8 +248,8 @@ func (tx *ETransaction) Commit() TID {
 	// for each write key
 	//  if global get from global store and lock
 	// TODO: if br is nil, create the key
-	for i, w := range tx.writes {
-		br := w.br
+	for i, _ := range tx.writes {
+		br := tx.writes[i].br
 		if !br.dd {
 			if !br.Lock() {
 				return tx.Abort()
@@ -272,7 +272,8 @@ func (tx *ETransaction) Commit() TID {
 	// for each write key
 	//  if dd, apply locally
 	//  else apply globally and unlock
-	for _, w := range tx.writes {
+	for i, _ := range tx.writes {
+        w := &tx.writes[i]
 		if tx.w.ID == 0 && *SysType == DOPPEL {
 			tx.s.checkLock(w.br)
 		}
