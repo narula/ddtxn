@@ -150,7 +150,7 @@ func StartTransaction(w *Worker) *ETransaction {
 	tx := &ETransaction{
 		read:   make([]*BRecord, 0, 30),
 		lasts:  make([]uint64, 0, 30),
-		writes: make([]Write, 0, 30),
+		writes: make([]Write, 0, 60),
 		w:      w,
 		s:      w.store,
 		ls:     w.local_store,
@@ -273,7 +273,7 @@ func (tx *ETransaction) Commit() TID {
 	//  if dd, apply locally
 	//  else apply globally and unlock
 	for i, _ := range tx.writes {
-        w := &tx.writes[i]
+		w := &tx.writes[i]
 		if tx.w.ID == 0 && *SysType == DOPPEL {
 			tx.s.checkLock(w.br)
 		}

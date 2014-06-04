@@ -15,7 +15,7 @@ func BenchmarkMany(b *testing.B) {
 	np := 100
 	n := 8
 	s := loadStore(nb, np)
-	c := NewCoordinator(n, s)
+	c := NewCoordinator(n, s, nil)
 	val := make([]int32, np)
 
 	var wg sync.WaitGroup
@@ -25,13 +25,14 @@ func BenchmarkMany(b *testing.B) {
 		go func(id int) {
 			var wg_inner sync.WaitGroup
 			w := c.Workers[id]
+			_ = w
 			for i := 0; i < b.N/3; i++ {
 				p := ProductKey(i % np)
 				u := UserKey(i % nb)
 				amt := int32(rand.Intn(100))
 				wg_inner.Add(1)
 				tx := Query{TXN: D_BUY, K1: u, A: amt, K2: p, W: make(chan *Result), T: 0}
-				w.Incoming <- tx
+				//w.Incoming <- tx
 				go func(c chan *Result, i int, np int, amt int32) {
 					r := <-c
 					if r != nil && r.C {
@@ -62,7 +63,7 @@ func BenchmarkBid(b *testing.B) {
 	np := 100
 	n := 8
 	s := loadStore(nb, np)
-	c := NewCoordinator(n, s)
+	c := NewCoordinator(n, s, nil)
 	val := make([]int32, np)
 
 	var wg sync.WaitGroup
@@ -72,13 +73,14 @@ func BenchmarkBid(b *testing.B) {
 		go func(id int) {
 			var wg_inner sync.WaitGroup
 			w := c.Workers[id]
+			_ = w
 			for i := 0; i < b.N/3; i++ {
 				p := ProductKey(i % np)
 				u := UserKey(i % nb)
 				amt := int32(rand.Intn(100))
 				wg_inner.Add(1)
 				tx := Query{TXN: D_BID, K1: u, A: amt, K2: p, S1: "xx", W: make(chan *Result), T: 0}
-				w.Incoming <- tx
+				//w.Incoming <- tx
 				go func(c chan *Result, i int, np int, amt int32) {
 					r := <-c
 					if r != nil && r.C {
@@ -119,7 +121,7 @@ func BenchmarkBidNC(b *testing.B) {
 	n := 8
 	s := NewStore()
 	//loadStore(nb, np)
-	c := NewCoordinator(n, s)
+	c := NewCoordinator(n, s, nil)
 	val := make([]int32, np)
 
 	var wg sync.WaitGroup
@@ -129,13 +131,14 @@ func BenchmarkBidNC(b *testing.B) {
 		go func(id int) {
 			var wg_inner sync.WaitGroup
 			w := c.Workers[id]
+			_ = w
 			for i := 0; i < b.N/3; i++ {
 				p := ProductKey(i % np)
 				u := UserKey(i % nb)
 				amt := int32(rand.Intn(100))
 				wg_inner.Add(1)
 				tx := Query{TXN: D_BID_NC, K1: u, A: amt, K2: p, S1: "xx", W: make(chan *Result), T: 0}
-				w.Incoming <- tx
+				//w.Incoming <- tx
 				go func(c chan *Result, i int, np int, amt int32) {
 					r := <-c
 					if r != nil && r.C {
@@ -175,7 +178,7 @@ func BenchmarkRead(b *testing.B) {
 	np := 100
 	n := 8
 	s := loadStore(nb, np)
-	c := NewCoordinator(n, s)
+	c := NewCoordinator(n, s, nil)
 	val := make([]int32, np)
 	read_rate := 50
 
@@ -186,6 +189,7 @@ func BenchmarkRead(b *testing.B) {
 		go func(id int) {
 			var wg_inner sync.WaitGroup
 			w := c.Workers[id]
+			_ = w
 			for i := 0; i < b.N/3; i++ {
 				p := ProductKey(i % np)
 				u := UserKey(i % nb)
@@ -200,7 +204,7 @@ func BenchmarkRead(b *testing.B) {
 				} else {
 					tx = Query{TXN: D_READ_BUY, K1: p, W: make(chan *Result), T: 0}
 				}
-				w.Incoming <- tx
+				//w.Incoming <- tx
 				go func(c chan *Result, i int, np int, amt int32, val_txn bool) {
 					r := <-c
 					if val_txn && r != nil && r.C {

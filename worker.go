@@ -3,6 +3,7 @@ package ddtxn
 import (
 	"flag"
 	"log"
+	"math/rand"
 	"runtime/debug"
 	"time"
 )
@@ -43,31 +44,35 @@ type Worker struct {
 	coordinator *Coordinator
 	next        TID
 	epoch       TID
-	Incoming    chan Query
+	done        chan Query
 	waiters     *TStore
 	ctxn        *ETransaction
 	// Stats
-	Nstats  []int64
-	Naborts int64
-	Nwait   time.Duration
-	Nwait2  time.Duration
-	txns    []TransactionFunc
+	Nstats     []int64
+	Naborts    int64
+	Nwait      time.Duration
+	Nwait2     time.Duration
+	txns       []TransactionFunc
+	load       App
+	local_seed uint32
 }
 
 func (w *Worker) Register(fn int, transaction TransactionFunc) {
 	w.txns[fn] = transaction
 }
 
-func NewWorker(id int, s *Store, c *Coordinator) *Worker {
+func NewWorker(id int, s *Store, c *Coordinator, load App) *Worker {
 	w := &Worker{
 		ID:          id,
 		store:       s,
 		local_store: NewLocalStore(s),
 		coordinator: c,
-		Incoming:    make(chan Query, BUFFER),
 		Nstats:      make([]int64, LAST_TXN),
 		epoch:       c.epochTID,
+		done:        make(chan Query),
 		txns:        make([]TransactionFunc, LAST_TXN),
+		load:        load,
+		local_seed:  uint32(rand.Intn(10000000)),
 	}
 	if *SysType == DOPPEL {
 		w.waiters = TSInit(START_SIZE)
@@ -81,7 +86,6 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 	w.Register(D_BID, BidTxn)
 	w.Register(D_BID_NC, BidNCTxn)
 	w.Register(D_READ_BUY, ReadBuyTxn)
-	go w.Go()
 	return w
 }
 
@@ -135,37 +139,40 @@ func (w *Worker) Transition(e TID) {
 
 // epoch -> merged -> safe -> read -> readers done
 func (w *Worker) Go() {
-	var t Query
 	for {
 		select {
-		case t = <-w.Incoming:
+		case x := <-w.done:
 			if *SysType == DOPPEL {
-				e := w.coordinator.GetEpoch()
-				if w.epoch != e {
-					w.Transition(e)
+				w.local_store.Merge()
+				w.local_store.stash = false
+				for i := 0; i < len(w.waiters.t); i++ {
+					t := w.waiters.t[i]
+					w.doTxn(t)
 				}
+				w.waiters.clear()
 			}
-			if t.TXN == LAST_TXN {
-				if *SysType == DOPPEL {
-					w.local_store.Merge()
-					w.local_store.stash = false
-					for i := 0; i < len(w.waiters.t); i++ {
-						t := w.waiters.t[i]
-						w.doTxn(t)
-					}
-					w.waiters.clear()
-				}
-				t.W <- nil
-				return
-			}
-			w.doTxn(t)
+			x.W <- nil
+			return
 		default:
+			t := w.load.MakeOne(w, &w.local_seed)
+			w.doTxn(*t)
 			if *SysType == DOPPEL {
 				e := w.coordinator.GetEpoch()
 				if w.epoch != e {
 					w.Transition(e)
 				}
 			}
+		}
+	}
+}
+
+func (w *Worker) One() {
+	t := w.load.MakeOne(w, &w.local_seed)
+	w.doTxn(*t)
+	if *SysType == DOPPEL {
+		e := w.coordinator.GetEpoch()
+		if w.epoch != e {
+			w.Transition(e)
 		}
 	}
 }

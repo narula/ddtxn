@@ -35,7 +35,7 @@ type Msg struct {
 	C chan bool
 }
 
-func NewCoordinator(n int, s *Store) *Coordinator {
+func NewCoordinator(n int, s *Store, load App) *Coordinator {
 	c := &Coordinator{
 		n:          n,
 		Workers:    make([]*Worker, n),
@@ -52,7 +52,7 @@ func NewCoordinator(n int, s *Store) *Coordinator {
 		c.wsafe[i] = make(chan bool)
 		c.wgo[i] = make(chan bool)
 		c.wdone[i] = make(chan bool)
-		c.Workers[i] = NewWorker(i, s, c)
+		c.Workers[i] = NewWorker(i, s, c, load)
 	}
 	dlog.Printf("[coordinator] %v workers\n", n)
 	go c.Process()
@@ -135,7 +135,7 @@ func (c *Coordinator) Process() {
 			for i := 0; i < c.n; i++ {
 				txn := Query{TXN: LAST_TXN, W: make(chan *Result)}
 				dlog.Printf("Finishing, waiting on %d\n", i)
-				c.Workers[i].Incoming <- txn
+				c.Workers[i].done <- txn
 				<-txn.W
 				dlog.Printf("Worker %d finished.\n", i)
 			}

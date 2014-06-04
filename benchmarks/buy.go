@@ -2,18 +2,17 @@ package main
 
 import (
 	"ddtxn"
+	"ddtxn/apps"
 	"ddtxn/prof"
 	"ddtxn/stats"
 	"flag"
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -58,26 +57,8 @@ func main() {
 	nproducts := *nbidders / *contention
 	s := ddtxn.NewStore()
 	portion_sz := *nbidders / *nworkers
-
-	dd := make([]ddtxn.Key, nproducts)
-	bidder_keys := make([]ddtxn.Key, *nbidders)
-
-	for i := 0; i < nproducts; i++ {
-		k := ddtxn.ProductKey(i)
-		dd[i] = k
-		s.CreateKey(k, int32(0), ddtxn.SUM)
-	}
-	// Uncontended keys
-	for i := nproducts; i < *nbidders/10; i++ {
-		k := ddtxn.ProductKey(i)
-		s.CreateKey(k, int32(0), ddtxn.SUM)
-	}
-	for i := 0; i < *nbidders; i++ {
-		k := ddtxn.UserKey(i)
-		bidder_keys[i] = k
-		s.CreateKey(k, "x", ddtxn.WRITE)
-	}
-	coord := ddtxn.NewCoordinator(*nworkers, s)
+	buy_app := apps.InitBuy(s, nproducts, *nbidders, portion_sz, *nworkers, *readrate, *notcontended_readrate)
+	coord := ddtxn.NewCoordinator(*nworkers, s, buy_app)
 
 	val := make([]int32, nproducts)
 
@@ -98,7 +79,6 @@ func main() {
 		}
 		wg.Add(1)
 		go func(n int) {
-			var local_seed uint32 = uint32(rand.Intn(1000000))
 			done := time.NewTimer(time.Duration(*nsec) * time.Second).C
 			wi := n % (*nworkers)
 			w := coord.Workers[wi]
@@ -108,68 +88,12 @@ func main() {
 					wg.Done()
 					return
 				default:
-					var bidder int
-					lb := int(ddtxn.RandN(&local_seed, uint32(portion_sz)))
-					bidder = lb + wi*portion_sz
-					amt := int32(ddtxn.RandN(&local_seed, 10))
-					product := int(ddtxn.RandN(&local_seed, uint32(nproducts)))
-					x := int(ddtxn.RandN(&local_seed, uint32(100)))
-
-					var txn ddtxn.Query
-					if x < *readrate {
-						txn = ddtxn.Query{
-							TXN: ddtxn.D_READ_BUY,
-							K1:  dd[product],
-						}
-						if *latency || *doValidate {
-							txn.W = make(chan *ddtxn.Result)
-						}
-						if x >= *notcontended_readrate {
-							// Contended read; already set K1
-						} else {
-							// Uncontended read
-							txn.K1 = bidder_keys[bidder]
-						}
-					} else {
-						txn = ddtxn.Query{
-							TXN: ddtxn.D_BUY,
-							K1:  bidder_keys[bidder],
-							A:   amt,
-							K2:  dd[product],
-						}
-						if *latency || *doValidate {
-							txn.W = make(chan *ddtxn.Result)
-						}
-					}
-					if *latency {
-						txn_start := time.Now()
-						w.Incoming <- txn
-						r := <-txn.W
-						txn_end := time.Since(txn_start)
-						if ddtxn.IsRead(txn.TXN) {
-							lhr[n].AddOne(txn_end.Nanoseconds())
-						} else {
-							lhw[n].AddOne(txn_end.Nanoseconds())
-						}
-						if r.C == true && x >= *readrate && *doValidate {
-							atomic.AddInt32(&val[product], amt)
-						}
-
-					} else if *doValidate {
-						w.Incoming <- txn
-						r := <-txn.W
-						if r.C == true && x >= *readrate {
-							atomic.AddInt32(&val[product], amt)
-						}
-					} else {
-						w.Incoming <- txn
-					}
+					w.One()
 				}
 			}
 		}(i)
 	}
 	wg.Wait()
-	coord.Finish()
 	end := time.Since(start)
 	p.Stop()
 
