@@ -5,48 +5,56 @@ import (
 	"testing"
 )
 
-// func TestBasic(t *testing.T) {
-// 	s := NewStore()
-// 	c := NewCoordinator(1, s)
-// 	w := c.Workers[0]
-// 	s.CreateKey(ProductKey(4), int32(0), SUM)
-// 	s.CreateKey(ProductKey(5), int32(0), SUM)
-// 	s.CreateKey(UserKey(1), "u1", WRITE)
-// 	s.CreateKey(UserKey(2), "u2", WRITE)
-// 	s.CreateKey(UserKey(3), "u3", WRITE)
-// 	tx := Query{TXN: D_BUY, K1: UserKey(1), A: int32(5), K2: ProductKey(4), W: make(chan *Result), T: 0}
-// 	w.Incoming <- tx
-// 	r := <-tx.W
+func TestBasic(t *testing.T) {
+	s := NewStore()
+	c := NewCoordinator(1, s)
+	w := c.Workers[0]
+	s.CreateKey(ProductKey(4), int32(0), SUM)
+	s.CreateKey(ProductKey(5), int32(0), SUM)
+	s.CreateKey(UserKey(1), "u1", WRITE)
+	s.CreateKey(UserKey(2), "u2", WRITE)
+	s.CreateKey(UserKey(3), "u3", WRITE)
+	tx := Query{TXN: D_BUY, K1: UserKey(1), A: int32(5), K2: ProductKey(4), W: nil, T: 0}
 
-// 	// Fresh read test
-// 	tx = Query{TXN: D_READ_BUY, K1: ProductKey(4), W: make(chan *Result), T: 0}
-// 	w.Incoming <- tx
-// 	r = <-tx.W
-// 	if r.V.(int32) != 5 {
-// 		t.Errorf("Wrong answer %v\n", r)
-// 	}
+	r := w.One(tx)
 
-// 	// Bidding
-// 	tx = Query{TXN: D_BID, K1: BidKey(5), K2: MaxBidKey(5), W: make(chan *Result), A: 27, S1: "bid on x"}
-// 	w.Incoming <- tx
-// 	r = <-tx.W
+	// Fresh read test
+	tx = Query{TXN: D_READ_BUY, K1: ProductKey(4), W: make(chan *Result), T: 0}
+	go func() {
+		w.One(tx)
+		dlog.Printf("Returned from one\n")
+	}()
+	r = <-tx.W
+	if r.V.(int32) != 5 {
+		t.Errorf("Wrong answer %v\n", r)
+	}
 
-// 	tx = Query{TXN: D_READ_BUY, K1: MaxBidKey(5), W: make(chan *Result)}
-// 	w.Incoming <- tx
-// 	r = <-tx.W
-// 	if r.V.(int32) != 27 {
-// 		t.Errorf("Wrong answer %v\n", r)
-// 	}
-// 	tx = Query{TXN: D_BID, K1: BidKey(5), K2: MaxBidKey(5), W: make(chan *Result), A: 29, S1: "bid on x"}
-// 	w.Incoming <- tx
-// 	r = <-tx.W
-// 	tx = Query{TXN: D_READ_BUY, K1: MaxBidKey(5), W: make(chan *Result)}
-// 	w.Incoming <- tx
-// 	r = <-tx.W
-// 	if r.V.(int32) != 29 {
-// 		t.Errorf("Wrong answer %v\n", r)
-// 	}
-// }
+	// Bidding
+	tx = Query{TXN: D_BID, K1: BidKey(5), K2: MaxBidKey(5), W: nil, A: 27, S1: "bid on x"}
+	w.One(tx)
+
+	tx = Query{TXN: D_READ_BUY, K1: MaxBidKey(5), W: make(chan *Result)}
+	go func() {
+		w.One(tx)
+	}()
+	r = <-tx.W
+	if r.V.(int32) != 27 {
+		t.Errorf("Wrong answer %v\n", r)
+	}
+	tx = Query{TXN: D_BID, K1: BidKey(5), K2: MaxBidKey(5), W: make(chan *Result), A: 29, S1: "bid on x"}
+	go func() {
+		w.One(tx)
+	}()
+	r = <-tx.W
+	tx = Query{TXN: D_READ_BUY, K1: MaxBidKey(5), W: make(chan *Result)}
+	go func() {
+		w.One(tx)
+	}()
+	r = <-tx.W
+	if r.V.(int32) != 29 {
+		t.Errorf("Wrong answer %v\n", r)
+	}
+}
 
 func TestRandN(t *testing.T) {
 	var seed uint32 = uint32(1)
@@ -101,6 +109,14 @@ func TestListRecord(t *testing.T) {
 			t.Errorf("Bad list %v\n", br.entries)
 		}
 		x = br.entries[i].order
+	}
+}
+
+func TestUndoKey(t *testing.T) {
+	var x uint64 = 655647
+	k := CKey(x, 'p')
+	if y := UndoCKey(k); y != x {
+		t.Errorf("Mismatch: %v %v %v\n", x, k, y)
 	}
 }
 

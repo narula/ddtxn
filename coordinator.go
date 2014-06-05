@@ -18,7 +18,6 @@ type Coordinator struct {
 	n        int
 	Workers  []*Worker
 	epochTID TID // Global TID, atomically incremented and read
-	safeTID  TID // Guaranteed no more writes at or before this point
 
 	// Notify workers
 	wsafe  []chan bool
@@ -30,12 +29,7 @@ type Coordinator struct {
 	Accelerate chan bool
 }
 
-type Msg struct {
-	T TID
-	C chan bool
-}
-
-func NewCoordinator(n int, s *Store, load App) *Coordinator {
+func NewCoordinator(n int, s *Store) *Coordinator {
 	c := &Coordinator{
 		n:          n,
 		Workers:    make([]*Worker, n),
@@ -52,7 +46,7 @@ func NewCoordinator(n int, s *Store, load App) *Coordinator {
 		c.wsafe[i] = make(chan bool)
 		c.wgo[i] = make(chan bool)
 		c.wdone[i] = make(chan bool)
-		c.Workers[i] = NewWorker(i, s, c, load)
+		c.Workers[i] = NewWorker(i, s, c)
 	}
 	dlog.Printf("[coordinator] %v workers\n", n)
 	go c.Process()
@@ -124,22 +118,13 @@ func (c *Coordinator) IncrementEpoch() {
 func (c *Coordinator) Finish() {
 	x := make(chan bool)
 	c.Done <- x
-	<-x
 }
 
 func (c *Coordinator) Process() {
 	tm := time.NewTicker(time.Duration(BUMP_EPOCH_MS) * time.Millisecond).C
 	for {
 		select {
-		case d := <-c.Done:
-			for i := 0; i < c.n; i++ {
-				txn := Query{TXN: LAST_TXN, W: make(chan *Result)}
-				dlog.Printf("Finishing, waiting on %d\n", i)
-				c.Workers[i].done <- txn
-				<-txn.W
-				dlog.Printf("Worker %d finished.\n", i)
-			}
-			d <- true
+		case <-c.Done:
 			return
 		case <-tm:
 			if *SysType == DOPPEL {

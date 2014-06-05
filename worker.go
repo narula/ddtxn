@@ -3,7 +3,6 @@ package ddtxn
 import (
 	"flag"
 	"log"
-	"math/rand"
 	"runtime/debug"
 	"time"
 )
@@ -48,20 +47,18 @@ type Worker struct {
 	waiters     *TStore
 	ctxn        *ETransaction
 	// Stats
-	Nstats     []int64
-	Naborts    int64
-	Nwait      time.Duration
-	Nwait2     time.Duration
-	txns       []TransactionFunc
-	load       App
-	local_seed uint32
+	Nstats  []int64
+	Naborts int64
+	Nwait   time.Duration
+	Nwait2  time.Duration
+	txns    []TransactionFunc
 }
 
 func (w *Worker) Register(fn int, transaction TransactionFunc) {
 	w.txns[fn] = transaction
 }
 
-func NewWorker(id int, s *Store, c *Coordinator, load App) *Worker {
+func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 	w := &Worker{
 		ID:          id,
 		store:       s,
@@ -71,8 +68,6 @@ func NewWorker(id int, s *Store, c *Coordinator, load App) *Worker {
 		epoch:       c.epochTID,
 		done:        make(chan Query),
 		txns:        make([]TransactionFunc, LAST_TXN),
-		load:        load,
-		local_seed:  uint32(rand.Intn(10000000)),
 	}
 	if *SysType == DOPPEL {
 		w.waiters = TSInit(START_SIZE)
@@ -86,6 +81,7 @@ func NewWorker(id int, s *Store, c *Coordinator, load App) *Worker {
 	w.Register(D_BID, BidTxn)
 	w.Register(D_BID_NC, BidNCTxn)
 	w.Register(D_READ_BUY, ReadBuyTxn)
+	go w.Go()
 	return w
 }
 
@@ -93,7 +89,7 @@ func (w *Worker) stashTxn(t Query) {
 	w.waiters.Add(t)
 }
 
-func (w *Worker) doTxn(t Query) {
+func (w *Worker) doTxn(t Query) (*Result, error) {
 	if t.TXN >= LAST_TXN {
 		debug.PrintStack()
 		log.Fatalf("Unknown transaction number %v\n", t.TXN)
@@ -105,12 +101,9 @@ func (w *Worker) doTxn(t Query) {
 			log.Fatalf("Stashing when I shouldn't be\n")
 		}
 		w.stashTxn(t)
-		return
+		return nil, err
 	}
-	if t.W != nil {
-		t.W <- x
-		close(t.W)
-	}
+	return x, err
 }
 
 func (w *Worker) Transition(e TID) {
@@ -125,7 +118,10 @@ func (w *Worker) Transition(e TID) {
 		w.local_store.stash = false
 		for i := 0; i < len(w.waiters.t); i++ {
 			t := w.waiters.t[i]
-			w.doTxn(t)
+			r, _ := w.doTxn(t)
+			if t.W != nil {
+				t.W <- r
+			}
 		}
 		w.waiters.clear()
 		w.local_store.stash = true
@@ -137,8 +133,10 @@ func (w *Worker) Transition(e TID) {
 	}
 }
 
-// epoch -> merged -> safe -> read -> readers done
+// Periodically check if the epoch changed.  This is important because
+// I might not always be receiving calls to One()
 func (w *Worker) Go() {
+	tm := time.NewTicker(time.Duration(BUMP_EPOCH_MS/2) * time.Millisecond).C
 	for {
 		select {
 		case x := <-w.done:
@@ -147,15 +145,16 @@ func (w *Worker) Go() {
 				w.local_store.stash = false
 				for i := 0; i < len(w.waiters.t); i++ {
 					t := w.waiters.t[i]
-					w.doTxn(t)
+					r, _ := w.doTxn(t)
+					if t.W != nil {
+						t.W <- r
+					}
 				}
 				w.waiters.clear()
 			}
 			x.W <- nil
 			return
-		default:
-			t := w.load.MakeOne(w, &w.local_seed)
-			w.doTxn(*t)
+		case <-tm:
 			if *SysType == DOPPEL {
 				e := w.coordinator.GetEpoch()
 				if w.epoch != e {
@@ -166,15 +165,17 @@ func (w *Worker) Go() {
 	}
 }
 
-func (w *Worker) One() {
-	t := w.load.MakeOne(w, &w.local_seed)
-	w.doTxn(*t)
+// Execute one transaction.  If there is a return channel, the caller
+// is waiting in a different goroutine, so send the result on it.
+func (w *Worker) One(t Query) (*Result, error) {
+	r, err := w.doTxn(t)
 	if *SysType == DOPPEL {
 		e := w.coordinator.GetEpoch()
 		if w.epoch != e {
 			w.Transition(e)
 		}
 	}
+	return r, err
 }
 
 func (w *Worker) nextTID() TID {

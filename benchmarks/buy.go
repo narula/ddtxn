@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"os/exec"
 	"runtime"
@@ -57,10 +58,7 @@ func main() {
 	nproducts := *nbidders / *contention
 	s := ddtxn.NewStore()
 	portion_sz := *nbidders / *nworkers
-	buy_app := apps.InitBuy(s, nproducts, *nbidders, portion_sz, *nworkers, *readrate, *notcontended_readrate)
-	coord := ddtxn.NewCoordinator(*nworkers, s, buy_app)
-
-	val := make([]int32, nproducts)
+	coord := ddtxn.NewCoordinator(*nworkers, s)
 
 	p := prof.StartProfile()
 	start := time.Now()
@@ -72,6 +70,8 @@ func main() {
 	var nincr int64 = 100
 	var nbuckets int64 = 1000000
 
+	buy_app := apps.InitBuy(s, nproducts, *nbidders, portion_sz, *nworkers, *readrate, *notcontended_readrate)
+
 	for i := 0; i < *clientGoRoutines; i++ {
 		if *latency {
 			lhr[i] = stats.MakeLatencyHistogram(nincr, nbuckets)
@@ -80,6 +80,7 @@ func main() {
 		wg.Add(1)
 		go func(n int) {
 			done := time.NewTimer(time.Duration(*nsec) * time.Second).C
+			var local_seed uint32 = uint32(rand.Intn(10000000))
 			wi := n % (*nworkers)
 			w := coord.Workers[wi]
 			for {
@@ -88,7 +89,28 @@ func main() {
 					wg.Done()
 					return
 				default:
-					w.One()
+					t := buy_app.MakeOne(w.ID, &local_seed)
+					if *latency || *doValidate {
+						t.W = make(chan *ddtxn.Result)
+						txn_start := time.Now()
+						_, err := w.One(t)
+						if err == ddtxn.ESTASH {
+							<-t.W
+						}
+						txn_end := time.Since(txn_start)
+						if *latency {
+							if t.TXN == ddtxn.D_READ_BUY {
+								lhr[n].AddOne(txn_end.Nanoseconds())
+							} else {
+								lhw[n].AddOne(txn_end.Nanoseconds())
+							}
+						}
+						if *doValidate {
+							buy_app.Add(t)
+						}
+					} else {
+						w.One(t)
+					}
 				}
 			}
 		}(i)
@@ -106,7 +128,7 @@ func main() {
 	}
 	nitr = nreads + nbuys
 	if *doValidate {
-		ddtxn.Validate(coord, s, *nbidders, nproducts, val, int(nitr))
+		buy_app.Validate(s, int(nitr))
 	}
 
 	out := fmt.Sprintf(" sys: %v, nworkers: %v, nbids: %v, nproducts: %v, contention: %v, done: %v, actual time: %v, nreads: %v, nbuys: %v, epoch changes: %v, total/sec %v, throughput ns/txn: %v, naborts: %v, ncopies: %v, nwmoved: %v, nrmoved: %v, ietime: %v, etime: %v, etime2: %v", *ddtxn.SysType, *nworkers, *nbidders, nproducts, *contention, nitr, end, nreads, nbuys, ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, naborts, ncopies, ddtxn.WMoved, ddtxn.RMoved, ddtxn.Time_in_IE.Seconds(), nwait.Seconds()/float64(*nworkers), nwait2.Seconds()/float64(*nworkers))

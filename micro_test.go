@@ -15,7 +15,7 @@ func BenchmarkMany(b *testing.B) {
 	np := 100
 	n := 8
 	s := loadStore(nb, np)
-	c := NewCoordinator(n, s, nil)
+	c := NewCoordinator(n, s)
 	val := make([]int32, np)
 
 	var wg sync.WaitGroup
@@ -63,7 +63,7 @@ func BenchmarkBid(b *testing.B) {
 	np := 100
 	n := 8
 	s := loadStore(nb, np)
-	c := NewCoordinator(n, s, nil)
+	c := NewCoordinator(n, s)
 	val := make([]int32, np)
 
 	var wg sync.WaitGroup
@@ -121,7 +121,7 @@ func BenchmarkBidNC(b *testing.B) {
 	n := 8
 	s := NewStore()
 	//loadStore(nb, np)
-	c := NewCoordinator(n, s, nil)
+	c := NewCoordinator(n, s)
 	val := make([]int32, np)
 
 	var wg sync.WaitGroup
@@ -178,7 +178,7 @@ func BenchmarkRead(b *testing.B) {
 	np := 100
 	n := 8
 	s := loadStore(nb, np)
-	c := NewCoordinator(n, s, nil)
+	c := NewCoordinator(n, s)
 	val := make([]int32, np)
 	read_rate := 50
 

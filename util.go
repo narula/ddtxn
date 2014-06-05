@@ -17,6 +17,17 @@ func CKey(x uint64, ch rune) Key {
 	return Key(b)
 }
 
+func UndoCKey(k Key) uint64 {
+	b := [16]byte(k)
+	var x uint64
+	var i uint64
+	for i = 0; i < 8; i++ {
+		v := uint32(b[i])
+		x = x + uint64(v<<(i*8))
+	}
+	return x
+}
+
 func TKey(x uint64, y uint64) Key {
 	var b [16]byte
 	var i uint64

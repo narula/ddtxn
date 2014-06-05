@@ -143,6 +143,10 @@ func (s *Store) Set(br *BRecord, v Value, op KeyType) {
 
 var UseRLocks = flag.Bool("rlock", true, "Use Rlocks\n")
 
+func (s *Store) Get(k Key) (*BRecord, error) {
+	return s.getKey(k)
+}
+
 func (s *Store) getKey(k Key) (*BRecord, error) {
 	if len(k) == 0 {
 		debug.PrintStack()
