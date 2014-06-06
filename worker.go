@@ -39,7 +39,7 @@ const (
 )
 
 type Worker struct {
-	sync.Mutex
+	sync.RWMutex
 	ID          int
 	store       *Store
 	local_store *LocalStore
@@ -182,7 +182,8 @@ func (w *Worker) Go() {
 // Execute one transaction.  If there is a return channel, the caller
 // is waiting in a different goroutine, so send the result on it.
 func (w *Worker) One(t Query) (*Result, error) {
-	w.Lock()
+	// Cheat.  I never call more than one of these at a time anyway.
+	w.RLock()
 	if *SysType == DOPPEL {
 		e := w.coordinator.GetEpoch()
 		if w.epoch != e {
@@ -190,7 +191,7 @@ func (w *Worker) One(t Query) (*Result, error) {
 		}
 	}
 	r, err := w.doTxn(t)
-	w.Unlock()
+	w.RUnlock()
 	return r, err
 }
 
