@@ -86,11 +86,11 @@ func main() {
 			var local_seed uint32 = uint32(rand.Intn(10000000))
 			wi := n % (*nworkers)
 			w := coord.Workers[wi]
+			// It's ok to reuse t because it gets copied in
+			// w.One(), and if we're actually reading from t later
+			// we pause and don't re-write it until it's done.
+			var t ddtxn.Query
 			for {
-				// It's ok to reuse t because it gets copied in
-				// w.One(), and if we're actually reading from t later
-				// we pause and don't re-write it until it's done.
-				var t ddtxn.Query
 				select {
 				case <-done:
 					wg.Done()
