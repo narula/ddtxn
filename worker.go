@@ -77,7 +77,7 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 	} else {
 		w.waiters = TSInit(1)
 	}
-	w.local_store.stash = true
+	w.local_store.phase = SPLIT
 	w.ctxn = StartTransaction(w)
 	w.Register(D_BUY, BuyTxn)
 	w.Register(D_BUY_NC, BuyNCTxn)
@@ -100,9 +100,6 @@ func (w *Worker) doTxn(t Query) (*Result, error) {
 	w.ctxn.Reset()
 	x, err := w.txns[t.TXN](t, w)
 	if err == ESTASH {
-		if w.local_store.stash == false {
-			log.Fatalf("Stashing when I shouldn't be\n")
-		}
 		w.stashTxn(t)
 		return nil, err
 	}
@@ -110,18 +107,16 @@ func (w *Worker) doTxn(t Query) (*Result, error) {
 }
 
 func (w *Worker) Transition(e TID) {
-	//dlog.Printf("%v transitioning to %v\n", w.ID, e)
-	w.epoch = TID(e)
+	w.epoch = e
 	if *SysType == DOPPEL {
+		w.local_store.phase = MERGE
 		w.local_store.Merge()
 		start := time.Now()
 		w.coordinator.wepoch[w.ID] <- true
-		//dlog.Printf("%v sent done with split for %v\n", w.ID, e)
 		<-w.coordinator.wsafe[w.ID]
-		//dlog.Printf("%v got safe for %v\n", w.ID, e)
 		end := time.Since(start)
 		w.Nwait += end
-		w.local_store.stash = false
+		w.local_store.phase = JOIN
 		for i := 0; i < len(w.waiters.t); i++ {
 			t := w.waiters.t[i]
 			r, _ := w.doTxn(t)
@@ -130,12 +125,10 @@ func (w *Worker) Transition(e TID) {
 			}
 		}
 		w.waiters.clear()
-		w.local_store.stash = true
+		w.local_store.phase = SPLIT
 		start = time.Now()
 		w.coordinator.wdone[w.ID] <- true
-		//dlog.Printf("%v sent done with reads for %v\n", w.ID, e)
 		<-w.coordinator.wgo[w.ID]
-		//dlog.Printf("%v got go for %v\n", w.ID, e)
 		end = time.Since(start)
 		w.Nwait2 += end
 	}
@@ -144,16 +137,19 @@ func (w *Worker) Transition(e TID) {
 // Periodically check if the epoch changed.  This is important because
 // I might not always be receiving calls to One()
 func (w *Worker) Go() {
-	tm := time.NewTicker(time.Duration(BUMP_EPOCH_MS*3) * time.Millisecond).C
+	duration := time.Duration(BUMP_EPOCH_MS*2) * time.Millisecond
+	tm := time.NewTicker(duration).C
+	_ = tm
 	for {
 		select {
 		case x := <-w.done:
 			if *SysType == DOPPEL {
-				dlog.Printf("%v Done\n", w.ID)
+				dlog.Printf("%v Received done\n", w.ID)
 				w.Lock()
+				w.local_store.phase = MERGE
 				w.local_store.Merge()
 				dlog.Printf("%v Done last merge, doing %v waiters\n", w.ID, len(w.waiters.t))
-				w.local_store.stash = false
+				w.local_store.phase = JOIN
 				for i := 0; i < len(w.waiters.t); i++ {
 					t := w.waiters.t[i]
 					r, _ := w.doTxn(t)
@@ -162,15 +158,19 @@ func (w *Worker) Go() {
 					}
 				}
 				w.waiters.clear()
+				w.Unlock()
 			}
 			x.W <- nil
-			w.Unlock()
 			return
 		case <-tm:
+			// This is necessary if all worker threads are blocked
+			// waiting for stashed reads, but there's a read race
+			// condition on w.epoch with a call to Transition() from
+			// One().  I'm ok with that cause this is just a tickle.
 			if *SysType == DOPPEL {
 				w.Lock()
 				e := w.coordinator.GetEpoch()
-				if w.epoch != e {
+				if e > w.epoch {
 					w.Transition(e)
 				}
 				w.Unlock()
@@ -179,10 +179,7 @@ func (w *Worker) Go() {
 	}
 }
 
-// Execute one transaction.  If there is a return channel, the caller
-// is waiting in a different goroutine, so send the result on it.
 func (w *Worker) One(t Query) (*Result, error) {
-	// Cheat.  I never call more than one of these at a time anyway.
 	w.RLock()
 	if *SysType == DOPPEL {
 		e := w.coordinator.GetEpoch()

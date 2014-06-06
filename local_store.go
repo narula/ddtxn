@@ -9,13 +9,20 @@ import (
 // Local per-worker store. Specific types to more quickly apply local
 // changes
 
+// Phases
+const (
+	SPLIT = iota
+	MERGE
+	JOIN
+)
+
 type LocalStore struct {
 	sums  map[Key]int32
 	max   map[Key]int32
 	bw    map[Key]Value
 	lists map[Key][]Entry
 	s     *Store
-	stash bool
+	phase uint32
 	Ncopy int64
 }
 
@@ -167,13 +174,13 @@ func (tx *ETransaction) Reset() {
 }
 
 func (tx *ETransaction) Read(k Key) (*BRecord, error) {
+	if *SysType == DOPPEL && tx.ls.phase == SPLIT && tx.s.IsDD(k) {
+		return nil, ESTASH
+	}
 	// TODO: If I wrote the key, return that value instead
 	br, err := tx.s.getKey(k)
 	if err != nil {
 		return nil, err
-	}
-	if *SysType == DOPPEL && tx.ls.stash && br.dd {
-		return nil, ESTASH
 	}
 	if err != nil {
 		return nil, err
@@ -249,8 +256,7 @@ func (tx *ETransaction) Commit() TID {
 	//  if global get from global store and lock
 	for i, _ := range tx.writes {
 		w := &tx.writes[i]
-		is_dd, ok := tx.s.dd[w.key]
-		if ok && is_dd {
+		if tx.ls.phase == SPLIT && tx.s.IsDD(w.key) {
 			w.dd = true
 			continue
 		}
@@ -290,11 +296,11 @@ func (tx *ETransaction) Commit() TID {
 		}
 	}
 	// for each write key
-	//  if dd, apply locally
+	//  if dd and split phase, apply locally
 	//  else apply globally and unlock
 	for i, _ := range tx.writes {
 		w := &tx.writes[i]
-		if w.dd {
+		if tx.ls.phase == SPLIT && w.dd {
 			switch w.op {
 			case SUM:
 				tx.ls.Apply(w.key, w.op, w.vint32, w.op)

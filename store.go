@@ -94,8 +94,9 @@ func (s *Store) CreateInt32Key(k Key, v int32, kt KeyType) *BRecord {
 	return br
 }
 
+// Only call if this is not derived data and from one thread.
 func (s *Store) checkLock(br *BRecord) {
-	if !br.dd && br.locked > THRESHOLD {
+	if br.locked > THRESHOLD {
 		s.lock_candidates.Lock()
 		s.candidates[br.key] = br
 		br.locked = 0
@@ -187,4 +188,9 @@ func (s *Store) getKeyStatic(k Key) (*BRecord, error) {
 	}
 	// TODO: mark candidates
 	return vr, nil
+}
+
+func (s *Store) IsDD(k Key) bool {
+	is, ok := s.dd[k]
+	return is && ok
 }
