@@ -3,6 +3,7 @@ package main
 import (
 	"ddtxn"
 	"ddtxn/apps"
+	"ddtxn/dlog"
 	"ddtxn/prof"
 	"ddtxn/stats"
 	"flag"
@@ -71,6 +72,7 @@ func main() {
 	var nbuckets int64 = 1000000
 
 	buy_app := apps.InitBuy(s, nproducts, *nbidders, portion_sz, *nworkers, *readrate, *notcontended_readrate)
+	dlog.Printf("Done initializing buy\n")
 
 	for i := 0; i < *clientGoRoutines; i++ {
 		if *latency {
@@ -84,12 +86,16 @@ func main() {
 			wi := n % (*nworkers)
 			w := coord.Workers[wi]
 			for {
+				// It's ok to reuse t because it gets copied in
+				// w.One(), and if we're actually reading from t later
+				// we pause and don't re-write it until it's done.
+				var t ddtxn.Query
 				select {
 				case <-done:
 					wg.Done()
 					return
 				default:
-					t := buy_app.MakeOne(w.ID, &local_seed)
+					buy_app.MakeOne(w.ID, &local_seed, &t)
 					if *latency || *doValidate {
 						t.W = make(chan *ddtxn.Result)
 						txn_start := time.Now()
@@ -106,7 +112,9 @@ func main() {
 							}
 						}
 						if *doValidate {
-							buy_app.Add(t)
+							if err != ddtxn.EABORT {
+								buy_app.Add(t)
+							}
 						}
 					} else {
 						w.One(t)
@@ -116,6 +124,7 @@ func main() {
 		}(i)
 	}
 	wg.Wait()
+	coord.Finish()
 	end := time.Since(start)
 	p.Stop()
 

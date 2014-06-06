@@ -16,41 +16,29 @@ func TestBasic(t *testing.T) {
 	s.CreateKey(UserKey(3), "u3", WRITE)
 	tx := Query{TXN: D_BUY, K1: UserKey(1), A: int32(5), K2: ProductKey(4), W: nil, T: 0}
 
-	r := w.One(tx)
-
+	r, err := w.One(tx)
+	_ = err
 	// Fresh read test
 	tx = Query{TXN: D_READ_BUY, K1: ProductKey(4), W: make(chan *Result), T: 0}
-	go func() {
-		w.One(tx)
-		dlog.Printf("Returned from one\n")
-	}()
-	r = <-tx.W
+	r, err = w.One(tx)
+	dlog.Printf("[test] Returned from one\n")
 	if r.V.(int32) != 5 {
 		t.Errorf("Wrong answer %v\n", r)
 	}
 
 	// Bidding
 	tx = Query{TXN: D_BID, K1: BidKey(5), K2: MaxBidKey(5), W: nil, A: 27, S1: "bid on x"}
-	w.One(tx)
+	r, err = w.One(tx)
 
 	tx = Query{TXN: D_READ_BUY, K1: MaxBidKey(5), W: make(chan *Result)}
-	go func() {
-		w.One(tx)
-	}()
-	r = <-tx.W
+	r, err = w.One(tx)
 	if r.V.(int32) != 27 {
 		t.Errorf("Wrong answer %v\n", r)
 	}
 	tx = Query{TXN: D_BID, K1: BidKey(5), K2: MaxBidKey(5), W: make(chan *Result), A: 29, S1: "bid on x"}
-	go func() {
-		w.One(tx)
-	}()
-	r = <-tx.W
+	r, err = w.One(tx)
 	tx = Query{TXN: D_READ_BUY, K1: MaxBidKey(5), W: make(chan *Result)}
-	go func() {
-		w.One(tx)
-	}()
-	r = <-tx.W
+	r, err = w.One(tx)
 	if r.V.(int32) != 29 {
 		t.Errorf("Wrong answer %v\n", r)
 	}

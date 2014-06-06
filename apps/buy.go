@@ -50,9 +50,8 @@ func InitBuy(s *ddtxn.Store, np, nb, portion_sz, nw, rr, crr int) *Buy {
 	return b
 }
 
-func (b *Buy) MakeOne(w int, local_seed *uint32) ddtxn.Query {
-	var txn ddtxn.Query
-	lb := int(ddtxn.RandN(local_seed, uint32(b.portion_sz)))
+func (b *Buy) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
+	lb := int(ddtxn.RandN(local_seed, uint32(b.portion_sz/4)))
 	bidder := lb + w*b.portion_sz
 	amt := int32(ddtxn.RandN(local_seed, 10))
 	product := int(ddtxn.RandN(local_seed, uint32(b.nproducts)))
@@ -72,12 +71,12 @@ func (b *Buy) MakeOne(w int, local_seed *uint32) ddtxn.Query {
 		txn.A = amt
 		txn.TXN = ddtxn.D_BUY
 	}
-	return txn
 }
 
 func (b *Buy) Add(t ddtxn.Query) {
 	if t.TXN == ddtxn.D_BUY || t.TXN == ddtxn.D_BUY_NC {
 		x := ddtxn.UndoCKey(t.K2)
+		dlog.Printf("Adding %v to %v for product %v\n", t.A, b.validate[x], x)
 		atomic.AddInt32(&b.validate[x], t.A)
 	}
 }

@@ -1,9 +1,11 @@
 package ddtxn
 
 import (
+	"ddtxn/dlog"
 	"flag"
 	"log"
 	"runtime/debug"
+	"sync"
 	"time"
 )
 
@@ -37,6 +39,7 @@ const (
 )
 
 type Worker struct {
+	sync.Mutex
 	ID          int
 	store       *Store
 	local_store *LocalStore
@@ -107,12 +110,15 @@ func (w *Worker) doTxn(t Query) (*Result, error) {
 }
 
 func (w *Worker) Transition(e TID) {
+	//dlog.Printf("%v transitioning to %v\n", w.ID, e)
 	w.epoch = TID(e)
 	if *SysType == DOPPEL {
 		w.local_store.Merge()
 		start := time.Now()
 		w.coordinator.wepoch[w.ID] <- true
+		//dlog.Printf("%v sent done with split for %v\n", w.ID, e)
 		<-w.coordinator.wsafe[w.ID]
+		//dlog.Printf("%v got safe for %v\n", w.ID, e)
 		end := time.Since(start)
 		w.Nwait += end
 		w.local_store.stash = false
@@ -127,7 +133,9 @@ func (w *Worker) Transition(e TID) {
 		w.local_store.stash = true
 		start = time.Now()
 		w.coordinator.wdone[w.ID] <- true
+		//dlog.Printf("%v sent done with reads for %v\n", w.ID, e)
 		<-w.coordinator.wgo[w.ID]
+		//dlog.Printf("%v got go for %v\n", w.ID, e)
 		end = time.Since(start)
 		w.Nwait2 += end
 	}
@@ -136,12 +144,15 @@ func (w *Worker) Transition(e TID) {
 // Periodically check if the epoch changed.  This is important because
 // I might not always be receiving calls to One()
 func (w *Worker) Go() {
-	tm := time.NewTicker(time.Duration(BUMP_EPOCH_MS/2) * time.Millisecond).C
+	tm := time.NewTicker(time.Duration(BUMP_EPOCH_MS*3) * time.Millisecond).C
 	for {
 		select {
 		case x := <-w.done:
 			if *SysType == DOPPEL {
+				dlog.Printf("%v Done\n", w.ID)
+				w.Lock()
 				w.local_store.Merge()
+				dlog.Printf("%v Done last merge, doing %v waiters\n", w.ID, len(w.waiters.t))
 				w.local_store.stash = false
 				for i := 0; i < len(w.waiters.t); i++ {
 					t := w.waiters.t[i]
@@ -153,13 +164,16 @@ func (w *Worker) Go() {
 				w.waiters.clear()
 			}
 			x.W <- nil
+			w.Unlock()
 			return
 		case <-tm:
 			if *SysType == DOPPEL {
+				w.Lock()
 				e := w.coordinator.GetEpoch()
 				if w.epoch != e {
 					w.Transition(e)
 				}
+				w.Unlock()
 			}
 		}
 	}
@@ -168,13 +182,15 @@ func (w *Worker) Go() {
 // Execute one transaction.  If there is a return channel, the caller
 // is waiting in a different goroutine, so send the result on it.
 func (w *Worker) One(t Query) (*Result, error) {
-	r, err := w.doTxn(t)
+	w.Lock()
 	if *SysType == DOPPEL {
 		e := w.coordinator.GetEpoch()
 		if w.epoch != e {
 			w.Transition(e)
 		}
 	}
+	r, err := w.doTxn(t)
+	w.Unlock()
 	return r, err
 }
 

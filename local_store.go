@@ -30,29 +30,29 @@ func NewLocalStore(s *Store) *LocalStore {
 	return ls
 }
 
-func (ls *LocalStore) Apply(br *BRecord, v Value, op KeyType) {
-	if op != br.key_type {
+func (ls *LocalStore) Apply(key Key, key_type KeyType, v Value, op KeyType) {
+	if op != key_type {
 		// Perhaps do something.  When is this set?
-		dlog.Printf("Different op types %v %v %v\n", br.key_type, op, br)
+		dlog.Printf("Different op types %v %v\n", key_type, op)
 	}
 	switch op {
 	case SUM:
-		ls.sums[br.key] += v.(int32)
+		ls.sums[key] += v.(int32)
 	case MAX:
 		delta := v.(int32)
-		if ls.max[br.key] < delta {
-			ls.max[br.key] = delta
+		if ls.max[key] < delta {
+			ls.max[key] = delta
 		}
 	case WRITE:
-		ls.bw[br.key] = v
+		ls.bw[key] = v
 	case LIST:
 		entry := v.(Entry)
-		l, ok := ls.lists[br.key]
+		l, ok := ls.lists[key]
 		if !ok {
 			l = make([]Entry, 0)
-			ls.lists[br.key] = l
+			ls.lists[key] = l
 		}
-		ls.lists[br.key] = append(l, entry)
+		ls.lists[key] = append(l, entry)
 	}
 }
 
@@ -128,6 +128,7 @@ func (ls *LocalStore) Merge() {
 //   - stash
 
 type Write struct {
+	key    Key
 	br     *BRecord
 	v      Value
 	op     KeyType
@@ -165,6 +166,7 @@ func (tx *ETransaction) Reset() {
 }
 
 func (tx *ETransaction) Read(k Key) (*BRecord, error) {
+	// TODO: If I wrote the key, return that value instead
 	br, err := tx.s.getKey(k)
 	if err != nil {
 		return nil, err
@@ -190,28 +192,30 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	return br, nil
 }
 
-func (tx *ETransaction) add(k Key, br *BRecord, v Value, op KeyType, create bool) {
+func (tx *ETransaction) add(k Key, v Value, op KeyType, create bool) {
 	if len(tx.writes) == cap(tx.writes) {
 		// TODO: extend
 		log.Fatalf("Ran out of room\n")
 	}
 	n := len(tx.writes)
 	tx.writes = tx.writes[0 : n+1]
-	tx.writes[n].br = br
+	tx.writes[n].key = k
+	tx.writes[n].br = nil
 	tx.writes[n].v = v
 	tx.writes[n].op = op
 	tx.writes[n].create = create
 	tx.writes[n].locked = false
 }
 
-func (tx *ETransaction) addInt32(k Key, br *BRecord, v int32, op KeyType, create bool) {
+func (tx *ETransaction) addInt32(k Key, v int32, op KeyType, create bool) {
 	if len(tx.writes) == cap(tx.writes) {
 		// TODO: extend
 		log.Fatalf("Ran out of room\n")
 	}
 	n := len(tx.writes)
 	tx.writes = tx.writes[0 : n+1]
-	tx.writes[n].br = br
+	tx.writes[n].key = k
+	tx.writes[n].br = nil
 	tx.writes[n].vint32 = v
 	tx.writes[n].op = op
 	tx.writes[n].create = create
@@ -219,26 +223,21 @@ func (tx *ETransaction) addInt32(k Key, br *BRecord, v int32, op KeyType, create
 }
 
 func (tx *ETransaction) WriteInt32(k Key, a int32, op KeyType) {
-	br, err := tx.s.getKey(k)
-	if err != nil {
-		br = tx.s.CreateInt32Key(k, a, op)
-	}
-	tx.addInt32(k, br, a, op, false)
+	tx.addInt32(k, a, op, false)
 }
 
 func (tx *ETransaction) Write(k Key, v Value, kt KeyType) {
-	br := tx.s.getOrCreateTypedKey(k, v, kt)
 	if kt == SUM || kt == MAX {
-		tx.addInt32(k, br, v.(int32), kt, true)
+		tx.addInt32(k, v.(int32), kt, true)
 		return
 	}
-	tx.add(k, br, v, kt, true)
+	tx.add(k, v, kt, true)
 }
 
 func (tx *ETransaction) Abort() TID {
-	for _, w := range tx.writes {
-		if w.locked {
-			w.br.Unlock(0)
+	for i, _ := range tx.writes {
+		if tx.writes[i].locked {
+			tx.writes[i].br.Unlock(0)
 		}
 	}
 	return 0
@@ -247,14 +246,29 @@ func (tx *ETransaction) Abort() TID {
 func (tx *ETransaction) Commit() TID {
 	// for each write key
 	//  if global get from global store and lock
-	// TODO: if br is nil, create the key
 	for i, _ := range tx.writes {
-		br := tx.writes[i].br
-		if !br.dd {
-			if !br.Lock() {
+		// TODO: If dd, don't do the lookup in the map.  Move dd info
+		// out of map!
+		w := &tx.writes[i]
+		if w.br == nil {
+			br, err := tx.s.getKey(w.key)
+			if br == nil || err != nil {
+				switch w.op {
+				case SUM:
+					br = tx.s.CreateInt32Key(w.key, w.vint32, w.op)
+				case MAX:
+					br = tx.s.CreateInt32Key(w.key, w.vint32, w.op)
+				default:
+					br = tx.s.CreateKey(w.key, "", WRITE)
+				}
+			}
+			w.br = br
+		}
+		if !w.br.dd {
+			if !w.br.Lock() {
 				return tx.Abort()
 			}
-			tx.writes[i].locked = true
+			w.locked = true
 		}
 	}
 	// TODO: acquire timestamp higher than anything i've read or am
@@ -263,9 +277,13 @@ func (tx *ETransaction) Commit() TID {
 
 	// for each read key
 	//  verify
-	for i, br := range tx.read {
-		if !br.Verify(tx.lasts[i]) {
-			// Check to make sure we aren't writing the key as well
+	if len(tx.read) != len(tx.lasts) {
+		debug.PrintStack()
+		log.Fatalf("Mismatch in lengths reads: %v, lasts: %v\n", tx.read, tx.lasts)
+	}
+	for i, _ := range tx.read {
+		if !tx.read[i].Verify(tx.lasts[i]) {
+			// TODO: Check to make sure we aren't writing the key as well
 			return tx.Abort()
 		}
 	}
@@ -280,11 +298,11 @@ func (tx *ETransaction) Commit() TID {
 		if w.br.dd {
 			switch w.op {
 			case SUM:
-				tx.ls.Apply(w.br, w.vint32, w.op)
+				tx.ls.Apply(w.key, w.op, w.vint32, w.op)
 			case MAX:
-				tx.ls.Apply(w.br, w.vint32, w.op)
+				tx.ls.Apply(w.key, w.op, w.vint32, w.op)
 			default:
-				tx.ls.Apply(w.br, w.v, w.op)
+				tx.ls.Apply(w.key, w.op, w.v, w.op)
 			}
 		} else {
 			switch w.op {

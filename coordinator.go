@@ -77,6 +77,7 @@ func (c *Coordinator) IncrementEpoch() {
 	// Wait for everyone to merge the previous epoch
 	for i := 0; i < c.n; i++ {
 		<-c.wepoch[i]
+		dlog.Printf("%v merged for %v\n", i, c.epochTID)
 	}
 
 	if c.epochTID%(10*EPOCH_INCR) == 0 {
@@ -106,25 +107,36 @@ func (c *Coordinator) IncrementEpoch() {
 	}
 	for i := 0; i < c.n; i++ {
 		<-c.wdone[i]
+		dlog.Printf("Got done from %v for %v\n", i, c.epochTID)
 	}
 	// Reads done!
 	for i := 0; i < c.n; i++ {
 		c.wgo[i] <- true
+		dlog.Printf("Sent go to %v for %v\n", i, c.epochTID)
 	}
 	end := time.Since(start)
 	Time_in_IE += end
 }
 
 func (c *Coordinator) Finish() {
+	dlog.Printf("Coordinator finishing\n")
 	x := make(chan bool)
 	c.Done <- x
+	<-x
 }
 
 func (c *Coordinator) Process() {
 	tm := time.NewTicker(time.Duration(BUMP_EPOCH_MS) * time.Millisecond).C
 	for {
 		select {
-		case <-c.Done:
+		case x := <-c.Done:
+			for i := 0; i < c.n; i++ {
+				txn := Query{W: make(chan *Result)}
+				c.Workers[i].done <- txn
+				<-txn.W
+				dlog.Printf("Worker %v finished\n", i)
+			}
+			x <- true
 			return
 		case <-tm:
 			if *SysType == DOPPEL {
