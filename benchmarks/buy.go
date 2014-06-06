@@ -61,8 +61,6 @@ func main() {
 	portion_sz := *nbidders / *nworkers
 	coord := ddtxn.NewCoordinator(*nworkers, s)
 
-	p := prof.StartProfile()
-	start := time.Now()
 	var wg sync.WaitGroup
 
 	lhr := make([]*stats.LatencyHist, *clientGoRoutines)
@@ -73,6 +71,9 @@ func main() {
 
 	buy_app := apps.InitBuy(s, nproducts, *nbidders, portion_sz, *nworkers, *readrate, *notcontended_readrate)
 	dlog.Printf("Done initializing buy\n")
+
+	p := prof.StartProfile()
+	start := time.Now()
 
 	for i := 0; i < *clientGoRoutines; i++ {
 		if *latency {
