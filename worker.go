@@ -118,10 +118,11 @@ func (w *Worker) Transition(e TID) {
 		w.Nwait += end
 		w.local_store.phase = JOIN
 		for i := 0; i < len(w.waiters.t); i++ {
-			t := w.waiters.t[i]
-			r, _ := w.doTxn(t)
-			if t.W != nil {
-				t.W <- r
+			if w.waiters.t[i].W != nil {
+				r, _ := w.doTxn(w.waiters.t[i])
+				w.waiters.t[i].W <- r
+			} else {
+				w.doTxn(w.waiters.t[i])
 			}
 		}
 		w.waiters.clear()
