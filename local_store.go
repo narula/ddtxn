@@ -135,6 +135,7 @@ type Write struct {
 	create bool
 	locked bool
 	vint32 int32
+	dd     bool
 }
 
 type ETransaction struct {
@@ -247,9 +248,12 @@ func (tx *ETransaction) Commit() TID {
 	// for each write key
 	//  if global get from global store and lock
 	for i, _ := range tx.writes {
-		// TODO: If dd, don't do the lookup in the map.  Move dd info
-		// out of map!
 		w := &tx.writes[i]
+		is_dd, ok := tx.s.dd[w.key]
+		if ok && is_dd {
+			w.dd = true
+			continue
+		}
 		if w.br == nil {
 			br, err := tx.s.getKey(w.key)
 			if br == nil || err != nil {
@@ -264,12 +268,10 @@ func (tx *ETransaction) Commit() TID {
 			}
 			w.br = br
 		}
-		if !w.br.dd {
-			if !w.br.Lock() {
-				return tx.Abort()
-			}
-			w.locked = true
+		if !w.br.Lock() {
+			return tx.Abort()
 		}
+		w.locked = true
 	}
 	// TODO: acquire timestamp higher than anything i've read or am
 	// writing
@@ -292,10 +294,7 @@ func (tx *ETransaction) Commit() TID {
 	//  else apply globally and unlock
 	for i, _ := range tx.writes {
 		w := &tx.writes[i]
-		if tx.w.ID == 0 && *SysType == DOPPEL {
-			tx.s.checkLock(w.br)
-		}
-		if w.br.dd {
+		if w.dd {
 			switch w.op {
 			case SUM:
 				tx.ls.Apply(w.key, w.op, w.vint32, w.op)
@@ -305,6 +304,9 @@ func (tx *ETransaction) Commit() TID {
 				tx.ls.Apply(w.key, w.op, w.v, w.op)
 			}
 		} else {
+			if tx.w.ID == 0 && *SysType == DOPPEL {
+				tx.s.checkLock(w.br)
+			}
 			switch w.op {
 			case SUM:
 				tx.s.SetInt32(w.br, w.vint32, w.op)

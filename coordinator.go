@@ -83,17 +83,21 @@ func (c *Coordinator) IncrementEpoch() {
 	if c.epochTID%(10*EPOCH_INCR) == 0 {
 		s := c.Workers[0].store
 		s.lock_candidates.Lock()
-		for _, br := range s.candidates {
+		for k, br := range s.candidates {
 			if br.dd != true {
 				br.dd = true
 				WMoved += 1
-				dlog.Printf("Moved %v to split\n", br.key)
+				dlog.Printf("Moved %v to split\n", k)
+				s.dd[k] = true
 			}
 		}
-		for _, br := range s.rcandidates {
-			br.dd = false
-			RMoved += 1
-			dlog.Printf("Moved %v to not split\n", br.key)
+		for k, br := range s.rcandidates {
+			if br.dd != false {
+				br.dd = false
+				RMoved += 1
+				dlog.Printf("Moved %v to not split\n", k)
+				s.dd[k] = false
+			}
 		}
 		s.candidates = make(map[Key]*BRecord)
 		s.rcandidates = make(map[Key]*BRecord)

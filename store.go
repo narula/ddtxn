@@ -36,6 +36,7 @@ type Store struct {
 	rcandidates     map[Key]*BRecord
 	lock_candidates sync.Mutex
 	NChunksAccessed []int64
+	dd              map[Key]bool
 }
 
 func NewStore() *Store {
@@ -44,6 +45,7 @@ func NewStore() *Store {
 		candidates:      make(map[Key]*BRecord),
 		rcandidates:     make(map[Key]*BRecord),
 		NChunksAccessed: make([]int64, CHUNKS),
+		dd:              make(map[Key]bool),
 	}
 	var bb byte
 
