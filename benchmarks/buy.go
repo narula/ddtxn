@@ -82,7 +82,7 @@ func main() {
 		}
 		wg.Add(1)
 		go func(n int) {
-			done := time.NewTimer(time.Duration(*nsec) * time.Second).C
+			duration := time.Now().Add(time.Duration(*nsec) * time.Second)
 			var local_seed uint32 = uint32(rand.Intn(10000000))
 			wi := n % (*nworkers)
 			w := coord.Workers[wi]
@@ -90,38 +90,33 @@ func main() {
 			// w.One(), and if we're actually reading from t later
 			// we pause and don't re-write it until it's done.
 			var t ddtxn.Query
-			for {
-				select {
-				case <-done:
-					wg.Done()
-					return
-				default:
-					buy_app.MakeOne(w.ID, &local_seed, &t)
-					if *latency || *doValidate {
-						t.W = make(chan *ddtxn.Result)
-						txn_start := time.Now()
-						_, err := w.One(t)
-						if err == ddtxn.ESTASH {
-							<-t.W
-						}
-						txn_end := time.Since(txn_start)
-						if *latency {
-							if t.TXN == ddtxn.D_READ_BUY {
-								lhr[n].AddOne(txn_end.Nanoseconds())
-							} else {
-								lhw[n].AddOne(txn_end.Nanoseconds())
-							}
-						}
-						if *doValidate {
-							if err != ddtxn.EABORT {
-								buy_app.Add(t)
-							}
-						}
-					} else {
-						w.One(t)
+			for duration.After(time.Now()) {
+				buy_app.MakeOne(w.ID, &local_seed, &t)
+				if *latency || *doValidate {
+					t.W = make(chan *ddtxn.Result)
+					txn_start := time.Now()
+					_, err := w.One(t)
+					if err == ddtxn.ESTASH {
+						<-t.W
 					}
+					txn_end := time.Since(txn_start)
+					if *latency {
+						if t.TXN == ddtxn.D_READ_BUY {
+							lhr[n].AddOne(txn_end.Nanoseconds())
+						} else {
+							lhw[n].AddOne(txn_end.Nanoseconds())
+						}
+					}
+					if *doValidate {
+						if err != ddtxn.EABORT {
+							buy_app.Add(t)
+						}
+					}
+				} else {
+					w.One(t)
 				}
 			}
+			wg.Done()
 		}(i)
 	}
 	wg.Wait()
