@@ -175,8 +175,12 @@ func (tx *ETransaction) Reset() {
 }
 
 func (tx *ETransaction) Read(k Key) (*BRecord, error) {
-	if *SysType == DOPPEL && tx.ls.phase == SPLIT && tx.s.IsDD(k) {
-		return nil, ESTASH
+	if *SysType == DOPPEL {
+		if tx.ls.phase == SPLIT {
+			if is, _ := tx.s.dd[k]; is {
+				return nil, ESTASH
+			}
+		}
 	}
 	// TODO: If I wrote the key, return that value instead
 	br, err := tx.s.getKey(k)
