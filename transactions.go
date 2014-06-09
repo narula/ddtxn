@@ -61,7 +61,8 @@ func BuyTxn(t Query, w *Worker) (*Result, error) {
 	return r, nil
 }
 
-// Verison of BUY that puts total in read set
+// Verison of BUY that puts total in read set (doesn't rely on
+// commutatitivity)
 func BuyNCTxn(t Query, w *Worker) (*Result, error) {
 	var r *Result = nil
 	if *Allocate {
@@ -112,7 +113,8 @@ func BidTxn(t Query, w *Worker) (*Result, error) {
 	return r, nil
 }
 
-// Version of Bid that puts bid in read set
+// Version of Bid that puts bid in read set (doesn't rely on
+// commutativity)
 func BidNCTxn(t Query, w *Worker) (*Result, error) {
 	var r *Result = nil
 	if *Allocate {
