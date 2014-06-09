@@ -89,6 +89,7 @@ func (c *Coordinator) IncrementEpoch() {
 				WMoved += 1
 				dlog.Printf("Moved %v to split\n", k)
 				s.dd[k] = true
+				br.locked = 0
 			}
 		}
 		for k, br := range s.rcandidates {

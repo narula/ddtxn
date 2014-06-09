@@ -30,7 +30,6 @@ type BRecord struct {
 	int_value int32
 	entries   []Entry
 	last      wfmutex.WFMutex
-	lastEpoch uint64
 	padding   [128]byte
 	locked    int32 // how many times was the lock already held when someone wanted it
 	stashed   int32 // how many times did we have to stash a txn bc of this key
@@ -89,14 +88,6 @@ func (br *BRecord) Lock() bool {
 }
 
 func (br *BRecord) Unlock(tid TID) {
-	if *SysType == DOPPEL && !br.dd {
-		x := CLEAR_TID & uint64(tid)
-		if x > br.lastEpoch {
-			br.lastEpoch = x
-			// Only one person doing this at a time
-			br.locked = 0
-		}
-	}
 	br.last.Unlock(uint64(tid))
 }
 
@@ -122,15 +113,6 @@ func (br *BRecord) IsUnlockedNoCount() (bool, uint64) {
 
 func (br *BRecord) Verify(last uint64) bool {
 	ok, new_last := br.IsUnlockedNoCount()
-	if *SysType == DOPPEL && !br.dd {
-		x := CLEAR_TID & last
-		lt := atomic.LoadUint64(&br.lastEpoch)
-		if x > lt {
-			// warning!  turning a read-only thing into a read/write!
-			atomic.StoreUint64(&br.lastEpoch, x)
-			atomic.StoreInt32(&br.locked, 0)
-		}
-	}
 	if !ok || uint64(new_last) != last {
 		atomic.AddInt32(&br.locked, 1)
 		return false
