@@ -92,8 +92,7 @@ func RegisterUserTxn(t Query, w *Worker) (*Result, error) {
 		return nil, EABORT
 	}
 	if *Allocate {
-		r.V = uint64(n)
-		r.C = true
+		r = &Result{uint64(n), true}
 		dlog.Printf("Registered user %v %v\n", nickname, n)
 	}
 	w.Nstats[RUBIS_REGISTER]++
@@ -128,7 +127,7 @@ func NewItemTxn(t Query, w *Worker) (*Result, error) {
 		return nil, EABORT
 	}
 	region := urec.value.(*User).Region
-	val := []Entry{Entry{order: now, top: int(n)}}
+	val := Entry{order: now, top: int(n)}
 	tx.Write(ItemKey(xx), x, WRITE)
 	tx.Write(ItemsByCatKey(x.Categ), val, LIST)
 	tx.Write(ItemsByRegKey(region, x.Categ), val, LIST)

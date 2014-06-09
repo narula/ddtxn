@@ -128,3 +128,34 @@ func TestStddev(t *testing.T) {
 	_ = mean
 	_ = stddev
 }
+
+func TestAuction(t *testing.T) {
+	s := NewStore()
+	c := NewCoordinator(1, s)
+	w := c.Workers[0]
+	myname := "johnny appleseed"
+	tx := Query{TXN: RUBIS_REGISTER, S1: myname, U1: 1}
+	r, err := w.One(tx)
+	if err != nil {
+		t.Errorf("Register\n")
+	}
+	jaid := r.V.(uint64)
+
+	tx = Query{TXN: RUBIS_NEWITEM, U1: jaid, S1: "burrito", S2: "slightly used burrito",
+		U2: 1,   // initial price
+		U3: 2,   // reserve price
+		U4: 5,   // buy now price
+		U5: 100, // duration
+		U6: 10,  // quantity
+		I:  42,  // enddate
+		U7: 1,   // category
+		W:  make(chan *Result)}
+	r, err = w.One(tx)
+	if err != nil {
+		t.Errorf("New\n")
+	}
+	burrito := r.V.(uint64)
+
+	tx = Query{TXN: RUBIS_BID, U1: jaid, U2: burrito, A: 20}
+	r, err = w.One(tx)
+}
