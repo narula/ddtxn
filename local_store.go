@@ -177,8 +177,12 @@ func (tx *ETransaction) Reset() {
 func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	if *SysType == DOPPEL {
 		if tx.ls.phase == SPLIT {
-			if is, _ := tx.s.dd[k]; is {
-				return nil, ESTASH
+			// When there is a small amount of dd, ranging over the
+			// map is faster than using hash_lookup!
+			for k1, _ := range tx.s.dd {
+				if k == k1 {
+					return nil, ESTASH
+				}
 			}
 		}
 	}
