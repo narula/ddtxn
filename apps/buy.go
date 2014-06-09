@@ -10,18 +10,17 @@ import (
 )
 
 type Buy struct {
-	nproducts      int
-	nbidders       int
-	portion_sz     int
-	nworkers       int
+	sp             uint32
 	read_rate      int
+	nproducts      int
 	contended_rate int
-	bidder_keys    []ddtxn.Key
-	product_keys   []ddtxn.Key
+	nbidders       int
+	nworkers       int
 	validate       []int32
 	lhr            []*stats.LatencyHist
 	lhw            []*stats.LatencyHist
-	sp             uint32
+	bidder_keys    []ddtxn.Key
+	product_keys   []ddtxn.Key
 }
 
 func InitBuy(s *ddtxn.Store, np, nb, nw, rr, crr int, ngo int) *Buy {
@@ -36,7 +35,6 @@ func InitBuy(s *ddtxn.Store, np, nb, nw, rr, crr int, ngo int) *Buy {
 		validate:       make([]int32, np),
 		lhr:            make([]*stats.LatencyHist, ngo),
 		lhw:            make([]*stats.LatencyHist, ngo),
-		portion_sz:     nb / nw,
 		sp:             uint32(nb / nw / 4),
 	}
 
@@ -68,7 +66,7 @@ func (b *Buy) SetupLatency(nincr int64, nbuckets int64, ngo int) {
 func (b *Buy) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 	rnd := ddtxn.RandN(local_seed, b.sp)
 	lb := int(rnd)
-	bidder := lb + w*b.portion_sz
+	bidder := lb + w*int(b.sp)*4
 	amt := int32(ddtxn.RandN(local_seed, 10))
 	product := int(ddtxn.RandN(local_seed, uint32(b.nproducts)))
 	x := int(ddtxn.RandN(local_seed, 100))
@@ -82,8 +80,8 @@ func (b *Buy) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 		}
 		txn.TXN = ddtxn.D_READ_BUY
 	} else {
-		txn.K1 = b.bidder_keys[bidder]
-		txn.K2 = b.product_keys[product]
+		txn.K1 = ddtxn.UserKey(bidder) //b.bidder_keys[bidder]
+		txn.K2 = ddtxn.ProductKey(product) //b.product_keys[product]
 		txn.A = amt
 		txn.TXN = ddtxn.D_BUY
 	}
