@@ -146,7 +146,7 @@ func main() {
 	}
 
 	f.WriteString(fmt.Sprintf("txn%v: %v\n", ddtxn.D_BUY, nbuys))
-	f.WriteString(fmt.Sprintf("txn%v: %v\n", ddtxn.D_READ_BUY, nreads))
+	f.WriteString(fmt.Sprintf("txn%v: %v\n", ddtxn.D_READ_ONE, nreads))
 
 	if *latency {
 		x, y := buy_app.LatencyString(*clientGoRoutines)

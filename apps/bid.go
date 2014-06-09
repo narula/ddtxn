@@ -80,7 +80,7 @@ func (b *Bid) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 			// Uncontended read
 			txn.K1 = b.bidder_keys[bidder]
 		}
-		txn.TXN = ddtxn.D_READ_BUY
+		txn.TXN = ddtxn.D_READ_ONE
 	} else {
 		txn.K1 = b.bidder_keys[bidder]
 		txn.K2 = b.product_keys[product]
@@ -140,7 +140,7 @@ func (b *Bid) Validate(s *ddtxn.Store, nitr int) bool {
 }
 
 func (b *Bid) Time(t *ddtxn.Query, txn_end time.Duration, n int) {
-	if t.TXN == ddtxn.D_READ_BUY {
+	if t.TXN == ddtxn.D_READ_ONE {
 		b.lhr[n].AddOne(txn_end.Nanoseconds())
 	} else {
 		b.lhw[n].AddOne(txn_end.Nanoseconds())
