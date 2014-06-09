@@ -86,7 +86,7 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 	w.Register(D_BUY_NC, BuyNCTxn)
 	w.Register(D_BID, BidTxn)
 	w.Register(D_BID_NC, BidNCTxn)
-	w.Register(D_READ_ONE, ReadBuyTxn)
+	w.Register(D_READ_ONE, ReadTxn)
 	w.Register(RUBIS_REGISTER, RegisterUserTxn)
 	w.Register(RUBIS_NEWITEM, NewItemTxn)
 	w.Register(RUBIS_BID, StoreBidTxn)

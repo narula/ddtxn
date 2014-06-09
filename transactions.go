@@ -131,7 +131,7 @@ func BidNCTxn(t Query, w *Worker) (*Result, error) {
 	return r, nil
 }
 
-func ReadBuyTxn(t Query, w *Worker) (*Result, error) {
+func ReadTxn(t Query, w *Worker) (*Result, error) {
 	var r *Result = nil
 	tx := w.ctxn
 	v1, err := tx.Read(t.K1)

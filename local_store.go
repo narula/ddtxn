@@ -183,11 +183,8 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err != nil {
-		return nil, err
-	}
 	ok, last := br.IsUnlockedNoCount()
-	// if locked, abort
+	// if locked and not by me, abort
 	// else note the last timestamp, save it, return value
 	if !ok {
 		tx.Abort()
@@ -295,6 +292,8 @@ func (tx *ETransaction) Commit() TID {
 	for i, _ := range tx.read {
 		if !tx.read[i].Verify(tx.lasts[i]) {
 			if writes[tx.read[i].key] {
+				// We would have aborted if we did not successfully
+				// lock this earlier
 				continue
 			}
 			return tx.Abort()
