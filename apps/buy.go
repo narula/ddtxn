@@ -3,8 +3,10 @@ package apps
 import (
 	"ddtxn"
 	"ddtxn/dlog"
+	"ddtxn/stats"
 	"fmt"
 	"sync/atomic"
+	"time"
 )
 
 type Buy struct {
@@ -17,9 +19,12 @@ type Buy struct {
 	bidder_keys    []ddtxn.Key
 	product_keys   []ddtxn.Key
 	validate       []int32
+	lhr            []*stats.LatencyHist
+	lhw            []*stats.LatencyHist
+	sp             uint32
 }
 
-func InitBuy(s *ddtxn.Store, np, nb, portion_sz, nw, rr, crr int) *Buy {
+func InitBuy(s *ddtxn.Store, np, nb, portion_sz, nw, rr, crr int, ngo int) *Buy {
 	b := &Buy{
 		nproducts:      np,
 		nbidders:       nb,
@@ -30,6 +35,9 @@ func InitBuy(s *ddtxn.Store, np, nb, portion_sz, nw, rr, crr int) *Buy {
 		bidder_keys:    make([]ddtxn.Key, nb),
 		product_keys:   make([]ddtxn.Key, np),
 		validate:       make([]int32, np),
+		lhr:            make([]*stats.LatencyHist, ngo),
+		lhw:            make([]*stats.LatencyHist, ngo),
+		sp:             uint32(portion_sz / 4),
 	}
 
 	for i := 0; i < np; i++ {
@@ -50,12 +58,20 @@ func InitBuy(s *ddtxn.Store, np, nb, portion_sz, nw, rr, crr int) *Buy {
 	return b
 }
 
+func (b *Buy) SetupLatency(nincr int64, nbuckets int64, ngo int) {
+	for i := 0; i < ngo; i++ {
+		b.lhr[i] = stats.MakeLatencyHistogram(nincr, nbuckets)
+		b.lhw[i] = stats.MakeLatencyHistogram(nincr, nbuckets)
+	}
+}
+
 func (b *Buy) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
-	lb := int(ddtxn.RandN(local_seed, uint32(b.portion_sz/4)))
+	rnd := ddtxn.RandN(local_seed, b.sp)
+	lb := int(rnd)
 	bidder := lb + w*b.portion_sz
 	amt := int32(ddtxn.RandN(local_seed, 10))
 	product := int(ddtxn.RandN(local_seed, uint32(b.nproducts)))
-	x := int(ddtxn.RandN(local_seed, uint32(100)))
+	x := int(ddtxn.RandN(local_seed, 100))
 	if x < b.read_rate {
 		if x >= b.contended_rate {
 			// Contended read
@@ -115,4 +131,20 @@ func (b *Buy) Validate(s *ddtxn.Store, nitr int) bool {
 		good = false
 	}
 	return good
+}
+
+func (b *Buy) Time(t *ddtxn.Query, txn_end time.Duration, n int) {
+	if t.TXN == ddtxn.D_READ_BUY {
+		b.lhr[n].AddOne(txn_end.Nanoseconds())
+	} else {
+		b.lhw[n].AddOne(txn_end.Nanoseconds())
+	}
+}
+
+func (b *Buy) LatencyString(ngo int) (string, string) {
+	for i := 1; i < ngo; i++ {
+		b.lhr[0].Combine(b.lhr[i])
+		b.lhw[0].Combine(b.lhw[i])
+	}
+	return fmt.Sprint("Read 25: %v\nRead 50: %v\nRead 75: %v\nRead 99: %v\n", b.lhr[0].GetPercentile(25), b.lhr[0].GetPercentile(50), b.lhr[0].GetPercentile(75), b.lhr[0].GetPercentile(99)), fmt.Sprint("Write 25: %v\nWrite 50: %v\nWrite 75: %v\nWrite 99: %v\n", b.lhw[0].GetPercentile(25), b.lhw[0].GetPercentile(50), b.lhw[0].GetPercentile(75), b.lhw[0].GetPercentile(99))
 }

@@ -5,7 +5,6 @@ import (
 	"ddtxn/apps"
 	"ddtxn/dlog"
 	"ddtxn/prof"
-	"ddtxn/stats"
 	"flag"
 	"fmt"
 	"log"
@@ -61,25 +60,18 @@ func main() {
 	portion_sz := *nbidders / *nworkers
 	coord := ddtxn.NewCoordinator(*nworkers, s)
 
-	var wg sync.WaitGroup
+	buy_app := apps.InitBuy(s, nproducts, *nbidders, portion_sz, *nworkers, *readrate, *notcontended_readrate, *clientGoRoutines)
+	if *latency {
+		buy_app.SetupLatency(100, 1000000, *clientGoRoutines)
+	}
 
-	lhr := make([]*stats.LatencyHist, *clientGoRoutines)
-	lhw := make([]*stats.LatencyHist, *clientGoRoutines)
-
-	var nincr int64 = 100
-	var nbuckets int64 = 1000000
-
-	buy_app := apps.InitBuy(s, nproducts, *nbidders, portion_sz, *nworkers, *readrate, *notcontended_readrate)
 	dlog.Printf("Done initializing buy\n")
 
 	p := prof.StartProfile()
 	start := time.Now()
 
+	var wg sync.WaitGroup
 	for i := 0; i < *clientGoRoutines; i++ {
-		if *latency {
-			lhr[i] = stats.MakeLatencyHistogram(nincr, nbuckets)
-			lhw[i] = stats.MakeLatencyHistogram(nincr, nbuckets)
-		}
 		wg.Add(1)
 		go func(n int) {
 			duration := time.Now().Add(time.Duration(*nsec) * time.Second)
@@ -101,11 +93,7 @@ func main() {
 					}
 					txn_end := time.Since(txn_start)
 					if *latency {
-						if t.TXN == ddtxn.D_READ_BUY {
-							lhr[n].AddOne(txn_end.Nanoseconds())
-						} else {
-							lhw[n].AddOne(txn_end.Nanoseconds())
-						}
+						buy_app.Time(&t, txn_end, n)
 					}
 					if *doValidate {
 						if err != ddtxn.EABORT {
@@ -163,12 +151,9 @@ func main() {
 	f.WriteString(fmt.Sprintf("txn%v: %v\n", ddtxn.D_READ_BUY, nreads))
 
 	if *latency {
-		for i := 1; i < *clientGoRoutines; i++ {
-			lhr[0].Combine(lhr[i])
-			lhw[0].Combine(lhw[i])
-		}
-		f.WriteString(fmt.Sprint("Read 25: %v\nRead 50: %v\nRead 75: %v\nRead 99: %v\n", lhr[0].GetPercentile(25), lhr[0].GetPercentile(50), lhr[0].GetPercentile(75), lhr[0].GetPercentile(99)))
-		f.WriteString(fmt.Sprint("Write 25: %v\nWrite 50: %v\nWrite 75: %v\nWrite 99: %v\n", lhw[0].GetPercentile(25), lhw[0].GetPercentile(50), lhw[0].GetPercentile(75), lhw[0].GetPercentile(99)))
+		x, y := buy_app.LatencyString(*clientGoRoutines)
+		f.WriteString(x)
+		f.WriteString(y)
 	}
 
 	mean, stddev := ddtxn.StddevChunks(s.NChunksAccessed)
@@ -183,5 +168,4 @@ func main() {
 		}
 	}
 	f.WriteString("\n")
-	//ddtxn.PrintLockCounts(s, *nbidders, nproducts, true)
 }
