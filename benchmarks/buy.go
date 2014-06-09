@@ -35,7 +35,6 @@ var nitr int64
 var nreads int64
 var nbuys int64
 var naborts int64
-var ncopies int64
 var nwait time.Duration
 var nwait2 time.Duration
 
@@ -57,10 +56,9 @@ func main() {
 	}
 	nproducts := *nbidders / *contention
 	s := ddtxn.NewStore()
-	portion_sz := *nbidders / *nworkers
 	coord := ddtxn.NewCoordinator(*nworkers, s)
 
-	buy_app := apps.InitBuy(s, nproducts, *nbidders, portion_sz, *nworkers, *readrate, *notcontended_readrate, *clientGoRoutines)
+	buy_app := apps.InitBuy(s, nproducts, *nbidders, *nworkers, *readrate, *notcontended_readrate, *clientGoRoutines)
 	if *latency {
 		buy_app.SetupLatency(100, 1000000, *clientGoRoutines)
 	}
@@ -124,7 +122,7 @@ func main() {
 		buy_app.Validate(s, int(nitr))
 	}
 
-	out := fmt.Sprintf(" sys: %v, nworkers: %v, nbids: %v, nproducts: %v, contention: %v, done: %v, actual time: %v, nreads: %v, nbuys: %v, epoch changes: %v, total/sec %v, throughput ns/txn: %v, naborts: %v, ncopies: %v, nwmoved: %v, nrmoved: %v, ietime: %v, etime: %v, etime2: %v", *ddtxn.SysType, *nworkers, *nbidders, nproducts, *contention, nitr, end, nreads, nbuys, ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, naborts, ncopies, ddtxn.WMoved, ddtxn.RMoved, ddtxn.Time_in_IE.Seconds(), nwait.Seconds()/float64(*nworkers), nwait2.Seconds()/float64(*nworkers))
+	out := fmt.Sprintf(" sys: %v, nworkers: %v, nbids: %v, nproducts: %v, contention: %v, done: %v, actual time: %v, nreads: %v, nbuys: %v, epoch changes: %v, total/sec %v, throughput ns/txn: %v, naborts: %v, nwmoved: %v, nrmoved: %v, ietime: %v, etime: %v, etime2: %v", *ddtxn.SysType, *nworkers, *nbidders, nproducts, *contention, nitr, end, nreads, nbuys, ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, naborts, ddtxn.WMoved, ddtxn.RMoved, ddtxn.Time_in_IE.Seconds(), nwait.Seconds()/float64(*nworkers), nwait2.Seconds()/float64(*nworkers))
 	fmt.Printf(out)
 	fmt.Printf("\n")
 

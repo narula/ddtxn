@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-type Buy struct {
+type Bid struct {
 	nproducts      int
 	nbidders       int
 	portion_sz     int
@@ -24,8 +24,8 @@ type Buy struct {
 	sp             uint32
 }
 
-func InitBuy(s *ddtxn.Store, np, nb, nw, rr, crr int, ngo int) *Buy {
-	b := &Buy{
+func InitBid(s *ddtxn.Store, np, nb, nw, rr, crr int, ngo int) *Bid {
+	b := &Bid{
 		nproducts:      np,
 		nbidders:       nb,
 		nworkers:       nw,
@@ -58,14 +58,14 @@ func InitBuy(s *ddtxn.Store, np, nb, nw, rr, crr int, ngo int) *Buy {
 	return b
 }
 
-func (b *Buy) SetupLatency(nincr int64, nbuckets int64, ngo int) {
+func (b *Bid) SetupLatency(nincr int64, nbuckets int64, ngo int) {
 	for i := 0; i < ngo; i++ {
 		b.lhr[i] = stats.MakeLatencyHistogram(nincr, nbuckets)
 		b.lhw[i] = stats.MakeLatencyHistogram(nincr, nbuckets)
 	}
 }
 
-func (b *Buy) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
+func (b *Bid) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 	rnd := ddtxn.RandN(local_seed, b.sp)
 	lb := int(rnd)
 	bidder := lb + w*b.portion_sz
@@ -85,18 +85,24 @@ func (b *Buy) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 		txn.K1 = b.bidder_keys[bidder]
 		txn.K2 = b.product_keys[product]
 		txn.A = amt
-		txn.TXN = ddtxn.D_BUY
+		txn.TXN = ddtxn.D_BID
 	}
 }
 
-func (b *Buy) Add(t ddtxn.Query) {
-	if t.TXN == ddtxn.D_BUY || t.TXN == ddtxn.D_BUY_NC {
+func (b *Bid) Add(t ddtxn.Query) {
+	if t.TXN == ddtxn.D_BID {
 		x := ddtxn.UndoCKey(t.K2)
-		atomic.AddInt32(&b.validate[x], t.A)
+		for t.A > b.validate[x] {
+			v := atomic.LoadInt32(&b.validate[x])
+			done := atomic.CompareAndSwapInt32(&b.validate[x], v, t.A)
+			if done {
+				break
+			}
+		}
 	}
 }
 
-func (b *Buy) Validate(s *ddtxn.Store, nitr int) bool {
+func (b *Bid) Validate(s *ddtxn.Store, nitr int) bool {
 	good := true
 	zero_cnt := 0
 	for j := 0; j < b.nproducts; j++ {
@@ -133,7 +139,7 @@ func (b *Buy) Validate(s *ddtxn.Store, nitr int) bool {
 	return good
 }
 
-func (b *Buy) Time(t *ddtxn.Query, txn_end time.Duration, n int) {
+func (b *Bid) Time(t *ddtxn.Query, txn_end time.Duration, n int) {
 	if t.TXN == ddtxn.D_READ_BUY {
 		b.lhr[n].AddOne(txn_end.Nanoseconds())
 	} else {
@@ -141,7 +147,7 @@ func (b *Buy) Time(t *ddtxn.Query, txn_end time.Duration, n int) {
 	}
 }
 
-func (b *Buy) LatencyString(ngo int) (string, string) {
+func (b *Bid) LatencyString(ngo int) (string, string) {
 	for i := 1; i < ngo; i++ {
 		b.lhr[0].Combine(b.lhr[i])
 		b.lhw[0].Combine(b.lhw[i])
