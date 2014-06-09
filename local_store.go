@@ -252,10 +252,8 @@ func (tx *ETransaction) Abort() TID {
 func (tx *ETransaction) Commit() TID {
 	// for each write key
 	//  if global get from global store and lock
-	writes := make(map[Key]bool)
 	for i, _ := range tx.writes {
 		w := &tx.writes[i]
-		writes[w.key] = true
 		if tx.ls.phase == SPLIT && tx.s.IsDD(w.key) {
 			w.dd = true
 			continue
@@ -290,10 +288,17 @@ func (tx *ETransaction) Commit() TID {
 		log.Fatalf("Mismatch in lengths reads: %v, lasts: %v\n", tx.read, tx.lasts)
 	}
 	for i, _ := range tx.read {
+		rd := false
 		if !tx.read[i].Verify(tx.lasts[i]) {
-			if writes[tx.read[i].key] {
-				// We would have aborted if we did not successfully
-				// lock this earlier
+			for j, _ := range tx.writes {
+				if tx.writes[j].key == tx.read[i].key {
+					// We would have aborted if we did not successfully
+					// lock this earlier
+					rd = true
+					break
+				}
+			}
+			if rd {
 				continue
 			}
 			return tx.Abort()
