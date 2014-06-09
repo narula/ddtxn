@@ -140,7 +140,9 @@ func (s *Store) Set(br *BRecord, v Value, op KeyType) {
 	case WRITE:
 		br.value = v
 	case LIST:
-		br.AddOneToList(v.(Entry))
+		if v != nil {
+			br.AddOneToRecord(v.(Entry))
+		}
 	}
 }
 

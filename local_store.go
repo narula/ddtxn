@@ -59,6 +59,7 @@ func (ls *LocalStore) Apply(key Key, key_type KeyType, v Value, op KeyType) {
 			l = make([]Entry, 0)
 			ls.lists[key] = l
 		}
+		// TODO: Use listApply or add one to list to keep them sorted
 		ls.lists[key] = append(l, entry)
 	}
 }

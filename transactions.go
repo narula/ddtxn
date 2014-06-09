@@ -28,7 +28,6 @@ type Query struct {
 }
 
 type Result struct {
-	T TID
 	V Value
 	C bool // committed?
 }
@@ -44,9 +43,6 @@ func IsRead(t int) bool {
 
 func BuyTxn(t Query, w *Worker) (*Result, error) {
 	var r *Result = nil
-	if *Allocate {
-		r = &Result{C: false}
-	}
 	tx := w.ctxn
 	tx.WriteInt32(t.K1, 1, SUM)
 	tx.WriteInt32(t.K2, t.A, SUM)
@@ -56,7 +52,7 @@ func BuyTxn(t Query, w *Worker) (*Result, error) {
 	}
 	w.Nstats[D_BUY]++
 	if *Allocate {
-		r.C = true
+		r = &Result{C: true}
 	}
 	return r, nil
 }
@@ -65,9 +61,7 @@ func BuyTxn(t Query, w *Worker) (*Result, error) {
 // commutatitivity)
 func BuyNCTxn(t Query, w *Worker) (*Result, error) {
 	var r *Result = nil
-	if *Allocate {
-		r = &Result{C: false}
-	}
+
 	tx := w.ctxn
 	tx.Write(t.K1, "x", WRITE)
 	br, err := tx.Read(t.K2)
@@ -97,9 +91,6 @@ func BuyNCTxn(t Query, w *Worker) (*Result, error) {
 // Commutative BID
 func BidTxn(t Query, w *Worker) (*Result, error) {
 	var r *Result = nil
-	if *Allocate {
-		r = &Result{C: false}
-	}
 	tx := w.ctxn
 	tx.Write(t.K1, t.S1, WRITE)
 	tx.Write(t.K2, t.A, MAX)
@@ -108,7 +99,7 @@ func BidTxn(t Query, w *Worker) (*Result, error) {
 	}
 	w.Nstats[D_BID]++
 	if *Allocate {
-		r.C = true
+		r = &Result{C: true}
 	}
 	return r, nil
 }
@@ -117,9 +108,6 @@ func BidTxn(t Query, w *Worker) (*Result, error) {
 // commutativity)
 func BidNCTxn(t Query, w *Worker) (*Result, error) {
 	var r *Result = nil
-	if *Allocate {
-		r = &Result{C: false}
-	}
 	tx := w.ctxn
 	tx.Write(t.K1, t.S1, WRITE)
 	high_bid, err := tx.Read(t.K2)
@@ -145,10 +133,6 @@ func BidNCTxn(t Query, w *Worker) (*Result, error) {
 
 func ReadBuyTxn(t Query, w *Worker) (*Result, error) {
 	var r *Result = nil
-	if *Allocate {
-		r = &Result{C: false}
-	}
-
 	tx := w.ctxn
 	v1, err := tx.Read(t.K1)
 	if err != nil {
@@ -159,7 +143,7 @@ func ReadBuyTxn(t Query, w *Worker) (*Result, error) {
 		return r, EABORT
 	}
 	if *Allocate {
-		r = &Result{txid, v1.Value(), true}
+		r = &Result{v1.Value(), true}
 	}
 	w.Nstats[D_READ_BUY]++
 	return r, nil

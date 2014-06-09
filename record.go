@@ -14,6 +14,7 @@ const (
 	MAX
 	WRITE
 	LIST
+	ORDERED_PAIR
 )
 
 type BRecord struct {
@@ -56,6 +57,8 @@ func MakeBR(k Key, val Value, kt KeyType) *BRecord {
 			b.entries = make([]Entry, 1)
 			b.entries[0] = val.(Entry)
 		}
+	case ORDERED_PAIR:
+		return nil
 	}
 	return b
 }
@@ -171,61 +174,37 @@ const (
 	DEFAULT_LIST_SIZE = 10
 )
 
-func AddToList(k Key, lst []Entry, e Entry) {
-	added := false
-	for i := 0; i < len(lst); i++ {
-		if lst[i].order < e.order {
-			lst = append(lst, Entry{})
-			copy(lst[i+1:], lst[i:])
-			lst[i] = e
-			added = true
-			break
-		}
-	}
-
-	if added {
-		if len(lst) <= DEFAULT_LIST_SIZE {
-			return
-		} else {
-			lst = lst[:DEFAULT_LIST_SIZE]
-		}
-	} else if len(lst) < DEFAULT_LIST_SIZE {
-		lst = append(lst, e)
-	} else if len(lst) > DEFAULT_LIST_SIZE {
-		lst = lst[:DEFAULT_LIST_SIZE]
-	}
-	if len(lst) > DEFAULT_LIST_SIZE {
-		log.Fatalf("How did this happen AddToList?  %v %v %v\n", e, lst, lst[:DEFAULT_LIST_SIZE])
-	}
+func (br *BRecord) AddOneToRecord(e Entry) {
+	br.entries = AddOneToList(br.entries, e)
 }
 
-func (br *BRecord) AddOneToList(e Entry) {
-	lst := br.entries
+func AddOneToList(lst []Entry, e Entry) []Entry {
 	added := false
 	for i := 0; i < len(lst); i++ {
 		if lst[i].order < e.order {
 			lst := append(lst, Entry{})
 			copy(lst[i+1:], lst[i:])
 			lst[i] = e
-			br.entries = lst
 			added = true
 			break
 		}
 	}
 	if added {
-		if len(br.entries) <= DEFAULT_LIST_SIZE {
+		if len(lst) <= DEFAULT_LIST_SIZE {
 			//
 		} else {
-			br.entries = br.entries[:DEFAULT_LIST_SIZE]
+			lst = lst[:DEFAULT_LIST_SIZE]
 		}
-	} else if len(br.entries) < DEFAULT_LIST_SIZE {
-		br.entries = append(br.entries, e)
+	} else if len(lst) < DEFAULT_LIST_SIZE {
+		// This goes at the end
+		lst = append(lst, e)
 	} else {
-		br.entries = br.entries[:DEFAULT_LIST_SIZE]
+		lst = lst[:DEFAULT_LIST_SIZE]
 	}
-	if len(br.entries) > DEFAULT_LIST_SIZE {
-		log.Fatalf("How did this happen?  %v %v %v\n", e, br.entries, br.entries[:DEFAULT_LIST_SIZE])
+	if len(lst) > DEFAULT_LIST_SIZE {
+		log.Fatalf("How did this happen?  %v %v %v\n", e, lst, lst[:DEFAULT_LIST_SIZE])
 	}
+	return lst
 }
 
 // default desc
