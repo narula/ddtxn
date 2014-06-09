@@ -19,8 +19,6 @@ type Buy struct {
 	validate       []int32
 	lhr            []*stats.LatencyHist
 	lhw            []*stats.LatencyHist
-	bidder_keys    []ddtxn.Key
-	product_keys   []ddtxn.Key
 }
 
 func InitBuy(s *ddtxn.Store, np, nb, nw, rr, crr int, ngo int) *Buy {
@@ -30,8 +28,6 @@ func InitBuy(s *ddtxn.Store, np, nb, nw, rr, crr int, ngo int) *Buy {
 		nworkers:       nw,
 		read_rate:      rr,
 		contended_rate: crr,
-		bidder_keys:    make([]ddtxn.Key, nb),
-		product_keys:   make([]ddtxn.Key, np),
 		validate:       make([]int32, np),
 		lhr:            make([]*stats.LatencyHist, ngo),
 		lhw:            make([]*stats.LatencyHist, ngo),
@@ -40,7 +36,6 @@ func InitBuy(s *ddtxn.Store, np, nb, nw, rr, crr int, ngo int) *Buy {
 
 	for i := 0; i < np; i++ {
 		k := ddtxn.ProductKey(i)
-		b.product_keys[i] = k
 		s.CreateKey(k, int32(0), ddtxn.SUM)
 	}
 	// Uncontended keys
@@ -50,7 +45,6 @@ func InitBuy(s *ddtxn.Store, np, nb, nw, rr, crr int, ngo int) *Buy {
 	}
 	for i := 0; i < nb; i++ {
 		k := ddtxn.UserKey(i)
-		b.bidder_keys[i] = k
 		s.CreateKey(k, "x", ddtxn.WRITE)
 	}
 	return b
@@ -73,15 +67,15 @@ func (b *Buy) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 	if x < b.read_rate {
 		if x >= b.contended_rate {
 			// Contended read
-			txn.K1 = b.product_keys[product]
+			txn.K1 = ddtxn.ProductKey(product)
 		} else {
 			// Uncontended read
-			txn.K1 = b.bidder_keys[bidder]
+			txn.K1 = ddtxn.UserKey(bidder)
 		}
 		txn.TXN = ddtxn.D_READ_BUY
 	} else {
-		txn.K1 = ddtxn.UserKey(bidder) //b.bidder_keys[bidder]
-		txn.K2 = ddtxn.ProductKey(product) //b.product_keys[product]
+		txn.K1 = ddtxn.UserKey(bidder)
+		txn.K2 = ddtxn.ProductKey(product)
 		txn.A = amt
 		txn.TXN = ddtxn.D_BUY
 	}
@@ -99,7 +93,7 @@ func (b *Buy) Validate(s *ddtxn.Store, nitr int) bool {
 	zero_cnt := 0
 	for j := 0; j < b.nproducts; j++ {
 		var x int32
-		k := b.product_keys[j]
+		k := ddtxn.ProductKey(j)
 		v, err := s.Get(k)
 		if err != nil {
 			if b.validate[j] != 0 {
