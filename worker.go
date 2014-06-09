@@ -34,7 +34,7 @@ const (
 	D_BUY_NC
 	D_BID
 	D_BID_NC
-	D_READ_BUY
+	D_READ_ONE
 	RUBIS_REGISTER
 	RUBIS_NEWITEM
 	RUBIS_BID
@@ -86,7 +86,7 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 	w.Register(D_BUY_NC, BuyNCTxn)
 	w.Register(D_BID, BidTxn)
 	w.Register(D_BID_NC, BidNCTxn)
-	w.Register(D_READ_BUY, ReadBuyTxn)
+	w.Register(D_READ_ONE, ReadBuyTxn)
 	w.Register(RUBIS_REGISTER, RegisterUserTxn)
 	w.Register(RUBIS_NEWITEM, NewItemTxn)
 	w.Register(RUBIS_BID, StoreBidTxn)

@@ -35,7 +35,7 @@ type Result struct {
 var Allocate = flag.Bool("allocate", true, "Allocate results")
 
 func IsRead(t int) bool {
-	if t == D_READ_BUY {
+	if t == D_READ_ONE {
 		return true
 	}
 	return false
@@ -145,6 +145,6 @@ func ReadBuyTxn(t Query, w *Worker) (*Result, error) {
 	if *Allocate {
 		r = &Result{v1.Value(), true}
 	}
-	w.Nstats[D_READ_BUY]++
+	w.Nstats[D_READ_ONE]++
 	return r, nil
 }

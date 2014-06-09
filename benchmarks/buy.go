@@ -111,7 +111,7 @@ func main() {
 	p.Stop()
 
 	for i := 0; i < *nworkers; i++ {
-		nreads = nreads + coord.Workers[i].Nstats[ddtxn.D_READ_BUY]
+		nreads = nreads + coord.Workers[i].Nstats[ddtxn.D_READ_ONE]
 		nbuys = nbuys + coord.Workers[i].Nstats[ddtxn.D_BUY]
 		naborts = naborts + coord.Workers[i].Naborts
 		nwait = nwait + coord.Workers[i].Nwait

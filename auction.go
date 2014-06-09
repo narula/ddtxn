@@ -185,6 +185,7 @@ func StoreBidTxn(t Query, w *Worker) (*Result, error) {
 	tx.Write(BidsPerItemKey(item), Entry{int(bid.Price), bid_key, 0}, LIST)
 
 	if tx.Commit() == 0 {
+		dlog.Printf("Bid abort %v\n", t)
 		return r, EABORT
 	}
 

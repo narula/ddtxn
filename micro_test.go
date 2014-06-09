@@ -202,7 +202,7 @@ func BenchmarkRead(b *testing.B) {
 					tx = Query{TXN: D_BUY, K1: u, K2: p, A: amt, W: make(chan *Result), T: 0}
 					val_txn = true
 				} else {
-					tx = Query{TXN: D_READ_BUY, K1: p, W: make(chan *Result), T: 0}
+					tx = Query{TXN: D_READ_ONE, K1: p, W: make(chan *Result), T: 0}
 				}
 				//w.Incoming <- tx
 				go func(c chan *Result, i int, np int, amt int32, val_txn bool) {

@@ -19,7 +19,7 @@ func TestBasic(t *testing.T) {
 	r, err := w.One(tx)
 	_ = err
 	// Fresh read test
-	tx = Query{TXN: D_READ_BUY, K1: ProductKey(4), W: make(chan *Result), T: 0}
+	tx = Query{TXN: D_READ_ONE, K1: ProductKey(4), W: make(chan *Result), T: 0}
 	r, err = w.One(tx)
 	dlog.Printf("[test] Returned from one\n")
 	if r.V.(int32) != 5 {
@@ -30,14 +30,14 @@ func TestBasic(t *testing.T) {
 	tx = Query{TXN: D_BID, K1: BidKey(5), K2: MaxBidKey(5), W: nil, A: 27, S1: "bid on x"}
 	r, err = w.One(tx)
 
-	tx = Query{TXN: D_READ_BUY, K1: MaxBidKey(5), W: make(chan *Result)}
+	tx = Query{TXN: D_READ_ONE, K1: MaxBidKey(5), W: make(chan *Result)}
 	r, err = w.One(tx)
 	if r.V.(int32) != 27 {
 		t.Errorf("Wrong answer %v\n", r)
 	}
 	tx = Query{TXN: D_BID, K1: BidKey(5), K2: MaxBidKey(5), W: make(chan *Result), A: 29, S1: "bid on x"}
 	r, err = w.One(tx)
-	tx = Query{TXN: D_READ_BUY, K1: MaxBidKey(5), W: make(chan *Result)}
+	tx = Query{TXN: D_READ_ONE, K1: MaxBidKey(5), W: make(chan *Result)}
 	r, err = w.One(tx)
 	if r.V.(int32) != 29 {
 		t.Errorf("Wrong answer %v\n", r)
@@ -152,10 +152,21 @@ func TestAuction(t *testing.T) {
 		W:  make(chan *Result)}
 	r, err = w.One(tx)
 	if err != nil {
-		t.Errorf("New\n")
+		t.Errorf("New item\n")
 	}
 	burrito := r.V.(uint64)
 
 	tx = Query{TXN: RUBIS_BID, U1: jaid, U2: burrito, A: 20}
 	r, err = w.One(tx)
+	if err != nil {
+		t.Errorf("Bid %v\n", err)
+	}
+	tx = Query{TXN: D_READ_ONE, K1: MaxBidKey(burrito)}
+	r, err = w.One(tx)
+	if err != nil {
+		t.Errorf("Get bid %v\n", err)
+	}
+	if r.V.(int32) != 20 {
+		t.Errorf("Wrong max bid %v\n", r)
+	}
 }

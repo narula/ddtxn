@@ -255,8 +255,10 @@ func (tx *ETransaction) Abort() TID {
 func (tx *ETransaction) Commit() TID {
 	// for each write key
 	//  if global get from global store and lock
+	writes := make(map[Key]bool)
 	for i, _ := range tx.writes {
 		w := &tx.writes[i]
+		writes[w.key] = true
 		if tx.ls.phase == SPLIT && tx.s.IsDD(w.key) {
 			w.dd = true
 			continue
@@ -292,7 +294,9 @@ func (tx *ETransaction) Commit() TID {
 	}
 	for i, _ := range tx.read {
 		if !tx.read[i].Verify(tx.lasts[i]) {
-			// TODO: Check to make sure we aren't writing the key as well
+			if writes[tx.read[i].key] {
+				continue
+			}
 			return tx.Abort()
 		}
 	}
