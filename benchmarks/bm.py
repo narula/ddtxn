@@ -52,7 +52,7 @@ def get_cpus(host):
     return ncpus
 
 def fill_cmd(rr, contention, ncpus, systype, cpus_arg=""):
-    nsec = 5
+    nsec = 10
     if options.short:
         nsec = 1
     cmd = BASE_CMD % (ncpus, cpus_arg, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock)
