@@ -36,7 +36,7 @@ type Store struct {
 	rcandidates     map[Key]*BRecord
 	lock_candidates sync.Mutex
 	NChunksAccessed []int64
-	dd              map[Key]bool
+	dd              []Key
 }
 
 func NewStore() *Store {
@@ -45,7 +45,7 @@ func NewStore() *Store {
 		candidates:      make(map[Key]*BRecord),
 		rcandidates:     make(map[Key]*BRecord),
 		NChunksAccessed: make([]int64, CHUNKS),
-		dd:              make(map[Key]bool),
+		dd:              make([]Key, 0, 100),
 	}
 	var bb byte
 
@@ -193,6 +193,10 @@ func (s *Store) getKeyStatic(k Key) (*BRecord, error) {
 }
 
 func (s *Store) IsDD(k Key) bool {
-	is, ok := s.dd[k]
-	return is && ok
+	for i := 0; i < len(s.dd); i++ {
+		if s.dd[i] == k {
+			return true
+		}
+	}
+	return false
 }

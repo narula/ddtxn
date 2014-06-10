@@ -88,16 +88,17 @@ func (c *Coordinator) IncrementEpoch() {
 				br.dd = true
 				WMoved += 1
 				dlog.Printf("Moved %v to split\n", k)
-				s.dd[k] = true
+				s.dd = append(s.dd, k)
 				br.locked = 0
 			}
 		}
+		// TODO: make this work
 		for k, br := range s.rcandidates {
 			if br.dd != false {
 				br.dd = false
 				RMoved += 1
 				dlog.Printf("Moved %v to not split\n", k)
-				s.dd[k] = false
+				//s.dd[k] = false
 			}
 		}
 		s.candidates = make(map[Key]*BRecord)
