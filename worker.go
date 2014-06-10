@@ -70,7 +70,7 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 		store:       s,
 		local_store: NewLocalStore(s),
 		coordinator: c,
-		Nstats:      make([]int64, LAST_TXN),
+		Nstats:      make([]int64, LAST_TXN+1),
 		epoch:       c.epochTID,
 		done:        make(chan Query),
 		txns:        make([]TransactionFunc, LAST_TXN),
@@ -95,6 +95,7 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 }
 
 func (w *Worker) stashTxn(t Query) {
+	w.Nstats[LAST_TXN]++
 	w.waiters.Add(t)
 }
 
