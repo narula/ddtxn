@@ -2,6 +2,7 @@ package ddtxn
 
 import (
 	"ddtxn/dlog"
+	"fmt"
 	"testing"
 )
 
@@ -169,4 +170,24 @@ func TestAuction(t *testing.T) {
 	if r.V.(int32) != 20 {
 		t.Errorf("Wrong max bid %v\n", r)
 	}
+}
+
+func TestCandidates(t *testing.T) {
+	h := make([]*OneStat, 0)
+	sh := StatsHeap(h)
+	c := Candidates{make(map[Key]*OneStat), &sh}
+	k := ProductKey(1)
+	for i := 0; i < 10; i++ {
+		c.Write(k)
+	}
+	c.Read(k)
+	fmt.Println(c.m[k])
+	h2 := make([]*OneStat, 0)
+	sh2 := StatsHeap(h2)
+	c2 := Candidates{make(map[Key]*OneStat), &sh2}
+	for i := 0; i < 9; i++ {
+		c2.Write(k)
+	}
+	c.Merge(&c2)
+	fmt.Println(c.m[k])
 }

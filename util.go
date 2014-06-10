@@ -170,11 +170,12 @@ func Validate(c *Coordinator, s *Store, nkeys int, nproducts int, val []int32, n
 	return good
 }
 
-func PrintLockCounts(s *Store, nkeys int, nproducts int, dist bool) {
+func PrintLockCounts(s *Store) {
+	fmt.Println()
 	for _, chunk := range s.store {
 		for k, v := range chunk.rows {
-			if v.locked > 0 {
-				fmt.Printf("%v\t:%v\n", k, v.locked)
+			if v.conflict > 0 {
+				fmt.Printf("%v\t:%v\n", k, v.conflict)
 			}
 		}
 	}

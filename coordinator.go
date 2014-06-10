@@ -1,6 +1,7 @@
 package ddtxn
 
 import (
+	"container/heap"
 	"ddtxn/dlog"
 	"sync/atomic"
 	"time"
@@ -69,6 +70,7 @@ func (c *Coordinator) GetEpoch() TID {
 var RMoved int64
 var WMoved int64
 var Time_in_IE time.Duration
+var Time_in_IE1 time.Duration
 
 func (c *Coordinator) IncrementEpoch() {
 	start := time.Now()
@@ -80,32 +82,6 @@ func (c *Coordinator) IncrementEpoch() {
 		dlog.Printf("%v merged for %v\n", i, c.epochTID)
 	}
 
-	if c.epochTID%(10*EPOCH_INCR) == 0 {
-		s := c.Workers[0].store
-		s.lock_candidates.Lock()
-		for k, br := range s.candidates {
-			if br.dd != true {
-				br.dd = true
-				WMoved += 1
-				dlog.Printf("Moved %v to split\n", k)
-				s.dd = append(s.dd, k)
-				br.locked = 0
-			}
-		}
-		// TODO: make this work
-		for k, br := range s.rcandidates {
-			if br.dd != false {
-				br.dd = false
-				RMoved += 1
-				dlog.Printf("Moved %v to not split\n", k)
-				//s.dd[k] = false
-			}
-		}
-		s.candidates = make(map[Key]*BRecord)
-		s.rcandidates = make(map[Key]*BRecord)
-		s.lock_candidates.Unlock()
-	}
-
 	// All merged.  The previous epoch is now safe; tell everyone to
 	// do their reads.
 	for i := 0; i < c.n; i++ {
@@ -115,12 +91,43 @@ func (c *Coordinator) IncrementEpoch() {
 		<-c.wdone[i]
 		dlog.Printf("Got done from %v for %v\n", i, c.epochTID)
 	}
-	// Reads done!
+
+	start2 := time.Now()
+	// Reads done!  Check stats
+	s := c.Workers[0].store
+	if c.epochTID%(10*EPOCH_INCR) == 0 {
+		for i := 0; i < c.n; i++ {
+			w := c.Workers[i]
+			s.cand.Merge(w.local_store.candidates)
+		}
+		for i := 0; i < len(*s.cand.h); i++ {
+			o := heap.Pop(s.cand.h).(*OneStat)
+			br, _ := s.getKey(o.k)
+			if !br.dd {
+				br.dd = true
+				WMoved += 1
+				dlog.Printf("Moved %v to split\n", o.k)
+				s.dd = append(s.dd, o.k)
+			}
+		}
+		for i := 0; i < len(s.dd); i++ {
+			if s.cand.m[s.dd[i]].ratio() < WRRATIO {
+				br, _ := s.getKey(s.dd[i])
+				br.dd = false
+				RMoved += 1
+				dlog.Printf("Moved %v from split\n", br.key)
+				s.dd[i], s.dd = s.dd[len(s.dd)-1], s.dd[:len(s.dd)-1]
+			}
+		}
+	}
+	end := time.Since(start2)
+	Time_in_IE1 += end
+
 	for i := 0; i < c.n; i++ {
 		c.wgo[i] <- true
 		dlog.Printf("Sent go to %v for %v\n", i, c.epochTID)
 	}
-	end := time.Since(start)
+	end = time.Since(start)
 	Time_in_IE += end
 }
 

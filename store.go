@@ -6,7 +6,6 @@ import (
 	"log"
 	"runtime/debug"
 	"sync"
-	"sync/atomic"
 )
 
 type TID uint64
@@ -32,20 +31,19 @@ const (
 // Global data
 type Store struct {
 	store           []*Chunk
-	candidates      map[Key]*BRecord
-	rcandidates     map[Key]*BRecord
-	lock_candidates sync.Mutex
 	NChunksAccessed []int64
 	dd              []Key
+	cand            *Candidates
 }
 
 func NewStore() *Store {
+	x := make([]*OneStat, 0)
+	sh := StatsHeap(x)
 	s := &Store{
 		store:           make([]*Chunk, CHUNKS),
-		candidates:      make(map[Key]*BRecord),
-		rcandidates:     make(map[Key]*BRecord),
 		NChunksAccessed: make([]int64, CHUNKS),
 		dd:              make([]Key, 0, 100),
+		cand:            &Candidates{make(map[Key]*OneStat), &sh},
 	}
 	var bb byte
 
@@ -92,29 +90,6 @@ func (s *Store) CreateInt32Key(k Key, v int32, kt KeyType) *BRecord {
 	chunk.rows[k] = br
 	chunk.Unlock()
 	return br
-}
-
-// Only call if this is not derived data and from one thread.
-func (s *Store) checkLock(br *BRecord) {
-	if br.locked > THRESHOLD {
-		s.lock_candidates.Lock()
-		s.candidates[br.key] = br
-		br.locked = 0
-		s.lock_candidates.Unlock()
-	}
-}
-
-// TODO: Race condition on br.dd and br.stashed This just ends up
-// moving keys back and forth.  I need a better way of determining if
-// a key should be dd.  For now, never change a key back to not-dd.
-func (s *Store) addStash(br *BRecord) {
-	atomic.AddInt32(&br.stashed, 1)
-	if br.dd && br.stashed > RTHRESHOLD {
-		s.lock_candidates.Lock()
-		s.rcandidates[br.key] = br
-		br.stashed = 0
-		s.lock_candidates.Unlock()
-	}
 }
 
 func (s *Store) SetInt32(br *BRecord, v int32, op KeyType) {
@@ -188,7 +163,6 @@ func (s *Store) getKeyStatic(k Key) (*BRecord, error) {
 	if !ok {
 		return vr, ENOKEY
 	}
-	// TODO: mark candidates
 	return vr, nil
 }
 

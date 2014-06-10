@@ -17,22 +17,26 @@ const (
 )
 
 type LocalStore struct {
-	sums  map[Key]int32
-	max   map[Key]int32
-	bw    map[Key]Value
-	lists map[Key][]Entry
-	s     *Store
-	phase uint32
-	Ncopy int64
+	sums       map[Key]int32
+	max        map[Key]int32
+	bw         map[Key]Value
+	lists      map[Key][]Entry
+	s          *Store
+	phase      uint32
+	Ncopy      int64
+	candidates *Candidates
 }
 
 func NewLocalStore(s *Store) *LocalStore {
+	x := make([]*OneStat, 0)
+	sh := StatsHeap(x)
 	ls := &LocalStore{
-		sums:  make(map[Key]int32),
-		max:   make(map[Key]int32),
-		bw:    make(map[Key]Value),
-		lists: make(map[Key][]Entry),
-		s:     s,
+		sums:       make(map[Key]int32),
+		max:        make(map[Key]int32),
+		bw:         make(map[Key]Value),
+		lists:      make(map[Key][]Entry),
+		s:          s,
+		candidates: &Candidates{make(map[Key]*OneStat), &sh},
 	}
 	return ls
 }
@@ -191,7 +195,7 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	ok, last := br.IsUnlockedNoCount()
+	ok, last := br.IsUnlocked()
 	// if locked and not by me, abort
 	// else note the last timestamp, save it, return value
 	if !ok {
@@ -262,7 +266,7 @@ func (tx *ETransaction) Commit() TID {
 	//  if global get from global store and lock
 	for i, _ := range tx.writes {
 		w := &tx.writes[i]
-		if tx.ls.phase == SPLIT && tx.s.IsDD(w.key) {
+		if *SysType == DOPPEL && tx.ls.phase == SPLIT && tx.s.IsDD(w.key) {
 			w.dd = true
 			continue
 		}
@@ -295,7 +299,14 @@ func (tx *ETransaction) Commit() TID {
 		debug.PrintStack()
 		log.Fatalf("Mismatch in lengths reads: %v, lasts: %v\n", tx.read, tx.lasts)
 	}
+	count := false
+	if *SysType == DOPPEL && tid%1000 == 0 {
+		count = true
+	}
 	for i, _ := range tx.read {
+		if count {
+			tx.ls.candidates.Read(tx.read[i].key)
+		}
 		rd := false
 		if !tx.read[i].Verify(tx.lasts[i]) {
 			for j, _ := range tx.writes {
@@ -317,6 +328,9 @@ func (tx *ETransaction) Commit() TID {
 	//  else apply globally and unlock
 	for i, _ := range tx.writes {
 		w := &tx.writes[i]
+		if count {
+			tx.ls.candidates.Write(w.key)
+		}
 		if tx.ls.phase == SPLIT && w.dd {
 			switch w.op {
 			case SUM:
@@ -327,9 +341,6 @@ func (tx *ETransaction) Commit() TID {
 				tx.ls.Apply(w.key, w.op, w.v, w.op)
 			}
 		} else {
-			if tx.w.ID == 0 && *SysType == DOPPEL {
-				tx.s.checkLock(w.br)
-			}
 			switch w.op {
 			case SUM:
 				tx.s.SetInt32(w.br, w.vint32, w.op)
