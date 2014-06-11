@@ -63,7 +63,7 @@ def contention_exp(fnpath, host, contention, rr):
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     cpus = get_cpus(host)
-    f.write("#OCC\tDoppel10\tDoppel50\tDoppel100\tDoppel1M\n")
+    f.write("#OCC\tDoppel1\tDoppel3\tDoppel5\tDoppel1000\n")
     cpu_args = ""
     if host == "ben":
         cpu_args = ben_list_cpus
@@ -73,7 +73,7 @@ def contention_exp(fnpath, host, contention, rr):
         f.write("\t")
         do(f, rr, contention, i, cpu_args, 1, 0)
         f.write("\t")
-        for ratio in [10, 50, 100, 1000000]:        
+        for ratio in [1, 3, 5, 1000]:        
             do(f, rr, contention, i, cpu_args, 0, ratio)
             f.write("\t")
         f.write("\n")
