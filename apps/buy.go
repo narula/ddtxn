@@ -83,7 +83,7 @@ func (b *Buy) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 
 func (b *Buy) Add(t ddtxn.Query) {
 	if t.TXN == ddtxn.D_BUY || t.TXN == ddtxn.D_BUY_NC {
-		x := ddtxn.UndoCKey(t.K2)
+		x, _ := ddtxn.UndoCKey(t.K2)
 		atomic.AddInt32(&b.validate[x], t.A)
 	}
 }

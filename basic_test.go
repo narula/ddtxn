@@ -104,7 +104,7 @@ func TestListRecord(t *testing.T) {
 func TestUndoKey(t *testing.T) {
 	var x uint64 = 655647
 	k := CKey(x, 'p')
-	if y := UndoCKey(k); y != x {
+	if y, r := UndoCKey(k); y != x || r != 'p' {
 		t.Errorf("Mismatch: %v %v %v\n", x, k, y)
 	}
 }

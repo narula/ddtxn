@@ -17,7 +17,7 @@ func CKey(x uint64, ch rune) Key {
 	return Key(b)
 }
 
-func UndoCKey(k Key) uint64 {
+func UndoCKey(k Key) (uint64, rune) {
 	b := [16]byte(k)
 	var x uint64
 	var i uint64
@@ -25,7 +25,7 @@ func UndoCKey(k Key) uint64 {
 		v := uint32(b[i])
 		x = x + uint64(v<<(i*8))
 	}
-	return x
+	return x, rune(b[8])
 }
 
 func TKey(x uint64, y uint64) Key {
@@ -171,7 +171,8 @@ func PrintLockCounts(s *Store) {
 	for _, chunk := range s.store {
 		for k, v := range chunk.rows {
 			if v.conflict > 0 {
-				fmt.Printf("%v\t:%v\n", k, v.conflict)
+				x, y := UndoCKey(k)
+				fmt.Printf("%v %v\t:%v\n", x, y, v.conflict)
 			}
 		}
 	}

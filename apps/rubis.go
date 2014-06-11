@@ -91,7 +91,7 @@ func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 
 func (b *Rubis) Add(t ddtxn.Query) {
 	if t.TXN == ddtxn.D_BID {
-		x := ddtxn.UndoCKey(t.K2)
+		x, _ := ddtxn.UndoCKey(t.K2)
 		for t.A > b.validate[x] {
 			v := atomic.LoadInt32(&b.validate[x])
 			done := atomic.CompareAndSwapInt32(&b.validate[x], v, t.A)

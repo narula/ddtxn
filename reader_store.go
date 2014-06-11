@@ -23,7 +23,7 @@ func (ts *TStore) clear() {
 }
 
 const (
-	WRRATIO = 5
+	WRRATIO = 3
 )
 
 type OneStat struct {
