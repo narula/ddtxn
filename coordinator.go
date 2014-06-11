@@ -79,7 +79,7 @@ func (c *Coordinator) IncrementEpoch() {
 	// Wait for everyone to merge the previous epoch
 	for i := 0; i < c.n; i++ {
 		<-c.wepoch[i]
-		dlog.Printf("%v merged for %v\n", i, c.epochTID)
+		//dlog.Printf("%v merged for %v\n", i, c.epochTID)
 	}
 
 	// All merged.  The previous epoch is now safe; tell everyone to
@@ -89,7 +89,7 @@ func (c *Coordinator) IncrementEpoch() {
 	}
 	for i := 0; i < c.n; i++ {
 		<-c.wdone[i]
-		dlog.Printf("Got done from %v for %v\n", i, c.epochTID)
+		//dlog.Printf("Got done from %v for %v\n", i, c.epochTID)
 	}
 
 	start2 := time.Now()
@@ -100,34 +100,55 @@ func (c *Coordinator) IncrementEpoch() {
 			w := c.Workers[i]
 			s.cand.Merge(w.local_store.candidates)
 		}
-		for i := 0; i < len(*s.cand.h); i++ {
+		xx := len(*s.cand.h)
+		dlog.Printf("Number of potential keys: %v; keys %v\n", xx, *s.cand.h)
+		for i := 0; i < xx; i++ {
 			o := heap.Pop(s.cand.h).(*OneStat)
+			x, y := UndoCKey(o.k)
+			dlog.Printf("%v Considering key %v %v; ratio %v\n", i, x, y, o.ratio())
 			br, _ := s.getKey(o.k)
 			if !br.dd {
 				br.dd = true
 				WMoved += 1
-				x, y := UndoCKey(o.k)
-				dlog.Printf("Moved %v %v to split\n", x, y)
+				dlog.Printf("Moved %v %v to split %v\n", x, y, o.ratio())
 				s.dd = append(s.dd, o.k)
+			} else {
+				dlog.Printf("No need to Move %v %v to split; already dd\n", x, y)
 			}
 		}
 		for i := 0; i < len(s.dd); i++ {
-			if s.cand.m[s.dd[i]].ratio() < *WRRatio {
-				br, _ := s.getKey(s.dd[i])
+			o, ok := s.cand.m[s.dd[i]]
+			br, _ := s.getKey(s.dd[i])
+			x, y := UndoCKey(br.key)
+			if !ok {
+				dlog.Printf("Key %v %v was split but now is not in store candidates\n", x, y)
+				continue
+			}
+			if o.ratio() < *WRRatio {
 				br.dd = false
 				RMoved += 1
-				x, y := UndoCKey(br.key)
-				dlog.Printf("Moved %v %v from split\n", x, y)
+				dlog.Printf("Moved %v %v from split ratio %v\n", x, y, o.ratio())
 				s.dd[i], s.dd = s.dd[len(s.dd)-1], s.dd[:len(s.dd)-1]
 			}
 		}
+		for i := 0; i < c.n; i++ {
+			// Reset local stores
+			w := c.Workers[i]
+			x := make([]*OneStat, 0)
+			sh := StatsHeap(x)
+			w.local_store.candidates = &Candidates{make(map[Key]*OneStat), &sh}
+		}
+		// Reset global store
+		x := make([]*OneStat, 0)
+		sh := StatsHeap(x)
+		s.cand = &Candidates{make(map[Key]*OneStat), &sh}
 	}
 	end := time.Since(start2)
 	Time_in_IE1 += end
 
 	for i := 0; i < c.n; i++ {
 		c.wgo[i] <- true
-		dlog.Printf("Sent go to %v for %v\n", i, c.epochTID)
+		//dlog.Printf("Sent go to %v for %v\n", i, c.epochTID)
 	}
 	end = time.Since(start)
 	Time_in_IE += end

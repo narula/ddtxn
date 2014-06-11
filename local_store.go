@@ -2,8 +2,10 @@ package ddtxn
 
 import (
 	"ddtxn/dlog"
+	"flag"
 	"log"
 	"runtime/debug"
+	"time"
 )
 
 // Local per-worker store. Specific types to more quickly apply local
@@ -16,6 +18,8 @@ const (
 	JOIN
 )
 
+var SampleRate = flag.Int64("sr", 10000, "Sample ever sr nanoseconds\n")
+
 type LocalStore struct {
 	sums       map[Key]int32
 	max        map[Key]int32
@@ -25,6 +29,7 @@ type LocalStore struct {
 	phase      uint32
 	Ncopy      int64
 	candidates *Candidates
+	start      time.Time
 }
 
 func NewLocalStore(s *Store) *LocalStore {
@@ -37,6 +42,7 @@ func NewLocalStore(s *Store) *LocalStore {
 		lists:      make(map[Key][]Entry),
 		s:          s,
 		candidates: &Candidates{make(map[Key]*OneStat), &sh},
+		start:      time.Now(),
 	}
 	return ls
 }
@@ -199,7 +205,8 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	// if locked and not by me, abort
 	// else note the last timestamp, save it, return value
 	if !ok {
-		if *SysType == DOPPEL {
+		d := time.Since(tx.ls.start)
+		if *SysType == DOPPEL && d.Nanoseconds()%*SampleRate == 0 {
 			tx.ls.candidates.Conflict(k)
 		}
 		tx.Abort()
@@ -265,6 +272,11 @@ func (tx *ETransaction) Abort() TID {
 }
 
 func (tx *ETransaction) Commit() TID {
+	count := false
+	d := time.Since(tx.ls.start)
+	if *SysType == DOPPEL && d.Nanoseconds()%*SampleRate == 0 {
+		count = true
+	}
 	// for each write key
 	//  if global get from global store and lock
 	for i, _ := range tx.writes {
@@ -288,7 +300,7 @@ func (tx *ETransaction) Commit() TID {
 			w.br = br
 		}
 		if !w.br.Lock() {
-			if *SysType == DOPPEL {
+			if count {
 				tx.ls.candidates.Conflict(w.key)
 			}
 			return tx.Abort()
@@ -304,10 +316,6 @@ func (tx *ETransaction) Commit() TID {
 	if len(tx.read) != len(tx.lasts) {
 		debug.PrintStack()
 		log.Fatalf("Mismatch in lengths reads: %v, lasts: %v\n", tx.read, tx.lasts)
-	}
-	count := false
-	if *SysType == DOPPEL && tid%1000 == 0 {
-		count = true
 	}
 	for i, _ := range tx.read {
 		if count {
@@ -326,7 +334,7 @@ func (tx *ETransaction) Commit() TID {
 			if rd {
 				continue
 			}
-			if *SysType == DOPPEL {
+			if *SysType == DOPPEL && count {
 				tx.ls.candidates.Conflict(tx.read[i].key)
 			}
 			return tx.Abort()

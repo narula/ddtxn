@@ -2,11 +2,10 @@ package ddtxn
 
 import (
 	"container/heap"
-	"ddtxn/dlog"
 	"flag"
 )
 
-var WRRatio = flag.Float64("wr", 10, "Ratio of write conflicts (and some write counts) to reads at which to move a piece of data to split.  Default 10.\n")
+var WRRatio = flag.Float64("wr", 3, "Ratio of sampled write conflicts and sampled writes to sampled reads at which to move a piece of data to split.  Default 3")
 
 var ConflictWeight = flag.Float64("cw", 1, "Weight given to conflicts over writes\n")
 
@@ -55,7 +54,8 @@ func (c *Candidates) Merge(c2 *Candidates) {
 		o.reads += o2.reads
 		o.writes += o2.writes
 		o.conflicts += o2.conflicts
-		dlog.Printf("Added %v reads and %v writes and %v conflicts to %v\n", o2.reads, o2.writes, o2.conflicts, o2.k)
+		//x, y := UndoCKey(o2.k)
+		//dlog.Printf("key %v %v Added %v reads and %v writes and %v conflicts ratio %v\n", x, y, o2.reads, o2.writes, o2.conflicts, o.ratio())
 		if o.ratio() > *WRRatio {
 			c.h.update(o)
 		}
@@ -71,6 +71,7 @@ func (c *Candidates) Read(k Key) {
 		o.reads++
 	}
 	if o.ratio() > *WRRatio {
+		//dlog.Printf("Read; updating %v %v\n", o.ratio(), o.k)
 		c.h.update(o)
 	}
 }
@@ -84,6 +85,7 @@ func (c *Candidates) Write(k Key) {
 		o.writes++
 	}
 	if o.ratio() > *WRRatio {
+		//dlog.Printf("Write; updating %v %v\n", o.ratio(), o.k)
 		c.h.update(o)
 	}
 }
@@ -97,6 +99,7 @@ func (c *Candidates) Conflict(k Key) {
 		o.conflicts++
 	}
 	if o.ratio() > *WRRatio {
+		//dlog.Printf("Conflict; updating %v %v\n", o.ratio(), o.k)
 		c.h.update(o)
 	}
 }
