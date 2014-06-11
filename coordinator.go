@@ -3,6 +3,7 @@ package ddtxn
 import (
 	"container/heap"
 	"ddtxn/dlog"
+	"fmt"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -107,7 +108,7 @@ func (c *Coordinator) IncrementEpoch() {
 				br.dd = true
 				WMoved += 1
 				x, y := UndoCKey(o.k)
-				dlog.Printf("Moved %v %v to split\n", x, y)
+				fmt.Printf("Moved %v %v to split\n", x, y)
 				s.dd = append(s.dd, o.k)
 			}
 		}
@@ -117,7 +118,7 @@ func (c *Coordinator) IncrementEpoch() {
 				br.dd = false
 				RMoved += 1
 				x, y := UndoCKey(br.key)
-				dlog.Printf("Moved %v %v from split\n", x, y)
+				fmt.Printf("Moved %v %v from split\n", x, y)
 				s.dd[i], s.dd = s.dd[len(s.dd)-1], s.dd[:len(s.dd)-1]
 			}
 		}

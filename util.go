@@ -106,7 +106,7 @@ func RatingKey(user uint64) Key {
 
 func RandN(seed *uint32, n uint32) uint32 {
 	*seed = *seed*1103515245 + 12345
-	return ((*seed & 0x7fffffff) % (n * 2) / 2)
+	return ((*seed & 0x7fffffff) % (n * 8) / 8)
 }
 
 func Randstr(sz int) string {
