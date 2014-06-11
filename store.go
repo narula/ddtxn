@@ -132,7 +132,7 @@ func (s *Store) getKey(k Key) (*BRecord, error) {
 		debug.PrintStack()
 		log.Fatalf("[store] getKey(): Empty key\n")
 	}
-	//s.NChunksAccessed[k[0]]++
+	s.NChunksAccessed[k[0]]++
 	if !*UseRLocks {
 		x, err := s.getKeyStatic(k)
 		return x, err
