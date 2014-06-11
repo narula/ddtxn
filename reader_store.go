@@ -3,7 +3,10 @@ package ddtxn
 import (
 	"container/heap"
 	"ddtxn/dlog"
+	"flag"
 )
+
+var WRRatio = flag.Float64("wr", 10, "Ratio of write conflicts (and some write counts) to reads at which to move a piece of data to split.  Default 10.\n")
 
 type TStore struct {
 	t []Query
@@ -21,10 +24,6 @@ func (ts *TStore) Add(t Query) {
 func (ts *TStore) clear() {
 	ts.t = ts.t[:0]
 }
-
-const (
-	WRRATIO = 3
-)
 
 type OneStat struct {
 	k      Key
@@ -53,7 +52,7 @@ func (c *Candidates) Merge(c2 *Candidates) {
 		o.reads += o2.reads
 		o.writes += o2.writes
 		dlog.Printf("Added %v reads and %v writes to %v\n", o2.reads, o2.writes, o2.k)
-		if o.ratio() > WRRATIO {
+		if o.ratio() > *WRRatio {
 			c.h.update(o)
 		}
 	}
@@ -67,7 +66,7 @@ func (c *Candidates) Read(k Key) {
 	} else {
 		o.reads++
 	}
-	if o.ratio() > WRRATIO {
+	if o.ratio() > *WRRatio {
 		c.h.update(o)
 	}
 }
@@ -80,7 +79,7 @@ func (c *Candidates) Write(k Key) {
 	} else {
 		o.writes++
 	}
-	if o.ratio() > WRRATIO {
+	if o.ratio() > *WRRatio {
 		c.h.update(o)
 	}
 }

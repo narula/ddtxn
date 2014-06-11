@@ -113,7 +113,7 @@ func (c *Coordinator) IncrementEpoch() {
 			}
 		}
 		for i := 0; i < len(s.dd); i++ {
-			if s.cand.m[s.dd[i]].ratio() < WRRATIO {
+			if s.cand.m[s.dd[i]].ratio() < *WRRatio {
 				br, _ := s.getKey(s.dd[i])
 				br.dd = false
 				RMoved += 1

@@ -285,6 +285,9 @@ func (tx *ETransaction) Commit() TID {
 			w.br = br
 		}
 		if !w.br.Lock() {
+			if *SysType == DOPPEL {
+				tx.ls.candidates.Write(w.key)
+			}
 			return tx.Abort()
 		}
 		w.locked = true
@@ -328,10 +331,10 @@ func (tx *ETransaction) Commit() TID {
 	//  else apply globally and unlock
 	for i, _ := range tx.writes {
 		w := &tx.writes[i]
-		if count {
-			tx.ls.candidates.Write(w.key)
-		}
 		if tx.ls.phase == SPLIT && w.dd {
+			if *SysType == DOPPEL && count {
+				tx.ls.candidates.Write(w.key)
+			}
 			switch w.op {
 			case SUM:
 				tx.ls.Apply(w.key, w.op, w.vint32, w.op)
