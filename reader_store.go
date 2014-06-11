@@ -8,6 +8,8 @@ import (
 
 var WRRatio = flag.Float64("wr", 10, "Ratio of write conflicts (and some write counts) to reads at which to move a piece of data to split.  Default 10.\n")
 
+var ConflictWeight = flag.Float64("cw", 1, "Weight given to conflicts over writes\n")
+
 type TStore struct {
 	t []Query
 }
@@ -26,14 +28,15 @@ func (ts *TStore) clear() {
 }
 
 type OneStat struct {
-	k      Key
-	reads  float64
-	writes float64
-	index  int
+	k         Key
+	reads     float64
+	writes    float64
+	conflicts float64
+	index     int
 }
 
 func (o *OneStat) ratio() float64 {
-	return float64(o.writes) / float64(o.reads)
+	return float64((*ConflictWeight)*o.conflicts+o.writes) / float64(o.reads)
 }
 
 type Candidates struct {
@@ -46,12 +49,13 @@ func (c *Candidates) Merge(c2 *Candidates) {
 		o2 := heap.Pop(c2.h).(*OneStat)
 		o, ok := c.m[o2.k]
 		if !ok {
-			c.m[o2.k] = &OneStat{k: o2.k, reads: 0, writes: 0, index: -1}
+			c.m[o2.k] = &OneStat{k: o2.k, reads: 0, writes: 0, conflicts: 0, index: -1}
 			o = c.m[o2.k]
 		}
 		o.reads += o2.reads
 		o.writes += o2.writes
-		dlog.Printf("Added %v reads and %v writes to %v\n", o2.reads, o2.writes, o2.k)
+		o.conflicts += o2.conflicts
+		dlog.Printf("Added %v reads and %v writes and %v conflicts to %v\n", o2.reads, o2.writes, o2.conflicts, o2.k)
 		if o.ratio() > *WRRatio {
 			c.h.update(o)
 		}
@@ -61,7 +65,7 @@ func (c *Candidates) Merge(c2 *Candidates) {
 func (c *Candidates) Read(k Key) {
 	o, ok := c.m[k]
 	if !ok {
-		c.m[k] = &OneStat{k: k, reads: 2, writes: 1, index: -1}
+		c.m[k] = &OneStat{k: k, reads: 2, writes: 1, conflicts: 1, index: -1}
 		o = c.m[k]
 	} else {
 		o.reads++
@@ -74,10 +78,23 @@ func (c *Candidates) Read(k Key) {
 func (c *Candidates) Write(k Key) {
 	o, ok := c.m[k]
 	if !ok {
-		c.m[k] = &OneStat{k: k, reads: 1, writes: 2, index: -1}
+		c.m[k] = &OneStat{k: k, reads: 1, writes: 2, conflicts: 1, index: -1}
 		o = c.m[k]
 	} else {
 		o.writes++
+	}
+	if o.ratio() > *WRRatio {
+		c.h.update(o)
+	}
+}
+
+func (c *Candidates) Conflict(k Key) {
+	o, ok := c.m[k]
+	if !ok {
+		c.m[k] = &OneStat{k: k, reads: 1, writes: 1, conflicts: 2, index: -1}
+		o = c.m[k]
+	} else {
+		o.conflicts++
 	}
 	if o.ratio() > *WRRatio {
 		c.h.update(o)

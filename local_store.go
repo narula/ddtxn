@@ -199,6 +199,7 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	// if locked and not by me, abort
 	// else note the last timestamp, save it, return value
 	if !ok {
+		tx.ls.candidates.Conflict(k)
 		tx.Abort()
 		return nil, EABORT
 	}
@@ -286,7 +287,7 @@ func (tx *ETransaction) Commit() TID {
 		}
 		if !w.br.Lock() {
 			if *SysType == DOPPEL {
-				tx.ls.candidates.Write(w.key)
+				tx.ls.candidates.Conflict(w.key)
 			}
 			return tx.Abort()
 		}
@@ -323,6 +324,7 @@ func (tx *ETransaction) Commit() TID {
 			if rd {
 				continue
 			}
+			tx.ls.candidates.Conflict(tx.read[i].key)
 			return tx.Abort()
 		}
 	}
@@ -332,7 +334,7 @@ func (tx *ETransaction) Commit() TID {
 	for i, _ := range tx.writes {
 		w := &tx.writes[i]
 		if tx.ls.phase == SPLIT && w.dd {
-			if *SysType == DOPPEL && count {
+			if count {
 				tx.ls.candidates.Write(w.key)
 			}
 			switch w.op {
