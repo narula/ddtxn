@@ -102,12 +102,8 @@ func (b *Buy) Validate(s *ddtxn.Store, nitr int) bool {
 			}
 			continue
 		}
-		if *ddtxn.SysType != ddtxn.DOPPEL {
-			x = v.Value().(int32)
-		} else {
-			x = v.Value().(int32)
-			dlog.Printf("Validate: %v %v\n", k, x)
-		}
+		x = v.Value().(int32)
+		dlog.Printf("Validate: %v %v\n", k, x)
 		if x != b.validate[j] {
 			fmt.Printf("Validating key %v failed; store: %v should have: %v\n", k, x, b.validate[j])
 			good = false

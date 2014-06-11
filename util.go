@@ -147,12 +147,8 @@ func Validate(c *Coordinator, s *Store, nkeys int, nproducts int, val []int32, n
 			}
 			continue
 		}
-		if *SysType != DOPPEL {
-			x = v.Value().(int32)
-		} else {
-			x = v.Value().(int32)
-			dlog.Printf("Validate: %v %v\n", k, x)
-		}
+		x = v.Value().(int32)
+		dlog.Printf("Validate: %v %v\n", k, x)
 		if x != val[j] {
 			fmt.Printf("Validating key %v failed; store: %v should have: %v\n", k, x, val[j])
 			good = false
