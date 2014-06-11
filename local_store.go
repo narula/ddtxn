@@ -199,7 +199,9 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	// if locked and not by me, abort
 	// else note the last timestamp, save it, return value
 	if !ok {
-		tx.ls.candidates.Conflict(k)
+		if *SysType == DOPPEL {
+			tx.ls.candidates.Conflict(k)
+		}
 		tx.Abort()
 		return nil, EABORT
 	}
@@ -324,7 +326,9 @@ func (tx *ETransaction) Commit() TID {
 			if rd {
 				continue
 			}
-			tx.ls.candidates.Conflict(tx.read[i].key)
+			if *SysType == DOPPEL {
+				tx.ls.candidates.Conflict(tx.read[i].key)
+			}
 			return tx.Abort()
 		}
 	}
