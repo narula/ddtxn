@@ -50,7 +50,7 @@ def get_cpus(host):
     return ncpus
 
 def fill_cmd(rr, contention, ncpus, systype, cpus_arg, ratio):
-    nsec = 10
+    nsec = 15
     if options.short:
         nsec = 1
     cmd = BASE_CMD % (ncpus, cpus_arg, ncpus, nsec, contention, rr, systype, ratio)
