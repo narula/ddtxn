@@ -10,28 +10,28 @@ import (
 )
 
 type Buy struct {
-	sp             uint32
-	read_rate      int
-	nproducts      int
-	contended_rate int
-	nbidders       int
-	nworkers       int
-	validate       []int32
-	lhr            []*stats.LatencyHist
-	lhw            []*stats.LatencyHist
+	sp              uint32
+	read_rate       int
+	nproducts       int
+	ncontended_rate int
+	nbidders        int
+	nworkers        int
+	validate        []int32
+	lhr             []*stats.LatencyHist
+	lhw             []*stats.LatencyHist
 }
 
-func InitBuy(s *ddtxn.Store, np, nb, nw, rr, crr int, ngo int) *Buy {
+func InitBuy(s *ddtxn.Store, np, nb, nw, rr int, ncrr float64, ngo int) *Buy {
 	b := &Buy{
-		nproducts:      np,
-		nbidders:       nb,
-		nworkers:       nw,
-		read_rate:      rr,
-		contended_rate: crr,
-		validate:       make([]int32, np),
-		lhr:            make([]*stats.LatencyHist, ngo),
-		lhw:            make([]*stats.LatencyHist, ngo),
-		sp:             uint32(nb / nw / 4),
+		nproducts:       np,
+		nbidders:        nb,
+		nworkers:        nw,
+		read_rate:       rr,
+		ncontended_rate: int(ncrr * float64(rr)),
+		validate:        make([]int32, np),
+		lhr:             make([]*stats.LatencyHist, ngo),
+		lhw:             make([]*stats.LatencyHist, ngo),
+		sp:              uint32(nb / nw / 4),
 	}
 
 	for i := 0; i < np; i++ {
@@ -57,6 +57,7 @@ func (b *Buy) SetupLatency(nincr int64, nbuckets int64, ngo int) {
 	}
 }
 
+// Calls rand 4 times
 func (b *Buy) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 	rnd := ddtxn.RandN(local_seed, b.sp)
 	lb := int(rnd)
@@ -65,7 +66,7 @@ func (b *Buy) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 	product := int(ddtxn.RandN(local_seed, uint32(b.nproducts)))
 	x := int(ddtxn.RandN(local_seed, 100))
 	if x < b.read_rate {
-		if x >= b.contended_rate {
+		if x > b.ncontended_rate {
 			// Contended read
 			txn.K1 = ddtxn.ProductKey(product)
 		} else {

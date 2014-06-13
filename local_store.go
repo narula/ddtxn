@@ -18,7 +18,7 @@ const (
 	JOIN
 )
 
-var SampleRate = flag.Int64("sr", 10000, "Sample ever sr nanoseconds\n")
+var SampleRate = flag.Int64("sr", 100, "Sample every sr nanoseconds\n")
 
 type LocalStore struct {
 	sums       map[Key]int32
@@ -30,6 +30,7 @@ type LocalStore struct {
 	Ncopy      int64
 	candidates *Candidates
 	start      time.Time
+	count      bool
 }
 
 func NewLocalStore(s *Store) *LocalStore {
@@ -133,17 +134,7 @@ func (ls *LocalStore) Merge() {
 	}
 }
 
-// idea of *currently running transaction* to save allocations?
-// re-use ETransaction
-// 2PL?
-// Phase?
-// allocate results
-
-// potential outcomes:
-//   - success no results
-//   - success results
-//   - abort
-//   - stash
+// TODO: 2PL
 
 type Write struct {
 	key    Key
@@ -182,6 +173,11 @@ func (tx *ETransaction) Reset() {
 	tx.lasts = tx.lasts[:0]
 	tx.read = tx.read[:0]
 	tx.writes = tx.writes[:0]
+	d := time.Since(tx.ls.start)
+	tx.ls.count = (*SysType == DOPPEL && d.Nanoseconds()%*SampleRate == 0)
+	if tx.ls.count {
+		tx.w.Nsamples++
+	}
 }
 
 func (tx *ETransaction) Read(k Key) (*BRecord, error) {
@@ -191,6 +187,9 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 			// map is faster than using hash_lookup!
 			for i := 0; i < len(tx.s.dd); i++ {
 				if k == tx.s.dd[i] {
+					if tx.ls.count {
+						tx.ls.candidates.Stash(k)
+					}
 					return nil, ESTASH
 				}
 			}
@@ -205,8 +204,7 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	// if locked and not by me, abort
 	// else note the last timestamp, save it, return value
 	if !ok {
-		d := time.Since(tx.ls.start)
-		if *SysType == DOPPEL && d.Nanoseconds()%*SampleRate == 0 {
+		if tx.ls.count {
 			tx.ls.candidates.Conflict(k)
 		}
 		tx.Abort()
@@ -272,11 +270,6 @@ func (tx *ETransaction) Abort() TID {
 }
 
 func (tx *ETransaction) Commit() TID {
-	count := false
-	d := time.Since(tx.ls.start)
-	if *SysType == DOPPEL && d.Nanoseconds()%*SampleRate == 0 {
-		count = true
-	}
 	// for each write key
 	//  if global get from global store and lock
 	for i, _ := range tx.writes {
@@ -300,7 +293,7 @@ func (tx *ETransaction) Commit() TID {
 			w.br = br
 		}
 		if !w.br.Lock() {
-			if count {
+			if tx.ls.count {
 				tx.ls.candidates.Conflict(w.key)
 			}
 			return tx.Abort()
@@ -318,7 +311,7 @@ func (tx *ETransaction) Commit() TID {
 		log.Fatalf("Mismatch in lengths reads: %v, lasts: %v\n", tx.read, tx.lasts)
 	}
 	for i, _ := range tx.read {
-		if count {
+		if tx.ls.count {
 			tx.ls.candidates.Read(tx.read[i].key)
 		}
 		rd := false
@@ -334,7 +327,7 @@ func (tx *ETransaction) Commit() TID {
 			if rd {
 				continue
 			}
-			if *SysType == DOPPEL && count {
+			if tx.ls.count {
 				tx.ls.candidates.Conflict(tx.read[i].key)
 			}
 			return tx.Abort()
@@ -346,7 +339,7 @@ func (tx *ETransaction) Commit() TID {
 	for i, _ := range tx.writes {
 		w := &tx.writes[i]
 		if tx.ls.phase == SPLIT && w.dd {
-			if count {
+			if tx.ls.count {
 				tx.ls.candidates.Write(w.key)
 			}
 			switch w.op {

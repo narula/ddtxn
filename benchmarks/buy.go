@@ -26,7 +26,7 @@ var doValidate = flag.Bool("validate", false, "Validate")
 var contention = flag.Int("contention", 1000, "Amount of contention, higher is more")
 var nbidders = flag.Int("nb", 1000000, "Bidders in store, default is 1M")
 var readrate = flag.Int("rr", 0, "Read rate %.  Rest are buys")
-var notcontended_readrate = flag.Int("ncrr", 25, "Uncontended read rate %.  Default to half reads uncontended\n")
+var notcontended_readrate = flag.Float64("ncrr", .5, "Uncontended read rate %.  Default to half reads uncontended\n")
 
 var latency = flag.Bool("latency", false, "Measure latency")
 var dataFile = flag.String("out", "buy-data.out", "Filename for output")
@@ -38,6 +38,7 @@ var naborts int64
 var nwait time.Duration
 var nwait2 time.Duration
 var nstashed int64
+var nsamples int64
 
 func main() {
 	flag.Parse()
@@ -117,6 +118,7 @@ func main() {
 		naborts = naborts + coord.Workers[i].Naborts
 		nwait = nwait + coord.Workers[i].Nwait
 		nwait2 = nwait2 + coord.Workers[i].Nwait2
+		nsamples = nsamples + coord.Workers[i].Nsamples
 		nstashed = nstashed + coord.Workers[i].Nstats[ddtxn.LAST_TXN]
 	}
 	nitr = nreads + nbuys
@@ -124,7 +126,7 @@ func main() {
 		buy_app.Validate(s, int(nitr))
 	}
 
-	out := fmt.Sprintf(" sys: %v, nworkers: %v, nbids: %v, nproducts: %v, contention: %v, done: %v, actual time: %v, nreads: %v, nbuys: %v, epoch changes: %v, total/sec: %v, throughput ns/txn: %v, naborts: %v, nwmoved: %v, nrmoved: %v, ietime: %v, ietime1: %v, etime: %v, etime2: %v, nstashed: %v, rlock: %v, wrratio: %v", *ddtxn.SysType, *nworkers, *nbidders, nproducts, *contention, nitr, end, nreads, nbuys, ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, naborts, ddtxn.WMoved, ddtxn.RMoved, ddtxn.Time_in_IE.Seconds(), ddtxn.Time_in_IE1.Seconds(), nwait.Seconds()/float64(*nworkers), nwait2.Seconds()/float64(*nworkers), nstashed, *ddtxn.UseRLocks, *ddtxn.WRRatio)
+	out := fmt.Sprintf(" sys: %v, nworkers: %v, nbids: %v, nproducts: %v, contention: %v, done: %v, actual time: %v, nreads: %v, nbuys: %v, epoch changes: %v, total/sec: %v, throughput ns/txn: %v, naborts: %v, nwmoved: %v, nrmoved: %v, ietime: %v, ietime1: %v, etime: %v, etime2: %v, nstashed: %v, rlock: %v, wrratio: %v, nsamples: %v", *ddtxn.SysType, *nworkers, *nbidders, nproducts, *contention, nitr, end, nreads, nbuys, ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, naborts, ddtxn.WMoved, ddtxn.RMoved, ddtxn.Time_in_IE.Seconds(), ddtxn.Time_in_IE1.Seconds(), nwait.Seconds()/float64(*nworkers), nwait2.Seconds()/float64(*nworkers), nstashed, *ddtxn.UseRLocks, *ddtxn.WRRatio, nsamples)
 	fmt.Printf(out)
 
 	if *ddtxn.Conflicts {

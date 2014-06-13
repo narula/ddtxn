@@ -2,6 +2,7 @@ package ddtxn
 
 import (
 	"container/heap"
+	"ddtxn/dlog"
 	"flag"
 )
 
@@ -54,8 +55,8 @@ func (c *Candidates) Merge(c2 *Candidates) {
 		o.reads += o2.reads
 		o.writes += o2.writes
 		o.conflicts += o2.conflicts
-		//x, y := UndoCKey(o2.k)
-		//dlog.Printf("key %v %v Added %v reads and %v writes and %v conflicts ratio %v\n", x, y, o2.reads, o2.writes, o2.conflicts, o.ratio())
+		x, y := UndoCKey(o2.k)
+		dlog.Printf("key %v %v Added %v reads and %v writes and %v conflicts ratio %v\n", x, y, o2.reads, o2.writes, o2.conflicts, o.ratio())
 		if o.ratio() > *WRRatio {
 			c.h.update(o)
 		}
@@ -102,6 +103,11 @@ func (c *Candidates) Conflict(k Key) {
 		//dlog.Printf("Conflict; updating %v %v\n", o.ratio(), o.k)
 		c.h.update(o)
 	}
+}
+
+// TODO: separate count?
+func (c *Candidates) Stash(k Key) {
+	c.Read(k)
 }
 
 type StatsHeap []*OneStat

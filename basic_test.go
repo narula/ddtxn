@@ -48,15 +48,15 @@ func TestBasic(t *testing.T) {
 func TestRandN(t *testing.T) {
 	var seed uint32 = uint32(1)
 	dlog.Printf("seed %v\n", seed)
-	for i := 0; i < 10; i++ {
-		x := RandN(&seed, 100000)
+	for i := 0; i < 1000; i++ {
+		x := RandN(&seed, 10)
 		// No idea how to test a random number generator, just look at the results for now.
 		dlog.Println(x, seed)
 		_ = x
 	}
 }
 
-func TestRandN2(t *testing.T) {
+func Test2RandN(t *testing.T) {
 	n := 0
 	var local_seed uint32 = uint32(n + 1)
 	portion_sz := 100
