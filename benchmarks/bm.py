@@ -33,7 +33,11 @@ def run_one(fn, cmd):
         exit(1)
     if options.dprint:
         print output
-    x = output.split()[23].rstrip(',')
+    fields = output.split(",")
+    x = 0
+    for f in fields:
+        if "total/sec" in f:
+            x = f.split(":")[1]
     tps = float(x)
     fn.write("%0.2f\t" % tps)
 

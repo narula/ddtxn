@@ -3,6 +3,7 @@ package ddtxn
 import (
 	"container/heap"
 	"ddtxn/dlog"
+	"fmt"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -121,7 +122,7 @@ func (c *Coordinator) IncrementEpoch() {
 			br, _ := s.getKey(s.dd[i])
 			x, y := UndoCKey(br.key)
 			if !ok {
-				dlog.Printf("Key %v %v was split but now is not in store candidates\n", x, y)
+				fmt.Printf("Key %v %v was split but now is not in store candidates\n", x, y)
 				continue
 			}
 			if o.ratio() < (*WRRatio)/2 {

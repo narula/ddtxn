@@ -27,7 +27,11 @@ def run_one(fn, cmd):
         exit(1)
     if options.dprint:
         print output
-    x = output.split()[23].rstrip(',')
+    fields = output.split(",")
+    x = 0
+    for f in fields:
+        if "total/sec" in f:
+            x = f.split(":")[1]
     tps = float(x)
     fn.write("%0.2f\t" % tps)
 
@@ -63,7 +67,7 @@ def contention_exp(fnpath, host, contention, rr):
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     cpus = get_cpus(host)
-    f.write("#OCC\tDoppel1\tDoppel3\tDoppel5\tDoppel1000\n")
+    f.write("#OCC\tDoppel1K\tDoppel1\tDoppel2\tDoppel3\tDoppel5\n")
     cpu_args = ""
     if host == "ben":
         cpu_args = ben_list_cpus
@@ -73,7 +77,7 @@ def contention_exp(fnpath, host, contention, rr):
         f.write("\t")
         do(f, rr, contention, i, cpu_args, 1, 0)
         f.write("\t")
-        for ratio in [1, 3, 5, 1000]:        
+        for ratio in [1000, 1, 2, 3, 5]:
             do(f, rr, contention, i, cpu_args, 0, ratio)
             f.write("\t")
         f.write("\n")
