@@ -14,8 +14,8 @@ type Value interface{}
 
 type Chunk struct {
 	sync.RWMutex
-	rows    map[Key]*BRecord
-	padding [32]int64
+	rows map[Key]*BRecord
+	//padding [32]int64
 }
 
 var (
