@@ -124,7 +124,7 @@ func (c *Coordinator) IncrementEpoch() {
 				dlog.Printf("Key %v %v was split but now is not in store candidates\n", x, y)
 				continue
 			}
-			if o.ratio() < *WRRatio {
+			if o.ratio() < (*WRRatio)/2 {
 				br.dd = false
 				RMoved += 1
 				dlog.Printf("Moved %v %v from split ratio %v\n", x, y, o.ratio())
