@@ -3,7 +3,6 @@ package ddtxn
 import (
 	"container/heap"
 	"ddtxn/dlog"
-	"fmt"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -122,7 +121,7 @@ func (c *Coordinator) IncrementEpoch() {
 			if !ok {
 				br, _ := s.getKey(s.dd[i])
 				x, y := UndoCKey(br.key)
-				fmt.Printf("Key %v %v was split but now is not in store candidates\n", x, y)
+				dlog.Printf("Key %v %v was split but now is not in store candidates\n", x, y)
 				continue
 			}
 			if o.ratio() < (*WRRatio)/2 {
@@ -130,7 +129,7 @@ func (c *Coordinator) IncrementEpoch() {
 				br.dd = false
 				RMoved += 1
 				x, y := UndoCKey(o.k)
-				fmt.Printf("Moved %v %v from split ratio %v\n", x, y, o.ratio())
+				dlog.Printf("Moved %v %v from split ratio %v\n", x, y, o.ratio())
 				s.dd[i], s.dd = s.dd[len(s.dd)-1], s.dd[:len(s.dd)-1]
 			}
 		}
