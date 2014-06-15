@@ -208,7 +208,7 @@ func main() {
 			} else {
 				ok[3]++
 			}
-			if x > 4*stddev {
+			if x > 2*stddev && bk[i] != 0 {
 				f.WriteString(fmt.Sprintf("BKey %v: %v\n", i, bk[i]))
 			}
 		}
