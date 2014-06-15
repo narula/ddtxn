@@ -184,7 +184,7 @@ func main() {
 			if x < 0 {
 				x = x * -1
 			}
-			if x > stddev {
+			if x > 2*stddev {
 				f.WriteString(fmt.Sprintf("Key %v: %v\n", i, buy_app.Accesses[i]))
 			}
 		}
