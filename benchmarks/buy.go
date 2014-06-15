@@ -61,6 +61,15 @@ func main() {
 	s := ddtxn.NewStore()
 	coord := ddtxn.NewCoordinator(*nworkers, s)
 
+	if *ddtxn.CountKeys {
+		for i := 0; i < *nworkers; i++ {
+			w := coord.Workers[i]
+			w.NKeyAccesses = make(map[rune][]int64)
+			w.NKeyAccesses[112] = make([]int64, nproducts)
+			w.NKeyAccesses[117] = make([]int64, *nbidders)
+		}
+	}
+
 	buy_app := apps.InitBuy(s, nproducts, *nbidders, *nworkers, *readrate, *notcontended_readrate, *clientGoRoutines)
 	if *latency {
 		buy_app.SetupLatency(100, 1000000, *clientGoRoutines)
@@ -176,16 +185,38 @@ func main() {
 		}
 	}
 
-	if *apps.CountKeys {
-		mean, stddev = ddtxn.StddevChunks(buy_app.Accesses[nproducts:])
-		f.WriteString(fmt.Sprintf("kmean: %v\nkstddev: %v\n", mean, stddev))
-		for i := nproducts; i < *nbidders; i++ {
-			x := float64(mean) - float64(buy_app.Accesses[i])
+	if *ddtxn.CountKeys {
+		bk := make([]int64, *nbidders)
+		pk := make([]int64, nproducts)
+		for j := 0; j < *nworkers; j++ {
+			w := coord.Workers[j]
+			for i := 0; i < *nbidders; i++ {
+				bk[i] = bk[i] + w.NKeyAccesses[117][i]
+			}
+			for i := 0; i < nproducts; i++ {
+				pk[i] = pk[i] + w.NKeyAccesses[112][i]
+			}
+		}
+		mean, stddev = ddtxn.StddevChunks(pk)
+		f.WriteString(fmt.Sprintf("p-kmean: %v\np-kstddev: %v\n", mean, stddev))
+		for i := 0; i < nproducts; i++ {
+			x := float64(mean) - float64(pk[i])
 			if x < 0 {
 				x = x * -1
 			}
-			if x > 2*stddev {
-				f.WriteString(fmt.Sprintf("Key %v: %v\n", i, buy_app.Accesses[i]))
+			if x > 2.5*stddev {
+				f.WriteString(fmt.Sprintf("PKey %v: %v\n", i, pk[i]))
+			}
+		}
+		mean, stddev = ddtxn.StddevChunks(bk)
+		f.WriteString(fmt.Sprintf("b-kmean: %v\nb-kstddev: %v\n", mean, stddev))
+		for i := 0; i < *nbidders; i++ {
+			x := float64(mean) - float64(bk[i])
+			if x < 0 {
+				x = x * -1
+			}
+			if x > 2.5*stddev {
+				f.WriteString(fmt.Sprintf("BKey %v: %v\n", i, bk[i]))
 			}
 		}
 	}

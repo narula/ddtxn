@@ -198,6 +198,10 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	// TODO: If I wrote the key, return that value instead
 	br, err := tx.s.getKey(k)
 	tx.w.NGetKeyCalls++
+	if *CountKeys {
+		p, r := UndoCKey(k)
+		tx.w.NKeyAccesses[r][p]++
+	}
 	if err != nil {
 		return nil, err
 	}

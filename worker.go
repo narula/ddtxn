@@ -16,6 +16,7 @@ const (
 )
 
 var SysType = flag.Int("sys", DOPPEL, "Type of system to run\n")
+var CountKeys = flag.Bool("ck", false, "Count keys accessed")
 
 const (
 	THRESHOLD  = 500
@@ -59,6 +60,7 @@ type Worker struct {
 	Nwait2       time.Duration
 	Nsamples     int64
 	NGetKeyCalls int64
+	NKeyAccesses map[rune][]int64
 	txns         []TransactionFunc
 }
 

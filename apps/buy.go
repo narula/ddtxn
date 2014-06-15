@@ -4,13 +4,10 @@ import (
 	"ddtxn"
 	"ddtxn/dlog"
 	"ddtxn/stats"
-	"flag"
 	"fmt"
 	"sync/atomic"
 	"time"
 )
-
-var CountKeys = flag.Bool("ck", false, "Count keys accessed")
 
 type Buy struct {
 	sp              uint32
@@ -22,7 +19,6 @@ type Buy struct {
 	validate        []int32
 	lhr             []*stats.LatencyHist
 	lhw             []*stats.LatencyHist
-	Accesses        []int64
 }
 
 func InitBuy(s *ddtxn.Store, np, nb, nw, rr int, ncrr float64, ngo int) *Buy {
@@ -36,7 +32,6 @@ func InitBuy(s *ddtxn.Store, np, nb, nw, rr int, ncrr float64, ngo int) *Buy {
 		lhr:             make([]*stats.LatencyHist, ngo),
 		lhw:             make([]*stats.LatencyHist, ngo),
 		sp:              uint32(nb / nw),
-		Accesses:        make([]int64, 0),
 	}
 
 	for i := 0; i < np; i++ {
@@ -51,9 +46,6 @@ func InitBuy(s *ddtxn.Store, np, nb, nw, rr int, ncrr float64, ngo int) *Buy {
 	for i := 0; i < nb; i++ {
 		k := ddtxn.UserKey(i)
 		s.CreateKey(k, "x", ddtxn.WRITE)
-	}
-	if *CountKeys {
-		b.Accesses = make([]int64, np+nb)
 	}
 	return b
 }
@@ -77,15 +69,9 @@ func (b *Buy) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 		if x > b.ncontended_rate {
 			// Contended read
 			txn.K1 = ddtxn.ProductKey(product)
-			if *CountKeys {
-				atomic.AddInt64(&b.Accesses[product], 1)
-			}
 		} else {
 			// Uncontended read
 			txn.K1 = ddtxn.UserKey(bidder)
-			if *CountKeys {
-				atomic.AddInt64(&b.Accesses[b.nproducts+bidder], 1)
-			}
 		}
 		txn.TXN = ddtxn.D_READ_ONE
 	} else {
@@ -93,10 +79,6 @@ func (b *Buy) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 		txn.K2 = ddtxn.ProductKey(product)
 		txn.A = amt
 		txn.TXN = ddtxn.D_BUY
-		if *CountKeys {
-			atomic.AddInt64(&b.Accesses[product], 1)
-			atomic.AddInt64(&b.Accesses[b.nproducts+bidder], 1)
-		}
 	}
 }
 
