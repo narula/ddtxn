@@ -188,6 +188,7 @@ func main() {
 	if *ddtxn.CountKeys {
 		bk := make([]int64, *nbidders)
 		pk := make([]int64, nproducts)
+		ok := make([]int64, 4)
 		for j := 0; j < *nworkers; j++ {
 			w := coord.Workers[j]
 			for i := 0; i < *nbidders; i++ {
@@ -204,9 +205,22 @@ func main() {
 			if x < 0 {
 				x = x * -1
 			}
+			if x < stddev {
+				ok[0]++
+			} else if x < 2*stddev {
+				ok[1]++
+			} else if x < 3*stddev {
+				ok[2]++
+			} else {
+				ok[3]++
+			}
 			if x > 2.5*stddev {
 				f.WriteString(fmt.Sprintf("PKey %v: %v\n", i, pk[i]))
 			}
+		}
+		f.WriteString(fmt.Sprintf("p-stddev counts: %v\n", ok))
+		for i := 0; i < 4; i++ {
+			ok[i] = 0
 		}
 		mean, stddev = ddtxn.StddevChunks(bk)
 		f.WriteString(fmt.Sprintf("b-kmean: %v\nb-kstddev: %v\n", mean, stddev))
@@ -215,10 +229,20 @@ func main() {
 			if x < 0 {
 				x = x * -1
 			}
+			if x < stddev {
+				ok[0]++
+			} else if x < 2*stddev {
+				ok[1]++
+			} else if x < 3*stddev {
+				ok[2]++
+			} else {
+				ok[3]++
+			}
 			if x > 2.5*stddev {
 				f.WriteString(fmt.Sprintf("BKey %v: %v\n", i, bk[i]))
 			}
 		}
+		f.WriteString(fmt.Sprintf("b-stddev counts: %v\n", ok))
 	}
 	f.WriteString("\n")
 }
