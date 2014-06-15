@@ -238,7 +238,7 @@ func main() {
 			} else {
 				ok[3]++
 			}
-			if x > 2.5*stddev {
+			if x > 4*stddev {
 				f.WriteString(fmt.Sprintf("BKey %v: %v\n", i, bk[i]))
 			}
 		}
