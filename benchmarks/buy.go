@@ -173,5 +173,16 @@ func main() {
 			f.WriteString(fmt.Sprintf("Chunk %v: %v\n", i, s.NChunksAccessed[i]))
 		}
 	}
+	if *apps.CountKeys {
+		for i := 0; i < nproducts+*nbidders; i++ {
+			count := buy_app.Accesses[i]
+			if count > 0 {
+				f.WriteString(fmt.Sprintf("%6d:%d ", i, count))
+				if i%100 == 0 {
+					f.WriteString("\n")
+				}
+			}
+		}
+	}
 	f.WriteString("\n")
 }
