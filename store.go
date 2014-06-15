@@ -6,7 +6,6 @@ import (
 	"log"
 	"runtime/debug"
 	"sync"
-	"sync/atomic"
 )
 
 type TID uint64
@@ -152,10 +151,7 @@ func (s *Store) getKey(k Key) (*BRecord, error) {
 	return vr, nil
 }
 
-var GetKeyStaticCalls int64
-
 func (s *Store) getKeyStatic(k Key) (*BRecord, error) {
-	atomic.AddInt64(&GetKeyStaticCalls, 1)
 	if len(k) == 0 {
 		log.Fatalf("[store] getKey(): Empty key\n")
 	}

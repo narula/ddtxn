@@ -53,12 +53,13 @@ type Worker struct {
 	waiters     *TStore
 	ctxn        *ETransaction
 	// Stats
-	Nstats   []int64
-	Naborts  int64
-	Nwait    time.Duration
-	Nwait2   time.Duration
-	Nsamples int64
-	txns     []TransactionFunc
+	Nstats       []int64
+	Naborts      int64
+	Nwait        time.Duration
+	Nwait2       time.Duration
+	Nsamples     int64
+	NGetKeyCalls int64
+	txns         []TransactionFunc
 }
 
 func (w *Worker) Register(fn int, transaction TransactionFunc) {

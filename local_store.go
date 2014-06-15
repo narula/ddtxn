@@ -197,6 +197,7 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	}
 	// TODO: If I wrote the key, return that value instead
 	br, err := tx.s.getKey(k)
+	tx.w.NGetKeyCalls++
 	if err != nil {
 		return nil, err
 	}
@@ -280,6 +281,7 @@ func (tx *ETransaction) Commit() TID {
 		}
 		if w.br == nil {
 			br, err := tx.s.getKey(w.key)
+			tx.w.NGetKeyCalls++
 			if br == nil || err != nil {
 				switch w.op {
 				case SUM:
