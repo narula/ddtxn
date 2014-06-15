@@ -22,7 +22,7 @@ type Buy struct {
 	validate        []int32
 	lhr             []*stats.LatencyHist
 	lhw             []*stats.LatencyHist
-	Accesses        []int32
+	Accesses        []int64
 }
 
 func InitBuy(s *ddtxn.Store, np, nb, nw, rr int, ncrr float64, ngo int) *Buy {
@@ -35,8 +35,8 @@ func InitBuy(s *ddtxn.Store, np, nb, nw, rr int, ncrr float64, ngo int) *Buy {
 		validate:        make([]int32, np),
 		lhr:             make([]*stats.LatencyHist, ngo),
 		lhw:             make([]*stats.LatencyHist, ngo),
-		sp:              uint32(nb / nw / 4),
-		Accesses:        make([]int32, 0),
+		sp:              uint32(nb / nw),
+		Accesses:        make([]int64, 0),
 	}
 
 	for i := 0; i < np; i++ {
@@ -53,7 +53,7 @@ func InitBuy(s *ddtxn.Store, np, nb, nw, rr int, ncrr float64, ngo int) *Buy {
 		s.CreateKey(k, "x", ddtxn.WRITE)
 	}
 	if *CountKeys {
-		b.Accesses = make([]int32, np+nb)
+		b.Accesses = make([]int64, np+nb)
 	}
 	return b
 }
@@ -69,7 +69,7 @@ func (b *Buy) SetupLatency(nincr int64, nbuckets int64, ngo int) {
 func (b *Buy) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 	rnd := ddtxn.RandN(local_seed, b.sp)
 	lb := int(rnd)
-	bidder := lb + w*int(b.sp)*4
+	bidder := lb + w*int(b.sp)
 	amt := int32(ddtxn.RandN(local_seed, 10))
 	product := int(ddtxn.RandN(local_seed, uint32(b.nproducts)))
 	x := int(ddtxn.RandN(local_seed, 100))
@@ -78,13 +78,13 @@ func (b *Buy) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 			// Contended read
 			txn.K1 = ddtxn.ProductKey(product)
 			if *CountKeys {
-				atomic.AddInt32(&b.Accesses[product], 1)
+				atomic.AddInt64(&b.Accesses[product], 1)
 			}
 		} else {
 			// Uncontended read
 			txn.K1 = ddtxn.UserKey(bidder)
 			if *CountKeys {
-				atomic.AddInt32(&b.Accesses[b.nproducts+bidder], 1)
+				atomic.AddInt64(&b.Accesses[b.nproducts+bidder], 1)
 			}
 		}
 		txn.TXN = ddtxn.D_READ_ONE
@@ -94,8 +94,8 @@ func (b *Buy) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 		txn.A = amt
 		txn.TXN = ddtxn.D_BUY
 		if *CountKeys {
-			atomic.AddInt32(&b.Accesses[product], 1)
-			atomic.AddInt32(&b.Accesses[b.nproducts+bidder], 1)
+			atomic.AddInt64(&b.Accesses[product], 1)
+			atomic.AddInt64(&b.Accesses[b.nproducts+bidder], 1)
 		}
 	}
 }

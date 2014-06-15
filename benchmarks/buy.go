@@ -126,7 +126,7 @@ func main() {
 		buy_app.Validate(s, int(nitr))
 	}
 
-	out := fmt.Sprintf(" sys: %v, nworkers: %v, nbids: %v, nproducts: %v, contention: %v, done: %v, actual time: %v, nreads: %v, nbuys: %v, epoch changes: %v, total/sec: %v, throughput ns/txn: %v, naborts: %v, nwmoved: %v, nrmoved: %v, ietime: %v, ietime1: %v, etime: %v, etime2: %v, nstashed: %v, rlock: %v, wrratio: %v, nsamples: %v", *ddtxn.SysType, *nworkers, *nbidders, nproducts, *contention, nitr, end, nreads, nbuys, ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, naborts, ddtxn.WMoved, ddtxn.RMoved, ddtxn.Time_in_IE.Seconds(), ddtxn.Time_in_IE1.Seconds(), nwait.Seconds()/float64(*nworkers), nwait2.Seconds()/float64(*nworkers), nstashed, *ddtxn.UseRLocks, *ddtxn.WRRatio, nsamples)
+	out := fmt.Sprintf(" sys: %v, nworkers: %v, rr: %v, ncrr: %v, nbids: %v, nproducts: %v, contention: %v, done: %v, actual time: %v, nreads: %v, nbuys: %v, epoch changes: %v, total/sec: %v, throughput ns/txn: %v, naborts: %v, nwmoved: %v, nrmoved: %v, ietime: %v, ietime1: %v, etime: %v, etime2: %v, nstashed: %v, rlock: %v, wrratio: %v, nsamples: %v", *ddtxn.SysType, *nworkers, *readrate, *notcontended_readrate*float64(*readrate), *nbidders, nproducts, *contention, nitr, end, nreads, nbuys, ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, naborts, ddtxn.WMoved, ddtxn.RMoved, ddtxn.Time_in_IE.Seconds(), ddtxn.Time_in_IE1.Seconds(), nwait.Seconds()/float64(*nworkers), nwait2.Seconds()/float64(*nworkers), nstashed, *ddtxn.UseRLocks, *ddtxn.WRRatio, nsamples)
 	fmt.Printf(out)
 
 	if *ddtxn.Conflicts {
@@ -173,14 +173,17 @@ func main() {
 			f.WriteString(fmt.Sprintf("Chunk %v: %v\n", i, s.NChunksAccessed[i]))
 		}
 	}
+
 	if *apps.CountKeys {
-		for i := 0; i < nproducts+*nbidders; i++ {
-			count := buy_app.Accesses[i]
-			if count > 0 {
-				f.WriteString(fmt.Sprintf("%6d:%d ", i, count))
-				if i%100 == 0 {
-					f.WriteString("\n")
-				}
+		mean, stddev = ddtxn.StddevChunks(buy_app.Accesses[nproducts:])
+		f.WriteString(fmt.Sprintf("kmean: %v\nkstddev: %v\n", mean, stddev))
+		for i := nproducts; i < *nbidders; i++ {
+			x := float64(mean) - float64(buy_app.Accesses[i])
+			if x < 0 {
+				x = x * -1
+			}
+			if x > stddev {
+				f.WriteString(fmt.Sprintf("Key %v: %v\n", i, buy_app.Accesses[i]))
 			}
 		}
 	}
