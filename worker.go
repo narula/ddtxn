@@ -60,7 +60,7 @@ type Worker struct {
 	Nwait2       time.Duration
 	Nsamples     int64
 	NGetKeyCalls int64
-	NKeyAccesses map[rune][]int64
+	NKeyAccesses []int64
 	txns         []TransactionFunc
 }
 

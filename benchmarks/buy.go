@@ -64,9 +64,7 @@ func main() {
 	if *ddtxn.CountKeys {
 		for i := 0; i < *nworkers; i++ {
 			w := coord.Workers[i]
-			w.NKeyAccesses = make(map[rune][]int64)
-			w.NKeyAccesses[112] = make([]int64, nproducts)
-			w.NKeyAccesses[117] = make([]int64, *nbidders)
+			w.NKeyAccesses = make([]int64, *nbidders)
 		}
 	}
 
@@ -187,40 +185,12 @@ func main() {
 
 	if *ddtxn.CountKeys {
 		bk := make([]int64, *nbidders)
-		pk := make([]int64, nproducts)
 		ok := make([]int64, 4)
 		for j := 0; j < *nworkers; j++ {
 			w := coord.Workers[j]
 			for i := 0; i < *nbidders; i++ {
-				bk[i] = bk[i] + w.NKeyAccesses[117][i]
+				bk[i] = bk[i] + w.NKeyAccesses[i]
 			}
-			for i := 0; i < nproducts; i++ {
-				pk[i] = pk[i] + w.NKeyAccesses[112][i]
-			}
-		}
-		mean, stddev = ddtxn.StddevChunks(pk)
-		f.WriteString(fmt.Sprintf("p-kmean: %v\np-kstddev: %v\n", mean, stddev))
-		for i := 0; i < nproducts; i++ {
-			x := float64(mean) - float64(pk[i])
-			if x < 0 {
-				x = x * -1
-			}
-			if x < stddev {
-				ok[0]++
-			} else if x < 2*stddev {
-				ok[1]++
-			} else if x < 3*stddev {
-				ok[2]++
-			} else {
-				ok[3]++
-			}
-			if x > 2.5*stddev {
-				f.WriteString(fmt.Sprintf("PKey %v: %v\n", i, pk[i]))
-			}
-		}
-		f.WriteString(fmt.Sprintf("p-stddev counts: %v\n", ok))
-		for i := 0; i < 4; i++ {
-			ok[i] = 0
 		}
 		mean, stddev = ddtxn.StddevChunks(bk)
 		f.WriteString(fmt.Sprintf("b-kmean: %v\nb-kstddev: %v\n", mean, stddev))
