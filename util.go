@@ -204,3 +204,38 @@ func StddevChunks(nc []int64) (int64, float64) {
 	}
 	return mean, math.Sqrt(float64(stddev / n))
 }
+
+func StddevKeys(nc []int64) (int64, float64) {
+	var total int64
+	var n int64
+	var i int64
+	n = int64(len(nc))
+	var cnt int64
+	for i = 0; i < n; i++ {
+		if nc[i] != 0 {
+			total += nc[i]
+			cnt++
+		}
+	}
+	mean := total / cnt
+	variances := make([]int64, cnt)
+
+	cnt = 0
+	for i = 0; i < n; i++ {
+		if nc[i] != 0 {
+			x := nc[i] - mean
+			if x < 0 {
+				x = x * -1
+			}
+			x = x * x
+			variances[cnt] = x
+			cnt++
+		}
+	}
+
+	var stddev int64
+	for i = 0; i < cnt; i++ {
+		stddev += variances[i]
+	}
+	return mean, math.Sqrt(float64(stddev / cnt))
+}

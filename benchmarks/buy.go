@@ -192,7 +192,7 @@ func main() {
 				bk[i] = bk[i] + w.NKeyAccesses[i]
 			}
 		}
-		mean, stddev = ddtxn.StddevChunks(bk)
+		mean, stddev = ddtxn.StddevKeys(bk)
 		f.WriteString(fmt.Sprintf("b-kmean: %v\nb-kstddev: %v\n", mean, stddev))
 		for i := 0; i < *nbidders; i++ {
 			x := float64(mean) - float64(bk[i])
