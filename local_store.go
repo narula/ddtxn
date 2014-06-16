@@ -321,6 +321,7 @@ func (tx *ETransaction) Commit() TID {
 		log.Fatalf("Mismatch in lengths reads: %v, lasts: %v\n", tx.read, tx.lasts)
 	}
 	for i, _ := range tx.read {
+		// Would have checked for dd earlier
 		if tx.ls.count {
 			tx.ls.candidates.Read(tx.read[i].key)
 		}

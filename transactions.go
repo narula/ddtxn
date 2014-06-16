@@ -41,16 +41,13 @@ func IsRead(t int) bool {
 	return false
 }
 
-func BuyTxn(t Query, w *Worker) (*Result, error) {
+func BuyTxn(t Query, tx *ETransaction) (*Result, error) {
 	var r *Result = nil
-	tx := w.ctxn
 	tx.WriteInt32(t.K1, 1, SUM)
 	tx.WriteInt32(t.K2, t.A, SUM)
 	if tx.Commit() == 0 {
-		w.Naborts++
 		return r, EABORT
 	}
-	w.Nstats[D_BUY]++
 	if *Allocate {
 		r = &Result{C: true}
 	}
@@ -59,10 +56,8 @@ func BuyTxn(t Query, w *Worker) (*Result, error) {
 
 // Verison of BUY that puts total in read set (doesn't rely on
 // commutatitivity)
-func BuyNCTxn(t Query, w *Worker) (*Result, error) {
+func BuyNCTxn(t Query, tx *ETransaction) (*Result, error) {
 	var r *Result = nil
-
-	tx := w.ctxn
 	tx.Write(t.K1, "x", WRITE)
 	br, err := tx.Read(t.K2)
 	if err == ESTASH {
@@ -78,10 +73,8 @@ func BuyNCTxn(t Query, w *Worker) (*Result, error) {
 	}
 	tx.Write(t.K2, t.A+sum, WRITE)
 	if tx.Commit() == 0 {
-		w.Naborts++
 		return r, EABORT
 	}
-	w.Nstats[D_BUY_NC]++
 	if *Allocate {
 		r.C = true
 	}
@@ -89,15 +82,13 @@ func BuyNCTxn(t Query, w *Worker) (*Result, error) {
 }
 
 // Commutative BID
-func BidTxn(t Query, w *Worker) (*Result, error) {
+func BidTxn(t Query, tx *ETransaction) (*Result, error) {
 	var r *Result = nil
-	tx := w.ctxn
 	tx.Write(t.K1, t.S1, WRITE)
 	tx.Write(t.K2, t.A, MAX)
 	if tx.Commit() == 0 {
 		return r, EABORT
 	}
-	w.Nstats[D_BID]++
 	if *Allocate {
 		r = &Result{C: true}
 	}
@@ -106,9 +97,8 @@ func BidTxn(t Query, w *Worker) (*Result, error) {
 
 // Version of Bid that puts bid in read set (doesn't rely on
 // commutativity)
-func BidNCTxn(t Query, w *Worker) (*Result, error) {
+func BidNCTxn(t Query, tx *ETransaction) (*Result, error) {
 	var r *Result = nil
-	tx := w.ctxn
 	tx.Write(t.K1, t.S1, WRITE)
 	high_bid, err := tx.Read(t.K2)
 	if err == ESTASH {
@@ -124,16 +114,14 @@ func BidNCTxn(t Query, w *Worker) (*Result, error) {
 	if tx.Commit() == 0 {
 		return r, EABORT
 	}
-	w.Nstats[D_BID_NC]++
 	if *Allocate {
 		r.C = true
 	}
 	return r, nil
 }
 
-func ReadTxn(t Query, w *Worker) (*Result, error) {
+func ReadTxn(t Query, tx *ETransaction) (*Result, error) {
 	var r *Result = nil
-	tx := w.ctxn
 	v1, err := tx.Read(t.K1)
 	if err != nil {
 		return r, err
@@ -145,6 +133,5 @@ func ReadTxn(t Query, w *Worker) (*Result, error) {
 	if *Allocate {
 		r = &Result{v1.Value(), true}
 	}
-	w.Nstats[D_READ_ONE]++
 	return r, nil
 }

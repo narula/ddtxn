@@ -5,55 +5,62 @@ import (
 	"ddtxn/dlog"
 	"ddtxn/stats"
 	"fmt"
+	"math/rand"
 	"sync/atomic"
 	"time"
 )
 
 type Rubis struct {
-	nproducts      int
-	nbidders       int
-	portion_sz     int
-	nworkers       int
-	read_rate      int
-	contended_rate int
-	bidder_keys    []ddtxn.Key
-	product_keys   []ddtxn.Key
-	validate       []int32
-	lhr            []*stats.LatencyHist
-	lhw            []*stats.LatencyHist
-	sp             uint32
+	nproducts       int
+	nbidders        int
+	portion_sz      int
+	nworkers        int
+	read_rate       int
+	ncontended_rate int
+	validate        []int32
+	lhr             []*stats.LatencyHist
+	lhw             []*stats.LatencyHist
+	sp              uint32
 }
 
-func InitRubis(s *ddtxn.Store, np, nb, nw, rr, crr int, ngo int) *Rubis {
+func InitRubis(s *ddtxn.Store, np, nb, nw, rr int, ncrr float64, ngo int, ex *ddtxn.ETransaction) *Rubis {
 	b := &Rubis{
-		nproducts:      np,
-		nbidders:       nb,
-		nworkers:       nw,
-		read_rate:      rr,
-		contended_rate: crr,
-		bidder_keys:    make([]ddtxn.Key, nb),
-		product_keys:   make([]ddtxn.Key, np),
-		validate:       make([]int32, np),
-		lhr:            make([]*stats.LatencyHist, ngo),
-		lhw:            make([]*stats.LatencyHist, ngo),
-		portion_sz:     nb / nw,
-		sp:             uint32(nb / nw / 4),
+		nproducts:       np,
+		nbidders:        nb,
+		nworkers:        nw,
+		read_rate:       rr,
+		ncontended_rate: int(ncrr * float64(rr)),
+		validate:        make([]int32, np),
+		lhr:             make([]*stats.LatencyHist, ngo),
+		lhw:             make([]*stats.LatencyHist, ngo),
+		sp:              uint32(nb / nw),
 	}
-
-	for i := 0; i < np; i++ {
-		k := ddtxn.ProductKey(i)
-		b.product_keys[i] = k
-		s.CreateKey(k, int32(0), ddtxn.SUM)
-	}
-	// Uncontended keys
-	for i := np; i < nb/10; i++ {
-		k := ddtxn.ProductKey(i)
-		s.CreateKey(k, int32(0), ddtxn.SUM)
+	for i := 0; i < ddtxn.NUM_ITEMS; i++ {
+		q := ddtxn.Query{
+			T:  ddtxn.TID(i),
+			S1: "xxx",
+			S2: "lovely",
+			U1: uint64(rand.Intn(nb)),
+			U2: 100,
+			U3: 100,
+			U4: 1000,
+			U5: 1000,
+			U6: 1,
+			I:  37,
+			U7: uint64(rand.Intn(ddtxn.NUM_CATEGORIES)),
+		}
+		ddtxn.NewItemTxn(q, ex)
+		// Allocate keys for every combination of user and product
+		// bids. This is to avoid using read locks during execution by
+		// guaranteeing the map of keys won't change.
+		for j := 0; j < nb; j++ {
+			k := ddtxn.PBidKey(uint64(i), uint64(j))
+			s.CreateKey(k, "", ddtxn.WRITE)
+		}
 	}
 	for i := 0; i < nb; i++ {
-		k := ddtxn.UserKey(i)
-		b.bidder_keys[i] = k
-		s.CreateKey(k, "x", ddtxn.WRITE)
+		var q ddtxn.Query
+		ddtxn.RegisterUserTxn(q, ex)
 	}
 	return b
 }
@@ -66,26 +73,19 @@ func (b *Rubis) SetupLatency(nincr int64, nbuckets int64, ngo int) {
 }
 
 func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
-	rnd := ddtxn.RandN(local_seed, b.sp)
-	lb := int(rnd)
-	bidder := lb + w*b.portion_sz
-	amt := int32(ddtxn.RandN(local_seed, 10))
-	product := int(ddtxn.RandN(local_seed, uint32(b.nproducts)))
 	x := int(ddtxn.RandN(local_seed, 100))
 	if x < b.read_rate {
-		if x >= b.contended_rate {
-			// Contended read
-			txn.K1 = b.product_keys[product]
-		} else {
-			// Uncontended read
-			txn.K1 = b.bidder_keys[bidder]
-		}
-		txn.TXN = ddtxn.D_READ_ONE
+
 	} else {
-		txn.K1 = b.bidder_keys[bidder]
-		txn.K2 = b.product_keys[product]
+		rnd := ddtxn.RandN(local_seed, b.sp)
+		lb := int(rnd)
+		bidder := lb + w*b.portion_sz
+		product := ddtxn.RandN(local_seed, uint32(b.nproducts))
+		amt := int32(ddtxn.RandN(local_seed, 10))
+		txn.U1 = uint64(bidder)
+		txn.U2 = uint64(product)
 		txn.A = amt
-		txn.TXN = ddtxn.D_BID
+		txn.TXN = ddtxn.RUBIS_BID
 	}
 }
 
@@ -107,7 +107,7 @@ func (b *Rubis) Validate(s *ddtxn.Store, nitr int) bool {
 	zero_cnt := 0
 	for j := 0; j < b.nproducts; j++ {
 		var x int32
-		k := b.product_keys[j]
+		k := ddtxn.ProductKey(j)
 		v, err := s.Get(k)
 		if err != nil {
 			if b.validate[j] != 0 {

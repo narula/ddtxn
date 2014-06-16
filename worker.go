@@ -23,7 +23,7 @@ const (
 	RTHRESHOLD = 500
 )
 
-type TransactionFunc func(Query, *Worker) (*Result, error)
+type TransactionFunc func(Query, *ETransaction) (*Result, error)
 
 const (
 	BUFFER     = 100000
@@ -52,7 +52,7 @@ type Worker struct {
 	epoch       TID
 	done        chan Query
 	waiters     *TStore
-	ctxn        *ETransaction
+	E           *ETransaction
 	// Stats
 	Nstats       []int64
 	Naborts      int64
@@ -86,7 +86,7 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 		w.waiters = TSInit(1)
 	}
 	w.local_store.phase = SPLIT
-	w.ctxn = StartTransaction(w)
+	w.E = StartTransaction(w)
 	w.Register(D_BUY, BuyTxn)
 	w.Register(D_BUY_NC, BuyNCTxn)
 	w.Register(D_BID, BidTxn)
@@ -109,11 +109,15 @@ func (w *Worker) doTxn(t Query) (*Result, error) {
 		debug.PrintStack()
 		log.Fatalf("Unknown transaction number %v\n", t.TXN)
 	}
-	w.ctxn.Reset()
-	x, err := w.txns[t.TXN](t, w)
+	w.E.Reset()
+	x, err := w.txns[t.TXN](t, w.E)
 	if err == ESTASH {
 		w.stashTxn(t)
 		return nil, err
+	} else if err == nil {
+		w.Nstats[t.TXN]++
+	} else if err == EABORT {
+		w.Naborts++
 	}
 	return x, err
 }

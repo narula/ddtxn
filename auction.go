@@ -2,6 +2,7 @@ package ddtxn
 
 import (
 	"ddtxn/dlog"
+	"log"
 	"time"
 )
 
@@ -63,12 +64,12 @@ type Comment struct {
 	Comment string
 }
 
-func RegisterUserTxn(t Query, w *Worker) (*Result, error) {
+func RegisterUserTxn(t Query, tx *ETransaction) (*Result, error) {
 	nickname := t.S1
 	region := t.U1
 
 	var r *Result = nil
-	n := w.nextTID()
+	n := t.T
 	nick := SKey(nickname)
 	user := &User{
 		ID:       uint64(n),
@@ -77,7 +78,6 @@ func RegisterUserTxn(t Query, w *Worker) (*Result, error) {
 		Region:   region,
 	}
 	u := UserKey(int(n))
-	tx := w.ctxn
 	_, err := tx.Read(nick)
 
 	if err != ENOKEY {
@@ -95,16 +95,13 @@ func RegisterUserTxn(t Query, w *Worker) (*Result, error) {
 		r = &Result{uint64(n), true}
 		dlog.Printf("Registered user %v %v\n", nickname, n)
 	}
-	w.Nstats[RUBIS_REGISTER]++
 	return r, nil
 }
 
-func NewItemTxn(t Query, w *Worker) (*Result, error) {
+func NewItemTxn(t Query, tx *ETransaction) (*Result, error) {
 	var r *Result = nil
 	now := time.Now().Second()
-
-	tx := w.ctxn
-	n := w.nextTID()
+	n := t.T
 	xx := uint64(n)
 	x := &Item{
 		ID:        xx,
@@ -144,24 +141,22 @@ func NewItemTxn(t Query, w *Worker) (*Result, error) {
 		r = &Result{xx, true}
 		dlog.Printf("Registered item %v cat %v\n", n, x.Categ)
 	}
-	w.Nstats[RUBIS_NEWITEM]++
 	return r, nil
 }
 
-func StoreBidTxn(t Query, w *Worker) (*Result, error) {
+func StoreBidTxn(t Query, tx *ETransaction) (*Result, error) {
 	var r *Result = nil
 	user := t.U1
 	item := t.U2
 	price := t.A
 	// insert bid
-	n := w.nextTID()
+	n := t.T
 	bid := &Bid{
 		ID:     uint64(n),
 		Item:   item,
 		Bidder: user,
 		Price:  price,
 	}
-	tx := w.ctxn
 	bid_key := BidKey(uint64(n))
 	tx.Write(bid_key, bid, WRITE)
 
@@ -193,6 +188,78 @@ func StoreBidTxn(t Query, w *Worker) (*Result, error) {
 		r = &Result{uint64(n), true}
 		dlog.Printf("%v Bid on %v %v\n", user, item, price)
 	}
-	w.Nstats[RUBIS_BID]++
+	return r, nil
+}
+
+func (w *Worker) SearchItemsCategTxn(t Query, tx *ETransaction) (*Result, error) {
+	categ := t.U1
+	num := t.U2
+	var r *Result = nil
+	if num > 10 {
+		log.Fatalf("Only 10 search items are currently supported.\n")
+	}
+	ibck := ItemsByCatKey(categ)
+	ibcrec, err := tx.Read(ibck)
+
+	if err != nil {
+		dlog.Printf("No index for category %v\n", ibck)
+		return r, nil
+	}
+	listy := ibcrec.entries
+
+	if len(listy) > 10 {
+		dlog.Printf("Only 10 search items are currently supported %v %v\n", len(listy), listy)
+	}
+
+	var ret []*Item
+	var maxb []int32
+	var numb []int32
+
+	if *Allocate {
+		ret = make([]*Item, len(listy))
+		maxb = make([]int32, len(listy))
+		numb = make([]int32, len(listy))
+	}
+
+	var br *BRecord
+	for i := 0; i < len(listy); i++ {
+		k := uint64(listy[i].top)
+		br, err = tx.Read(ItemKey(k))
+		if err != nil {
+			dlog.Printf("Item in list doesn't exist %v\n", k)
+			return r, nil
+		}
+		if *Allocate {
+			ret[i] = br.Value().(*Item)
+		}
+		br, err = tx.Read(MaxBidKey(k))
+		if err != nil {
+			dlog.Printf("No max bid key %v\n", k)
+		} else {
+			if *Allocate {
+				maxb[i] = br.Value().(int32)
+			}
+		}
+		br, err = tx.Read(NumBidsKey(k))
+		if err != nil {
+			dlog.Printf("No number of bids key %v\n", k)
+		} else if *Allocate {
+			numb[i] = br.Value().(int32)
+		}
+	}
+
+	if tx.Commit() == 0 {
+		return r, EABORT
+	}
+	if *Allocate {
+		r = &Result{
+			&struct {
+				items   []*Item
+				maxbids []int32
+				numbids []int32
+			}{ret, maxb, numb},
+			true,
+		}
+	}
 	return r, nil
 }

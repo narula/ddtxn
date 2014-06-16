@@ -26,7 +26,7 @@ var doValidate = flag.Bool("validate", false, "Validate")
 var contention = flag.Int("contention", 1000, "Amount of contention, higher is more")
 var nbidders = flag.Int("nb", 1000000, "Bidders in store, default is 1M")
 var readrate = flag.Int("rr", 0, "Read rate %.  Rest are buys")
-var notcontended_readrate = flag.Float64("ncrr", .5, "Uncontended read rate %.  Default to half reads uncontended\n")
+var notcontended_readrate = flag.Float64("ncrr", .8, "Uncontended read rate %.  Default to .8")
 
 var latency = flag.Bool("latency", false, "Measure latency")
 var dataFile = flag.String("out", "buy-data.out", "Filename for output")

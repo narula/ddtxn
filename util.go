@@ -60,6 +60,11 @@ func BidKey(id uint64) Key {
 	return CKey(id, 'b')
 }
 
+// TODO
+func PBidKey(id1 uint64, id2 uint64) Key {
+	return BidKey(id1)
+}
+
 func ItemKey(item uint64) Key {
 	return CKey(item, 'i')
 }
