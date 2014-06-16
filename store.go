@@ -18,6 +18,8 @@ type Chunk struct {
 	//padding [32]int64
 }
 
+var UseRLocks = flag.Bool("rlock", true, "Use Rlocks\n")
+
 var (
 	ENOKEY = errors.New("doppel: no key")
 	EABORT = errors.New("doppel: abort")
@@ -60,6 +62,9 @@ func NewStore() *Store {
 func (s *Store) getOrCreateTypedKey(k Key, v Value, kt KeyType) *BRecord {
 	br, err := s.getKey(k)
 	if err == ENOKEY {
+		if !*UseRLocks {
+			log.Fatalf("Should have preallocated keys if not locking chunks\n")
+		}
 		// Create key
 		chunk := s.store[k[0]]
 		var ok bool
@@ -76,8 +81,8 @@ func (s *Store) getOrCreateTypedKey(k Key, v Value, kt KeyType) *BRecord {
 
 func (s *Store) CreateKey(k Key, v Value, kt KeyType) *BRecord {
 	chunk := s.store[k[0]]
-	chunk.Lock()
 	br := MakeBR(k, v, kt)
+	chunk.Lock()
 	chunk.rows[k] = br
 	chunk.Unlock()
 	return br
@@ -85,8 +90,8 @@ func (s *Store) CreateKey(k Key, v Value, kt KeyType) *BRecord {
 
 func (s *Store) CreateInt32Key(k Key, v int32, kt KeyType) *BRecord {
 	chunk := s.store[k[0]]
-	chunk.Lock()
 	br := MakeBR(k, v, kt)
+	chunk.Lock()
 	chunk.rows[k] = br
 	chunk.Unlock()
 	return br
@@ -120,8 +125,6 @@ func (s *Store) Set(br *BRecord, v Value, op KeyType) {
 		}
 	}
 }
-
-var UseRLocks = flag.Bool("rlock", true, "Use Rlocks\n")
 
 func (s *Store) Get(k Key) (*BRecord, error) {
 	return s.getKey(k)
