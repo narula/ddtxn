@@ -356,6 +356,7 @@ func (tx *ETransaction) Commit() TID {
 			if tx.ls.count {
 				tx.ls.candidates.Write(w.key)
 			}
+			tx.w.NDDWrites++
 			switch w.op {
 			case SUM:
 				tx.ls.Apply(w.key, w.op, w.vint32, w.op)

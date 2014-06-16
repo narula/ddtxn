@@ -61,6 +61,7 @@ type Worker struct {
 	Nsamples     int64
 	NGetKeyCalls int64
 	NKeyAccesses []int64
+	NDDWrites    int64
 	txns         []TransactionFunc
 }
 
