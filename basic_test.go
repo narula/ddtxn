@@ -121,13 +121,24 @@ func TestTStore(t *testing.T) {
 }
 
 func TestStddev(t *testing.T) {
-	x := make([]int64, 10)
-	for i := 0; i < 10; i++ {
+	x := make([]int64, 100)
+	for i := 0; i < 100; i++ {
 		x[i] = int64(i)
 	}
 	mean, stddev := StddevChunks(x)
-	_ = mean
-	_ = stddev
+	if mean != 49 {
+		t.Errorf("Wrong mean %v\n", mean)
+	}
+	if stddev > 29 || stddev < 28 {
+		t.Errorf("Wrong stddev %v\n", stddev)
+	}
+	mean, stddev = StddevKeys(x) // ignores 0s
+	if mean != 50 {
+		t.Errorf("Wrong mean %v\n", mean)
+	}
+	if stddev > 29 || stddev < 28 {
+		t.Errorf("Wrong stddev %v\n", stddev)
+	}
 }
 
 func TestAuction(t *testing.T) {
