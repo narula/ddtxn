@@ -2,8 +2,9 @@ package main
 
 import (
 	"ddtxn"
+	"ddtxn/apps"
+	"ddtxn/dlog"
 	"ddtxn/prof"
-	"ddtxn/stats"
 	"flag"
 	"fmt"
 	"log"
@@ -49,168 +50,55 @@ func main() {
 		*nworkers = *nprocs
 	}
 
-	nitems := *nbidders / *contention
-	s := ddtxn.NewStore()
-	portion2 := *nbidders / *nworkers
+	if *doValidate {
+		if !*ddtxn.Allocate {
+			log.Fatalf("Cannot correctly validate without waiting for results; add -allocate\n")
+		}
+	}
 
+	nproducts := *nbidders / *contention
+	s := ddtxn.NewStore()
 	coord := ddtxn.NewCoordinator(*nworkers, s)
-	users, items := s.LoadRubis(coord, *nbidders, nitems)
+	rubis := apps.InitRubis(s, nproducts, *nbidders, *nworkers, *clientGoRoutines, coord.Workers[0].E)
+
+	if *latency {
+		rubis.SetupLatency(100, 1000000, *clientGoRoutines)
+	}
+
+	dlog.Printf("Done initializing buy\n")
 
 	p := prof.StartProfile()
 	start := time.Now()
 	var wg sync.WaitGroup
 
-	lh := make([]*stats.LatencyHist, *clientGoRoutines)
-
-	var nincr int64 = 100
-	var nbuckets int64 = 1000000
-	rates := ddtxn.GetTxns(*skewed)
-
 	for i := 0; i < *clientGoRoutines; i++ {
-		if *latency {
-			lh[i] = stats.MakeLatencyHistogram(nincr, nbuckets)
-		}
 		wg.Add(1)
 		go func(n int) {
+			duration := time.Now().Add(time.Duration(*nsec) * time.Second)
 			var local_seed uint32 = uint32(rand.Intn(1000000))
-			done := time.NewTimer(time.Duration(*nsec) * time.Second).C
 			wi := n % (*nworkers)
 			w := coord.Workers[wi]
-			for {
-				select {
-				case <-done:
-					wg.Done()
-					return
-				default:
-					var product int = int(ddtxn.RandN(&local_seed, uint32(nitems)))
-					if *skewed {
-						product = 5
+			var t ddtxn.Query
+			for duration.After(time.Now()) {
+				rubis.MakeOne(w.ID, &local_seed, &t)
+				if *latency || *doValidate {
+					t.W = make(chan *ddtxn.Result)
+					txn_start := time.Now()
+					_, err := w.One(t)
+					if err == ddtxn.ESTASH {
+						<-t.W
 					}
-
-					var bidder int
-					lb2 := int(ddtxn.RandN(&local_seed, uint32(portion2)))
-					bidder = lb2 + wi*portion2
-					amt := int32(ddtxn.RandN(&local_seed, 10))
-
-					x := float64(ddtxn.RandN(&local_seed, uint32(100)))
-					var tx ddtxn.Transaction
-
-					if x < rates[0] {
-						tx = ddtxn.Transaction{
-							TXN: ddtxn.RUBIS_BID,
-							U1:  users[bidder],
-							A:   amt,
-							U2:  items[product],
-						}
-						switch *ddtxn.SysType {
-						case ddtxn.OCC:
-							tx.TXN = ddtxn.RUBIS_BID_OCC
-						}
-					} else if x < rates[1] {
-						tx = ddtxn.Transaction{
-							TXN: ddtxn.RUBIS_BIDHIST,
-							U1:  items[product],
-						}
-					} else if x < rates[2] {
-						tx = ddtxn.Transaction{
-							TXN: ddtxn.RUBIS_BUYNOW,
-							U1:  users[bidder],
-							U2:  items[product],
-							U3:  uint64(amt),
-						}
-					} else if x < rates[3] {
-						tu := int(ddtxn.RandN(&local_seed, uint32(*nbidders)))
-						fu := int(ddtxn.RandN(&local_seed, uint32(*nbidders)))
-						com := "xxxxxxx" //ddtxn.Randstr(10)
-						var rating uint64 = 1
-						tx = ddtxn.Transaction{
-							TXN: ddtxn.RUBIS_COMMENT,
-							U1:  users[tu],
-							U2:  users[fu],
-							U3:  items[product],
-							S1:  com,
-							U4:  rating,
-						}
-						switch *ddtxn.SysType {
-						case ddtxn.OCC:
-							tx.TXN = ddtxn.RUBIS_COMMENT_OCC
-						}
-					} else if x < rates[4] {
-						tx = ddtxn.Transaction{
-							TXN: ddtxn.RUBIS_NEWITEM,
-							U1:  users[bidder],
-							S1:  "yyyy", //ddtxn.Randstr(7),
-							S2:  "zzzz", //ddtxn.Randstr(15),
-							U2:  uint64(amt),
-							U3:  uint64(amt),
-							U4:  uint64(amt),
-							U5:  1,
-							U6:  1,
-							I:   1,
-							U7:  uint64(ddtxn.RandN(&local_seed, uint32(ddtxn.NUM_CATEGORIES))),
-						}
-						switch *ddtxn.SysType {
-						case ddtxn.OCC:
-							tx.TXN = ddtxn.RUBIS_NEWITEM_OCC
-						}
-					} else if x < rates[5] {
-						tx = ddtxn.Transaction{
-							TXN: ddtxn.RUBIS_PUTBID,
-							U1:  items[product],
-						}
-						switch *ddtxn.SysType {
-						case ddtxn.OCC:
-							tx.TXN = ddtxn.RUBIS_PUTBID_OCC
-						}
-					} else if x < rates[6] {
-						tu := int(ddtxn.RandN(&local_seed, uint32(*nbidders)))
-						tx = ddtxn.Transaction{
-							TXN: ddtxn.RUBIS_PUTCOMMENT,
-							U1:  users[tu],
-							U2:  items[product],
-						}
-					} else if x < rates[7] {
-						tx = ddtxn.Transaction{
-							TXN: ddtxn.RUBIS_REGISTER,
-							S1:  "aaaaaaa", //ddtxn.Randstr(7),
-							U1:  uint64(ddtxn.RandN(&local_seed, uint32(ddtxn.NUM_REGIONS))),
-						}
-					} else if x < rates[8] {
-						tx = ddtxn.Transaction{
-							TXN: ddtxn.RUBIS_SEARCHCAT,
-							U1:  uint64(ddtxn.RandN(&local_seed, uint32(ddtxn.NUM_CATEGORIES))),
-							U2:  5,
-						}
-					} else if x < rates[9] {
-						tx = ddtxn.Transaction{
-							TXN: ddtxn.RUBIS_SEARCHREG,
-							U1:  uint64(ddtxn.RandN(&local_seed, uint32(ddtxn.NUM_REGIONS))),
-							U2:  uint64(ddtxn.RandN(&local_seed, uint32(ddtxn.NUM_CATEGORIES))),
-							U3:  5,
-						}
-					} else if x < rates[10] {
-						tx = ddtxn.Transaction{
-							TXN: ddtxn.RUBIS_VIEW,
-							U1:  items[product],
-						}
-					} else if x < rates[11] {
-						tx = ddtxn.Transaction{
-							TXN: ddtxn.RUBIS_VIEWUSER,
-							U1:  users[bidder],
-						}
-					} else {
-						log.Fatalf("No such transaction %v\n", x)
-					}
+					txn_end := time.Since(txn_start)
 					if *latency {
-						tx.W = make(chan *ddtxn.Result)
-						txn_start := time.Now()
-						w.Incoming <- tx
-						<-tx.W
-						txn_end := time.Since(txn_start)
-						lh[n].AddOne(txn_end.Nanoseconds())
-					} else {
-						w.Incoming <- tx
+						rubis.Time(&t, txn_end, n)
 					}
+					if *doValidate {
+						if err != ddtxn.EABORT {
+							rubis.Add(t)
+						}
+					}
+				} else {
+					w.One(t)
 				}
 			}
 		}(i)
@@ -226,16 +114,15 @@ func main() {
 		}
 		nbids = nbids + coord.Workers[i].Nstats[ddtxn.RUBIS_BID]
 		naborts = naborts + coord.Workers[i].Naborts
-		ncopies = ncopies + coord.Workers[i].Ncopy
 	}
 	for i := 0; i < len(stats); i++ {
 		nitr = nitr + stats[i]
 	}
 	if *doValidate {
-		ddtxn.ValidateRubis(s, users, items)
+		rubis.Validate(s, int(nitr))
 	}
 
-	out := fmt.Sprintf(" sys: %v, nworkers: %v, nbidders: %v, nitems: %v, contention: %v, done: %v, actual time: %v, nviews: %v, nbids: %v, epoch changes: %v, total/sec: %v, throughput ns/txn: %v, naborts: %v, ncopies: %v, nmoved: %v, nfound: %v, nentered: %v", *ddtxn.SysType, *nworkers, *nbidders, nitems, *contention, nitr, end, "xx", nbids, ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, naborts, ncopies, ddtxn.Moved, nfound, nentered)
+	out := fmt.Sprintf(" sys: %v, nworkers: %v, nbidders: %v, nitems: %v, contention: %v, done: %v, actual time: %v, nviews: %v, nbids: %v, epoch changes: %v, total/sec: %v, throughput: ns/txn: %v, naborts: %v, nwmoved: %v, nrmoved: %v, nfound: %v, nentered: %v", *ddtxn.SysType, *nworkers, *nbidders, nproducts, *contention, nitr, end, "xx", nbids, ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, naborts, ddtxn.WMoved, ddtxn.RMoved, nfound, nentered)
 	fmt.Printf(out)
 
 	st := strings.Split(out, ",")
@@ -263,10 +150,8 @@ func main() {
 		}
 	}
 	if *latency {
-		for i := 1; i < *clientGoRoutines; i++ {
-			lh[0].Combine(lh[i])
-		}
-		f.WriteString(fmt.Sprint("25: %v\n50: %v\n75: %v\n99: %v\n", lh[0].GetPercentile(25), lh[0].GetPercentile(50), lh[0].GetPercentile(75), lh[0].GetPercentile(99)))
+		x, y := rubis.LatencyString(*clientGoRoutines)
+		f.WriteString(x)
+		f.WriteString(y)
 	}
-	f.WriteString("\n")
 }

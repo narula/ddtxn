@@ -23,17 +23,15 @@ type Rubis struct {
 	sp              uint32
 }
 
-func InitRubis(s *ddtxn.Store, np, nb, nw, rr int, ncrr float64, ngo int, ex *ddtxn.ETransaction) *Rubis {
+func InitRubis(s *ddtxn.Store, np, nb, nw, ngo int, ex *ddtxn.ETransaction) *Rubis {
 	b := &Rubis{
-		nproducts:       np,
-		nbidders:        nb,
-		nworkers:        nw,
-		read_rate:       rr,
-		ncontended_rate: int(ncrr * float64(rr)),
-		validate:        make([]int32, np),
-		lhr:             make([]*stats.LatencyHist, ngo),
-		lhw:             make([]*stats.LatencyHist, ngo),
-		sp:              uint32(nb / nw),
+		nproducts: np,
+		nbidders:  nb,
+		nworkers:  nw,
+		validate:  make([]int32, np),
+		lhr:       make([]*stats.LatencyHist, ngo),
+		lhw:       make([]*stats.LatencyHist, ngo),
+		sp:        uint32(nb / nw),
 	}
 	for i := 0; i < ddtxn.NUM_ITEMS; i++ {
 		q := ddtxn.Query{
@@ -75,17 +73,19 @@ func (b *Rubis) SetupLatency(nincr int64, nbuckets int64, ngo int) {
 func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 	x := int(ddtxn.RandN(local_seed, 100))
 	if x < b.read_rate {
-
-	} else {
 		rnd := ddtxn.RandN(local_seed, b.sp)
 		lb := int(rnd)
-		bidder := lb + w*b.portion_sz
+		bidder := lb + w*int(b.sp)
 		product := ddtxn.RandN(local_seed, uint32(b.nproducts))
-		amt := int32(ddtxn.RandN(local_seed, 10))
 		txn.U1 = uint64(bidder)
 		txn.U2 = uint64(product)
-		txn.A = amt
+		txn.A = int32(ddtxn.RandN(local_seed, 10))
 		txn.TXN = ddtxn.RUBIS_BID
+
+	} else {
+		txn.TXN = ddtxn.RUBIS_SEARCHCAT
+		txn.U1 = uint64(ddtxn.RandN(local_seed, uint32(ddtxn.NUM_CATEGORIES)))
+		txn.U2 = 5
 	}
 }
 
