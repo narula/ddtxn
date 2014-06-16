@@ -39,6 +39,7 @@ const (
 	RUBIS_REGISTER
 	RUBIS_NEWITEM
 	RUBIS_BID
+	RUBIS_SEARCHCAT
 	LAST_TXN
 )
 
@@ -95,6 +96,7 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 	w.Register(RUBIS_REGISTER, RegisterUserTxn)
 	w.Register(RUBIS_NEWITEM, NewItemTxn)
 	w.Register(RUBIS_BID, StoreBidTxn)
+	w.Register(RUBIS_SEARCHCAT, SearchItemsCategTxn)
 	go w.Go()
 	return w
 }

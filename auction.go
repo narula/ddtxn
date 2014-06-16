@@ -191,7 +191,7 @@ func StoreBidTxn(t Query, tx *ETransaction) (*Result, error) {
 	return r, nil
 }
 
-func (w *Worker) SearchItemsCategTxn(t Query, tx *ETransaction) (*Result, error) {
+func SearchItemsCategTxn(t Query, tx *ETransaction) (*Result, error) {
 	categ := t.U1
 	num := t.U2
 	var r *Result = nil

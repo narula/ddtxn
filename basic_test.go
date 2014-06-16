@@ -2,7 +2,6 @@ package ddtxn
 
 import (
 	"ddtxn/dlog"
-	"fmt"
 	"testing"
 )
 
@@ -181,6 +180,25 @@ func TestAuction(t *testing.T) {
 	if r.V.(int32) != 20 {
 		t.Errorf("Wrong max bid %v\n", r)
 	}
+	tx = Query{TXN: RUBIS_SEARCHCAT, U1: 1, U2: 1}
+	r, err = w.One(tx)
+	if err != nil {
+		t.Errorf("Search cat\n", err)
+	}
+	st := r.V.(*struct {
+		items   []*Item
+		maxbids []int32
+		numbids []int32
+	})
+	if len(st.items) != 1 {
+		t.Errorf("Wrong length %v\n", st.items)
+	}
+	if st.numbids[0] != 1 {
+		t.Errorf("Wrong numbids %v\n", st.numbids)
+	}
+	if st.maxbids[0] != 20 {
+		t.Errorf("Wrong numbids %v\n", st.maxbids)
+	}
 }
 
 func TestCandidates(t *testing.T) {
@@ -192,7 +210,6 @@ func TestCandidates(t *testing.T) {
 		c.Write(k)
 	}
 	c.Read(k)
-	fmt.Println(c.m[k])
 	h2 := make([]*OneStat, 0)
 	sh2 := StatsHeap(h2)
 	c2 := Candidates{make(map[Key]*OneStat), &sh2}
@@ -200,5 +217,4 @@ func TestCandidates(t *testing.T) {
 		c2.Write(k)
 	}
 	c.Merge(&c2)
-	fmt.Println(c.m[k])
 }
