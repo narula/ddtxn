@@ -15,7 +15,6 @@ type Value interface{}
 type Chunk struct {
 	sync.RWMutex
 	rows map[Key]*BRecord
-	//padding [32]int64
 }
 
 var UseRLocks = flag.Bool("rlock", true, "Use Rlocks\n")
@@ -32,6 +31,7 @@ const (
 
 // Global data
 type Store struct {
+	padding         [128]byte
 	store           []*Chunk
 	NChunksAccessed []int64
 	dd              []Key
