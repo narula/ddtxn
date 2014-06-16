@@ -183,15 +183,11 @@ func (tx *ETransaction) Reset() {
 func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	if *SysType == DOPPEL {
 		if tx.ls.phase == SPLIT {
-			// When there is a small amount of dd, ranging over the
-			// map is faster than using hash_lookup!
-			for i := 0; i < len(tx.s.dd); i++ {
-				if k == tx.s.dd[i] {
-					if tx.ls.count {
-						tx.ls.candidates.Stash(k)
-					}
-					return nil, ESTASH
+			if tx.s.IsDD(k) {
+				if tx.ls.count {
+					tx.ls.candidates.Stash(k)
 				}
+				return nil, ESTASH
 			}
 		}
 	}

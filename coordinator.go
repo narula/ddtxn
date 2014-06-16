@@ -111,26 +111,31 @@ func (c *Coordinator) IncrementEpoch() {
 				br.dd = true
 				WMoved += 1
 				dlog.Printf("Moved %v %v to split %v\n", x, y, o.ratio())
-				s.dd = append(s.dd, o.k)
+				s.dd[o.k] = true
 			} else {
 				dlog.Printf("No need to Move %v %v to split; already dd\n", x, y)
 			}
 		}
-		for i := 0; i < len(s.dd); i++ {
-			o, ok := s.cand.m[s.dd[i]]
+		// Check to see if we need to remove anything from dd
+		for k, v := range s.dd {
+			if !v {
+				continue
+			}
+			o, ok := s.cand.m[k]
 			if !ok {
-				br, _ := s.getKey(s.dd[i])
+				br, _ := s.getKey(k)
 				x, y := UndoCKey(br.key)
 				dlog.Printf("Key %v %v was split but now is not in store candidates\n", x, y)
 				continue
 			}
 			if o.ratio() < (*WRRatio)/2 {
-				br, _ := s.getKey(s.dd[i])
+				br, _ := s.getKey(k)
 				br.dd = false
 				RMoved += 1
 				x, y := UndoCKey(o.k)
 				dlog.Printf("Moved %v %v from split ratio %v\n", x, y, o.ratio())
-				s.dd[i], s.dd = s.dd[len(s.dd)-1], s.dd[:len(s.dd)-1]
+				s.dd[k] = false
+				//s.dd[i], s.dd = s.dd[len(s.dd)-1], s.dd[:len(s.dd)-1]
 			}
 		}
 		for i := 0; i < c.n; i++ {

@@ -34,7 +34,7 @@ type Store struct {
 	padding         [128]byte
 	store           []*Chunk
 	NChunksAccessed []int64
-	dd              []Key
+	dd              map[Key]bool
 	cand            *Candidates
 }
 
@@ -44,7 +44,7 @@ func NewStore() *Store {
 	s := &Store{
 		store:           make([]*Chunk, CHUNKS),
 		NChunksAccessed: make([]int64, CHUNKS),
-		dd:              make([]Key, 0, 100),
+		dd:              make(map[Key]bool),
 		cand:            &Candidates{make(map[Key]*OneStat), &sh},
 	}
 	var bb byte
@@ -170,10 +170,6 @@ func (s *Store) getKeyStatic(k Key) (*BRecord, error) {
 }
 
 func (s *Store) IsDD(k Key) bool {
-	for i := 0; i < len(s.dd); i++ {
-		if s.dd[i] == k {
-			return true
-		}
-	}
-	return false
+	x, ok := s.dd[k]
+	return x && ok
 }
