@@ -17,7 +17,7 @@ const (
 	JOIN
 )
 
-var SampleRate = flag.Int("sr", 1000, "Sample every sr nanoseconds\n")
+var SampleRate = flag.Int64("sr", 1000, "Sample every sr nanoseconds\n")
 
 type LocalStore struct {
 	sums       map[Key]int32
@@ -29,6 +29,7 @@ type LocalStore struct {
 	Ncopy      int64
 	candidates *Candidates
 	count      bool
+	t          int64
 }
 
 func NewLocalStore(s *Store) *LocalStore {
@@ -145,13 +146,14 @@ type Write struct {
 }
 
 type ETransaction struct {
-	read   []*BRecord
-	lasts  []uint64
-	w      *Worker
-	s      *Store
-	ls     *LocalStore
-	writes []Write
-	t      int // Used just as a rough count
+	read    []*BRecord
+	lasts   []uint64
+	w       *Worker
+	s       *Store
+	ls      *LocalStore
+	writes  []Write
+	t       int64 // Used just as a rough count
+	padding [128]byte
 }
 
 // Re-use this?
