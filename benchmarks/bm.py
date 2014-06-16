@@ -22,7 +22,7 @@ ben_list_cpus = "socket@0,1,2,7,3-6"
 
 LATENCY_PART = " -latency=%s" % options.latency
 
-BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./buy -ngo %d -nprocs %d -nsec %d -contention %d -rr %d -allocate=%s -sys=%d -rlock=%s -wr=4" + LATENCY_PART
+BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./buy -ngo %d -nprocs %d -nsec %d -contention %d -rr %d -allocate=%s -sys=%d -rlock=%s -wr=5" + LATENCY_PART
 
 def run_one(fn, cmd):
     if options.dprint:
@@ -116,7 +116,7 @@ def products_exp(fnpath, host, rr, ncores):
     fnn = '%s-products-%d-%d-True.data' % (host, rr, ncores)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
-    cont = [1, 10, 100, 1000, 5000, 10000, 100000, 200000, 500000, 1000000]
+    cont = [1, 10, 100, 1000, 10000, 50000, 100000, 200000, 500000, 1000000]
     if options.short:
         cont = [100, 100000]
     cpu_args = ""
