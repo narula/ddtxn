@@ -5,7 +5,6 @@ import (
 	"flag"
 	"log"
 	"runtime/debug"
-	"time"
 )
 
 // Local per-worker store. Specific types to more quickly apply local
@@ -18,7 +17,7 @@ const (
 	JOIN
 )
 
-var SampleRate = flag.Int64("sr", 100, "Sample every sr nanoseconds\n")
+var SampleRate = flag.Int("sr", 1000, "Sample every sr nanoseconds\n")
 
 type LocalStore struct {
 	sums       map[Key]int32
@@ -29,7 +28,6 @@ type LocalStore struct {
 	phase      uint32
 	Ncopy      int64
 	candidates *Candidates
-	start      time.Time
 	count      bool
 }
 
@@ -43,7 +41,6 @@ func NewLocalStore(s *Store) *LocalStore {
 		lists:      make(map[Key][]Entry),
 		s:          s,
 		candidates: &Candidates{make(map[Key]*OneStat), &sh},
-		start:      time.Now(),
 	}
 	return ls
 }
@@ -154,6 +151,7 @@ type ETransaction struct {
 	s      *Store
 	ls     *LocalStore
 	writes []Write
+	t      int // Used just as a rough count
 }
 
 // Re-use this?
@@ -173,11 +171,11 @@ func (tx *ETransaction) Reset() {
 	tx.lasts = tx.lasts[:0]
 	tx.read = tx.read[:0]
 	tx.writes = tx.writes[:0]
-	d := time.Since(tx.ls.start)
-	tx.ls.count = (*SysType == DOPPEL && d.Nanoseconds()%*SampleRate == 0)
+	tx.ls.count = (*SysType == DOPPEL && tx.t%*SampleRate == 0)
 	if tx.ls.count {
 		tx.w.Nsamples++
 	}
+	tx.t++
 }
 
 func (tx *ETransaction) Read(k Key) (*BRecord, error) {
