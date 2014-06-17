@@ -175,7 +175,7 @@ func (tx *ETransaction) Reset() {
 	tx.writes = tx.writes[:0]
 	tx.ls.count = (*SysType == DOPPEL && tx.t%*SampleRate == 0)
 	if tx.ls.count {
-		tx.w.Nsamples++
+		tx.w.Nstats[NSAMPLES]++
 	}
 	tx.t++
 }
@@ -193,7 +193,7 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	}
 	// TODO: If I wrote the key, return that value instead
 	br, err := tx.s.getKey(k)
-	tx.w.NGetKeyCalls++
+	tx.w.Nstats[NGETKEYCALLS]++
 	if *CountKeys {
 		p, r := UndoCKey(k)
 		if r == 117 {
@@ -283,7 +283,7 @@ func (tx *ETransaction) Commit() TID {
 		}
 		if w.br == nil {
 			br, err := tx.s.getKey(w.key)
-			tx.w.NGetKeyCalls++
+			tx.w.Nstats[NGETKEYCALLS]++
 			if *CountKeys {
 				p, r := UndoCKey(w.key)
 				if r == 117 {
@@ -353,7 +353,7 @@ func (tx *ETransaction) Commit() TID {
 			if tx.ls.count {
 				tx.ls.candidates.Write(w.key)
 			}
-			tx.w.NDDWrites++
+			tx.w.Nstats[NDDWRITES]++
 			switch w.op {
 			case SUM:
 				tx.ls.Apply(w.key, w.op, w.vint32, w.op)

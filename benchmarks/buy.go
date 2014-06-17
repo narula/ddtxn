@@ -124,13 +124,13 @@ func main() {
 	for i := 0; i < *nworkers; i++ {
 		nreads = nreads + coord.Workers[i].Nstats[ddtxn.D_READ_ONE]
 		nbuys = nbuys + coord.Workers[i].Nstats[ddtxn.D_BUY]
-		naborts = naborts + coord.Workers[i].Naborts
+		naborts = naborts + coord.Workers[i].Nstats[ddtxn.NABORTS]
 		nwait = nwait + coord.Workers[i].Nwait
 		nwait2 = nwait2 + coord.Workers[i].Nwait2
-		nsamples = nsamples + coord.Workers[i].Nsamples
-		nstashed = nstashed + coord.Workers[i].Nstats[ddtxn.LAST_TXN]
-		ngks = ngks + coord.Workers[i].NGetKeyCalls
-		nddwrites = nddwrites + coord.Workers[i].NDDWrites
+		nsamples = nsamples + coord.Workers[i].Nstats[ddtxn.NSAMPLES]
+		nstashed = nstashed + coord.Workers[i].Nstats[ddtxn.NSTASHED]
+		ngks = ngks + coord.Workers[i].Nstats[ddtxn.NGETKEYCALLS]
+		nddwrites = nddwrites + coord.Workers[i].Nstats[ddtxn.NDDWRITES]
 	}
 	nitr = nreads + nbuys
 	if *doValidate {

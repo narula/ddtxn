@@ -41,6 +41,13 @@ const (
 	RUBIS_BID
 	RUBIS_SEARCHCAT
 	LAST_TXN
+
+	NABORTS
+	NSTASHED
+	NSAMPLES
+	NGETKEYCALLS
+	NDDWRITES
+	LAST_STAT
 )
 
 type Worker struct {
@@ -56,13 +63,9 @@ type Worker struct {
 	E           *ETransaction
 	// Stats
 	Nstats       []int64
-	Naborts      int64
 	Nwait        time.Duration
 	Nwait2       time.Duration
-	Nsamples     int64
-	NGetKeyCalls int64
 	NKeyAccesses []int64
-	NDDWrites    int64
 	txns         []TransactionFunc
 }
 
@@ -76,7 +79,7 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 		store:       s,
 		local_store: NewLocalStore(s),
 		coordinator: c,
-		Nstats:      make([]int64, LAST_TXN+1),
+		Nstats:      make([]int64, LAST_STAT),
 		epoch:       c.epochTID,
 		done:        make(chan Query),
 		txns:        make([]TransactionFunc, LAST_TXN),
@@ -102,7 +105,7 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 }
 
 func (w *Worker) stashTxn(t Query) {
-	w.Nstats[LAST_TXN]++
+	w.Nstats[NSTASHED]++
 	w.waiters.Add(t)
 }
 
@@ -119,7 +122,7 @@ func (w *Worker) doTxn(t Query) (*Result, error) {
 	} else if err == nil {
 		w.Nstats[t.TXN]++
 	} else if err == EABORT {
-		w.Naborts++
+		w.Nstats[NABORTS]++
 	}
 	return x, err
 }

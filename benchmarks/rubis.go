@@ -113,7 +113,7 @@ func main() {
 			stats[j] = stats[j] + coord.Workers[i].Nstats[j]
 		}
 		nbids = nbids + coord.Workers[i].Nstats[ddtxn.RUBIS_BID]
-		naborts = naborts + coord.Workers[i].Naborts
+		naborts = naborts + coord.Workers[i].Nstats[ddtxn.NABORTS]
 	}
 	for i := 0; i < len(stats); i++ {
 		nitr = nitr + stats[i]
