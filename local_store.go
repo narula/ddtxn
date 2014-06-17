@@ -297,7 +297,11 @@ func (tx *ETransaction) Commit() TID {
 				case MAX:
 					br = tx.s.CreateInt32Key(w.key, w.vint32, w.op)
 				default:
-					br = tx.s.CreateKey(w.key, "", WRITE)
+					if w.v == nil {
+						br = tx.s.CreateKey(w.key, "", WRITE)
+					} else {
+						br = tx.s.CreateKey(w.key, w.v, WRITE)
+					}
 				}
 			}
 			w.br = br

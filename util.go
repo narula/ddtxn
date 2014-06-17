@@ -35,7 +35,7 @@ func TKey(x uint64, y uint64) Key {
 		b[i] = byte((x >> (i * 8)))
 	}
 	for i = 8; i < 16; i++ {
-		b[i] = byte((x >> (i * 8)))
+		b[i] = byte((y >> (i * 8)))
 	}
 	return Key(b)
 }
@@ -60,9 +60,19 @@ func BidKey(id uint64) Key {
 	return CKey(id, 'b')
 }
 
-// TODO
-func PBidKey(id1 uint64, id2 uint64) Key {
-	return BidKey(id1)
+func PairKey(x uint32, y uint32, ch rune) Key {
+	var b [16]byte
+	var i uint64
+	for i = 0; i < 4; i++ {
+		b[i] = byte((x >> (i * 8)))
+		b[i+4] = byte((y >> (i * 8)))
+	}
+	b[8] = byte(ch)
+	return Key(b)
+}
+
+func PairBidKey(bidder uint64, product uint64) Key {
+	return PairKey(uint32(bidder), uint32(product), 'z')
 }
 
 func ItemKey(item uint64) Key {
@@ -102,7 +112,7 @@ func ItemsByCatKey(item uint64) Key {
 }
 
 func ItemsByRegKey(region uint64, categ uint64) Key {
-	return TKey(region, categ)
+	return PairKey(uint32(region), uint32(categ), 'r')
 }
 
 func RatingKey(user uint64) Key {

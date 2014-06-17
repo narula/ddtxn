@@ -43,6 +43,7 @@ const (
 	LAST_TXN
 
 	NABORTS
+	NENOKEY
 	NSTASHED
 	NSAMPLES
 	NGETKEYCALLS
@@ -123,6 +124,8 @@ func (w *Worker) doTxn(t Query) (*Result, error) {
 		w.Nstats[t.TXN]++
 	} else if err == EABORT {
 		w.Nstats[NABORTS]++
+	} else if err == ENOKEY {
+		w.Nstats[NENOKEY]++
 	}
 	return x, err
 }
@@ -143,7 +146,16 @@ func (w *Worker) Transition(e TID) {
 				r, _ := w.doTxn(w.waiters.t[i])
 				w.waiters.t[i].W <- r
 			} else {
-				w.doTxn(w.waiters.t[i])
+				_, err := w.doTxn(w.waiters.t[i])
+				if err == ESTASH {
+					log.Fatalf("Stashing when trying to execute stashed\n")
+				} else if err == nil {
+					w.Nstats[w.waiters.t[i].TXN]++
+				} else if err == EABORT {
+					w.Nstats[NABORTS]++
+				} else if err == ENOKEY {
+					w.Nstats[NENOKEY]++
+				}
 			}
 		}
 		w.waiters.clear()

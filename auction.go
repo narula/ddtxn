@@ -119,6 +119,9 @@ func NewItemTxn(t Query, tx *ETransaction) (*Result, error) {
 	}
 	urec, err := tx.Read(UserKey(int(t.U1)))
 	if err != nil {
+		if err == ESTASH {
+			return nil, ESTASH
+		}
 		dlog.Printf("User doesn't exist %v\n", t.U1)
 		tx.Abort()
 		return nil, EABORT
@@ -139,7 +142,6 @@ func NewItemTxn(t Query, tx *ETransaction) (*Result, error) {
 
 	if *Allocate {
 		r = &Result{xx, true}
-		dlog.Printf("Registered item %v cat %v\n", n, x.Categ)
 	}
 	return r, nil
 }
@@ -157,18 +159,22 @@ func StoreBidTxn(t Query, tx *ETransaction) (*Result, error) {
 		Bidder: user,
 		Price:  price,
 	}
-	bid_key := BidKey(uint64(n))
+	bid_key := PairBidKey(user, item)
 	tx.Write(bid_key, bid, WRITE)
 
 	// update max bid?
 	high := MaxBidKey(item)
 	bidder := MaxBidBidderKey(item)
 	max, err := tx.Read(high)
-	if err == ENOKEY {
+	if err != nil {
+		if err == ESTASH {
+			dlog.Printf("Max bid key for item %v stashed\n", item)
+			return nil, ESTASH
+		}
 		dlog.Printf("No max key for item? %v\n", item)
-		return nil, EABORT
+		return nil, err
 	}
-	if price > max.Value().(int32) {
+	if price > max.int_value {
 		tx.WriteInt32(high, price, MAX)
 		tx.Write(bidder, user, WRITE)
 	}
@@ -202,8 +208,11 @@ func SearchItemsCategTxn(t Query, tx *ETransaction) (*Result, error) {
 	ibcrec, err := tx.Read(ibck)
 
 	if err != nil {
+		if err == ESTASH {
+			return nil, ESTASH
+		}
 		dlog.Printf("No index for category %v\n", ibck)
-		return r, nil
+		return r, err
 	}
 	listy := ibcrec.entries
 
@@ -226,14 +235,20 @@ func SearchItemsCategTxn(t Query, tx *ETransaction) (*Result, error) {
 		k := uint64(listy[i].top)
 		br, err = tx.Read(ItemKey(k))
 		if err != nil {
+			if err == ESTASH {
+				return nil, ESTASH
+			}
 			dlog.Printf("Item in list doesn't exist %v\n", k)
-			return r, nil
+			return r, err
 		}
 		if *Allocate {
 			ret[i] = br.Value().(*Item)
 		}
 		br, err = tx.Read(MaxBidKey(k))
 		if err != nil {
+			if err == ESTASH {
+				return nil, ESTASH
+			}
 			dlog.Printf("No max bid key %v\n", k)
 		} else {
 			if *Allocate {
@@ -242,6 +257,9 @@ func SearchItemsCategTxn(t Query, tx *ETransaction) (*Result, error) {
 		}
 		br, err = tx.Read(NumBidsKey(k))
 		if err != nil {
+			if err == ESTASH {
+				return nil, ESTASH
+			}
 			dlog.Printf("No number of bids key %v\n", k)
 		} else if *Allocate {
 			numb[i] = br.Value().(int32)
