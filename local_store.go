@@ -159,8 +159,8 @@ type ETransaction struct {
 // Re-use this?
 func StartTransaction(w *Worker) *ETransaction {
 	tx := &ETransaction{
-		read:   make([]*BRecord, 0, 30),
-		lasts:  make([]uint64, 0, 30),
+		read:   make([]*BRecord, 0, 60),
+		lasts:  make([]uint64, 0, 60),
 		writes: make([]Write, 0, 60),
 		w:      w,
 		s:      w.store,

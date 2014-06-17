@@ -33,6 +33,15 @@ func InitRubis(s *ddtxn.Store, np, nb, nw, ngo int, ex *ddtxn.ETransaction) *Rub
 		lhw:       make([]*stats.LatencyHist, ngo),
 		sp:        uint32(nb / nw),
 	}
+	for i := 0; i < nb; i++ {
+		q := ddtxn.Query{
+			T:  ddtxn.TID(i),
+			S1: fmt.Sprintf("xxx%d", i),
+			U1: uint64(rand.Intn(ddtxn.NUM_REGIONS)),
+		}
+		ddtxn.RegisterUserTxn(q, ex)
+		ex.Reset()
+	}
 	for i := 0; i < ddtxn.NUM_ITEMS; i++ {
 		q := ddtxn.Query{
 			T:  ddtxn.TID(i),
@@ -48,6 +57,7 @@ func InitRubis(s *ddtxn.Store, np, nb, nw, ngo int, ex *ddtxn.ETransaction) *Rub
 			U7: uint64(rand.Intn(ddtxn.NUM_CATEGORIES)),
 		}
 		ddtxn.NewItemTxn(q, ex)
+		ex.Reset()
 		// Allocate keys for every combination of user and product
 		// bids. This is to avoid using read locks during execution by
 		// guaranteeing the map of keys won't change.
@@ -55,10 +65,6 @@ func InitRubis(s *ddtxn.Store, np, nb, nw, ngo int, ex *ddtxn.ETransaction) *Rub
 			k := ddtxn.PBidKey(uint64(i), uint64(j))
 			s.CreateKey(k, "", ddtxn.WRITE)
 		}
-	}
-	for i := 0; i < nb; i++ {
-		var q ddtxn.Query
-		ddtxn.RegisterUserTxn(q, ex)
 	}
 	return b
 }
