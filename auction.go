@@ -168,7 +168,7 @@ func StoreBidTxn(t Query, tx *ETransaction) (*Result, error) {
 	max, err := tx.Read(high)
 	if err != nil {
 		if err == ESTASH {
-			dlog.Printf("Max bid key for item %v stashed\n", item)
+			//dlog.Printf("Max bid key for item %v stashed\n", item)
 			return nil, ESTASH
 		}
 		dlog.Printf("No max key for item? %v\n", item)
@@ -186,7 +186,7 @@ func StoreBidTxn(t Query, tx *ETransaction) (*Result, error) {
 	tx.Write(BidsPerItemKey(item), Entry{int(bid.Price), bid_key, 0}, LIST)
 
 	if tx.Commit() == 0 {
-		dlog.Printf("Bid abort %v\n", t)
+		//dlog.Printf("Bid abort %v\n", t)
 		return r, EABORT
 	}
 

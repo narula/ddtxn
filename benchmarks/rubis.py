@@ -12,18 +12,18 @@ parser.add_option("-n", "--ncores", action="store", type="int", dest="default_nc
 parser.add_option("-c", "--contention", action="store", type="int", dest="default_contention", default=100000)
 parser.add_option("-l", "--latency", action="store_true", dest="latency", default=False)
 parser.add_option("-x", "--rlock", action="store_false", dest="rlock", default=True)
-parser.add_option("-d", "--dynamic", action="store_true", dest="dynamic", default=False)
 parser.add_option("-k", "--skewed", action="store_true", dest="skewed", default=False)
+parser.add_option("-m", "--scp", action="store_true", dest="scp", default=False)
+parser.add_option("-r", "--rr", action="store", type="int", dest="read_rate", default=50)
 
 (options, args) = parser.parse_args()
 
 ben_list_cpus = "socket@0,1,2,7,3-6"
 
 LATENCY_PART = "-latency=%s" % options.latency
-DYNAMIC_PART = " -dynamic=%s" % options.dynamic
 SKEWED_PART = " -skewed=%s" % options.skewed
 
-BASE_CMD = "GOGC=off numactl -C `list-cpus seq -n %d %s` ./rubis -ngo %d -nprocs %d -nsec %d -contention %d -allocate=%s -sys=%d -rlock=%s "+ LATENCY_PART + DYNAMIC_PART + SKEWED_PART
+BASE_CMD = "GOGC=off numactl -C `list-cpus seq -n %d %s` ./rubis -nprocs %d -nsec %d -contention %d -rr %d -allocate=%s -sys=%d -rlock=%s "+ LATENCY_PART + SKEWED_PART
 
 def run_one(fn, cmd):
     if options.dprint:
@@ -34,12 +34,16 @@ def run_one(fn, cmd):
         exit(1)
     if options.dprint:
         print output
-    x = output.split()[23].rstrip(',')
+    fields = output.split(",")
+    x = 0
+    for f in fields:
+        if "total/sec" in f:
+            x = f.split(":")[1]
     tps = float(x)
     fn.write("%0.2f\t" % tps)
 
 def get_cpus(host):
-    ncpus = [2, 4, 10, 20, 30, 40, 50, 60, 70, 80]
+    ncpus = [1, 4, 10, 20, 30, 40, 50, 60, 70, 80]
     if host == "mat":
         ncpus = [1, 2, 4, 8, 12, 24]
     elif host == "tbilisi":
@@ -50,14 +54,19 @@ def get_cpus(host):
         ncpus=[2, 4]
     return ncpus
 
-def fill_cmd(contention, ncpus, systype, cpus_arg=""):
+def fill_cmd(rr, contention, ncpus, systype, cpus_arg=""):
     nsec = 5
     if options.short:
         nsec = 1
-    cmd = BASE_CMD % (ncpus, cpus_arg, ncpus, ncpus, nsec, contention, options.allocate, systype, options.rlock)
+    cmd = BASE_CMD % (ncpus, cpus_arg, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock)
     return cmd
 
-def scalability_exp(fnpath, host, contention):
+def do(f, rr, contention, ncpu, list_cpus, sys):
+    cmd = fill_cmd(rr, contention, ncpu, sys, list_cpus)
+    run_one(f, cmd)
+    f.write("\t")
+
+def scalability_exp(fnpath, host, contention, rr):
     fnn = ""
     if options.skewed:
         fnn = '%s-rubis-scalability-1000000.data' % (host)
@@ -73,15 +82,14 @@ def scalability_exp(fnpath, host, contention):
     for i in cpus:
         f.write("%d"% i)
         f.write("\t")
-        cmd = fill_cmd(contention, i, 0, cpu_args)
-        run_one(f, cmd)
+        do(f, rr, contention, i, cpu_args, 0)
         f.write("\t")
-        cmd = fill_cmd(contention, i, 1, cpu_args)
-        run_one(f, cmd)
+        do(f, rr, contention, i, cpu_args, 1)
         f.write("\n")
     f.close()
-    system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
-    system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
+    if options.scp:
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 
 if __name__ == "__main__":
@@ -93,4 +101,4 @@ if __name__ == "__main__":
         options.default_ncores = 40
     if not os.path.exists(fnpath):
         os.mkdir(fnpath)
-    scalability_exp(fnpath, host, options.default_contention)
+    scalability_exp(fnpath, host, options.default_contention, options.read_rate)
