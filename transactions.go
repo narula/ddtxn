@@ -10,26 +10,28 @@ import (
 // TODO: clean this up.
 type Query struct {
 	TXN int
-	W   chan *Result
-	T   TID
-	K1  Key
-	K2  Key
-	A   int32
-	U1  uint64
-	U2  uint64
-	U3  uint64
-	U4  uint64
-	U5  uint64
-	U6  uint64
-	U7  uint64
-	S1  string
-	S2  string
-	I   int
+	W   chan struct {
+		R *Result
+		E error
+	}
+	T  TID
+	K1 Key
+	K2 Key
+	A  int32
+	U1 uint64
+	U2 uint64
+	U3 uint64
+	U4 uint64
+	U5 uint64
+	U6 uint64
+	U7 uint64
+	S1 string
+	S2 string
+	I  int
 }
 
 type Result struct {
 	V Value
-	E error
 }
 
 var Allocate = flag.Bool("allocate", true, "Allocate results")
@@ -47,9 +49,6 @@ func BuyTxn(t Query, tx *ETransaction) (*Result, error) {
 	tx.WriteInt32(t.K2, t.A, SUM)
 	if tx.Commit() == 0 {
 		return r, EABORT
-	}
-	if *Allocate {
-		r = &Result{E: nil}
 	}
 	return r, nil
 }
@@ -75,9 +74,6 @@ func BuyNCTxn(t Query, tx *ETransaction) (*Result, error) {
 	if tx.Commit() == 0 {
 		return r, EABORT
 	}
-	if *Allocate {
-		r.E = nil
-	}
 	return r, nil
 }
 
@@ -88,9 +84,6 @@ func BidTxn(t Query, tx *ETransaction) (*Result, error) {
 	tx.Write(t.K2, t.A, MAX)
 	if tx.Commit() == 0 {
 		return r, EABORT
-	}
-	if *Allocate {
-		r = &Result{E: nil}
 	}
 	return r, nil
 }
@@ -114,9 +107,6 @@ func BidNCTxn(t Query, tx *ETransaction) (*Result, error) {
 	if tx.Commit() == 0 {
 		return r, EABORT
 	}
-	if *Allocate {
-		r.E = nil
-	}
 	return r, nil
 }
 
@@ -131,7 +121,7 @@ func ReadTxn(t Query, tx *ETransaction) (*Result, error) {
 		return r, EABORT
 	}
 	if *Allocate {
-		r = &Result{v1.Value(), nil}
+		r = &Result{v1.Value()}
 	}
 	return r, nil
 }

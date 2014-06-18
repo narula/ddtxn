@@ -94,18 +94,22 @@ func main() {
 			for duration.After(time.Now()) {
 				buy_app.MakeOne(w.ID, &local_seed, &t)
 				if *latency || *doValidate {
-					t.W = make(chan *ddtxn.Result)
+					t.W = make(chan struct {
+						R *ddtxn.Result
+						E error
+					})
 					txn_start := time.Now()
 					_, err := w.One(t)
 					if err == ddtxn.ESTASH {
-						<-t.W
+						x := <-t.W
+						err = x.E
 					}
 					txn_end := time.Since(txn_start)
 					if *latency {
 						buy_app.Time(&t, txn_end, n)
 					}
 					if *doValidate {
-						if err != ddtxn.EABORT {
+						if err == nil {
 							buy_app.Add(t)
 						}
 					}

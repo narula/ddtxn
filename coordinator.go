@@ -174,7 +174,10 @@ func (c *Coordinator) Process() {
 		select {
 		case x := <-c.Done:
 			for i := 0; i < c.n; i++ {
-				txn := Query{W: make(chan *Result)}
+				txn := Query{W: make(chan struct {
+					R *Result
+					E error
+				})}
 				c.Workers[i].done <- txn
 				<-txn.W
 				dlog.Printf("Worker %v finished\n", i)

@@ -138,20 +138,15 @@ func (w *Worker) transition(e TID) {
 		w.Nwait += end
 		w.local_store.phase = JOIN
 		for i := 0; i < len(w.waiters.t); i++ {
+			r, err := w.doTxn(w.waiters.t[i])
+			if err == ESTASH {
+				log.Fatalf("Stashing when trying to execute stashed\n")
+			}
 			if w.waiters.t[i].W != nil {
-				r, _ := w.doTxn(w.waiters.t[i])
-				w.waiters.t[i].W <- r
-			} else {
-				_, err := w.doTxn(w.waiters.t[i])
-				if err == ESTASH {
-					log.Fatalf("Stashing when trying to execute stashed\n")
-				} else if err == nil {
-					w.Nstats[w.waiters.t[i].TXN]++
-				} else if err == EABORT {
-					w.Nstats[NABORTS]++
-				} else if err == ENOKEY {
-					w.Nstats[NENOKEY]++
-				}
+				w.waiters.t[i].W <- struct {
+					R *Result
+					E error
+				}{r, err}
 			}
 		}
 		w.waiters.clear()
@@ -182,15 +177,21 @@ func (w *Worker) run() {
 				w.local_store.phase = JOIN
 				for i := 0; i < len(w.waiters.t); i++ {
 					t := w.waiters.t[i]
-					r, _ := w.doTxn(t)
+					r, err := w.doTxn(t)
 					if t.W != nil {
-						t.W <- r
+						t.W <- struct {
+							R *Result
+							E error
+						}{r, err}
 					}
 				}
 				w.waiters.clear()
 				w.Unlock()
 			}
-			x.W <- nil
+			x.W <- struct {
+				R *Result
+				E error
+			}{nil, nil}
 			return
 		case <-tm:
 			// This is necessary if all worker threads are blocked

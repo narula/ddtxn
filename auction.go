@@ -92,7 +92,7 @@ func RegisterUserTxn(t Query, tx *ETransaction) (*Result, error) {
 		return nil, EABORT
 	}
 	if *Allocate {
-		r = &Result{uint64(n), nil}
+		r = &Result{uint64(n)}
 		dlog.Printf("Registered user %v %v\n", nickname, n)
 	}
 	return r, nil
@@ -141,7 +141,7 @@ func NewItemTxn(t Query, tx *ETransaction) (*Result, error) {
 	}
 
 	if *Allocate {
-		r = &Result{xx, nil}
+		r = &Result{xx}
 	}
 	return r, nil
 }
@@ -191,7 +191,7 @@ func StoreBidTxn(t Query, tx *ETransaction) (*Result, error) {
 	}
 
 	if *Allocate {
-		r = &Result{uint64(n), nil}
+		r = &Result{uint64(n)}
 		dlog.Printf("%v Bid on %v %v\n", user, item, price)
 	}
 	return r, nil
@@ -276,7 +276,6 @@ func SearchItemsCategTxn(t Query, tx *ETransaction) (*Result, error) {
 				maxbids []int32
 				numbids []int32
 			}{ret, maxb, numb},
-			nil,
 		}
 	}
 	return r, nil
