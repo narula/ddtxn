@@ -22,7 +22,7 @@ ben_list_cpus = "socket@0,1,2,7,3-6"
 
 LATENCY_PART = " -latency=%s" % options.latency
 
-BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./buy -ngo %d -nprocs %d -nsec %d -contention %d -rr %d -allocate=%s -sys=%d -rlock=%s -wr=5" + LATENCY_PART
+BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -ngo %d -nprocs %d -nsec %d -contention %d -rr %d -allocate=%s -sys=%d -rlock=%s -wr=5" + LATENCY_PART
 
 def run_one(fn, cmd):
     if options.dprint:
@@ -59,7 +59,10 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg=""):
     nsec = 10
     if options.short:
         nsec = 1
-    cmd = BASE_CMD % (ncpus, cpus_arg, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock)
+    bn = "buy"
+    if options.exp == "rubis":
+        bn = "rubis"
+    cmd = BASE_CMD % (ncpus, cpus_arg, bn, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock)
     return cmd
 
 def do(f, rr, contention, ncpu, list_cpus, sys):
@@ -165,6 +168,27 @@ def run_latency(cmd, prefix, sys):
 def latency():
     pass
 
+def rubis_exp(fnpath, host, contention, rr):
+    fnn = '%s-rubis-scalability-%d.data' % (host, contention)
+    filename=os.path.join(fnpath, fnn)
+    f = open(filename, 'w')
+    cpus = get_cpus(host)
+    f.write("#\tDoppel\tOCC\n")
+    cpu_args = ""
+    if host == "ben":
+        cpu_args = ben_list_cpus
+    for i in cpus:
+        f.write("%d"% i)
+        f.write("\t")
+        do(f, rr, contention, i, cpu_args, 0)
+        do(f, rr, contention, i, cpu_args, 1)
+        f.write("\n")
+    f.close()
+    if options.scp:
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
+
+
 if __name__ == "__main__":
     host = socket.gethostname()
     if len(host.split(".")) > 1:
@@ -178,6 +202,8 @@ if __name__ == "__main__":
         rw_exp(fnpath, host, options.default_contention, options.default_ncores)
     elif options.exp == "products":
         products_exp(fnpath, host, options.read_rate, options.default_ncores)
+    elif options.exp == "rubis":
+        rubis_exp(fnpath, host, options.default_contention, options.read_rate)
     elif options.exp == "all":
         options.dynamic = True
         if host == "ben":
