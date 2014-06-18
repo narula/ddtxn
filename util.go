@@ -178,6 +178,7 @@ func Validate(c *Coordinator, s *Store, nkeys int, nproducts int, val []int32, n
 		dlog.Printf("Bad: all zeroes!\n")
 		good = false
 	}
+	dlog.Printf("Done validating\n")
 	return good
 }
 

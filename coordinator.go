@@ -73,13 +73,13 @@ var Time_in_IE time.Duration
 var Time_in_IE1 time.Duration
 
 func (c *Coordinator) IncrementEpoch() {
+	dlog.Printf("Incrementing epoch %v\n", c.epochTID)
 	start := time.Now()
 	c.NextGlobalTID()
 
 	// Wait for everyone to merge the previous epoch
 	for i := 0; i < c.n; i++ {
 		<-c.wepoch[i]
-		//dlog.Printf("%v merged for %v\n", i, c.epochTID)
 	}
 
 	// All merged.  The previous epoch is now safe; tell everyone to
@@ -89,7 +89,6 @@ func (c *Coordinator) IncrementEpoch() {
 	}
 	for i := 0; i < c.n; i++ {
 		<-c.wdone[i]
-		//dlog.Printf("Got done from %v for %v\n", i, c.epochTID)
 	}
 
 	start2 := time.Now()
@@ -101,7 +100,6 @@ func (c *Coordinator) IncrementEpoch() {
 			s.cand.Merge(w.local_store.candidates)
 		}
 		xx := len(*s.cand.h)
-		dlog.Printf("Number of potential keys: %v; keys %v\n", xx, *s.cand.h)
 		for i := 0; i < xx; i++ {
 			o := heap.Pop(s.cand.h).(*OneStat)
 			x, y := UndoCKey(o.k)

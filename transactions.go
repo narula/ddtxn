@@ -97,11 +97,12 @@ func BidNCTxn(t Query, tx *ETransaction) (*Result, error) {
 	if err == ESTASH {
 		return nil, ESTASH
 	}
-	if err == EABORT {
+	if err == ENOKEY {
+		tx.Write(t.K2, t.A, WRITE)
+	} else if err != nil {
 		dlog.Println("Abort", high_bid, err, t.K2)
 		return r, EABORT
-	}
-	if err == ENOKEY || t.A > high_bid.value.(int32) {
+	} else if t.A > high_bid.Value().(int32) {
 		tx.Write(t.K2, t.A, WRITE)
 	}
 	if tx.Commit() == 0 {

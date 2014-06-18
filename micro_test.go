@@ -29,16 +29,14 @@ func BenchmarkMany(b *testing.B) {
 				u := UserKey(i % nb)
 				amt := int32(rand.Intn(100))
 				tx := Query{TXN: D_BUY, K1: u, A: amt, K2: p, W: nil, T: 0}
-				r, err := w.One(tx)
-				if r != nil && err == nil {
+				_, err := w.One(tx)
+				if err == nil {
 					atomic.AddInt32(&val[i%np], amt)
 				}
 			}
-			dlog.Printf("%d Done\n", id)
 			wg.Done()
 		}(p)
 	}
-	dlog.Printf("Waiting on outer\n")
 	wg.Wait()
 	dlog.Printf("done\n")
 	b.StopTimer()
@@ -52,7 +50,14 @@ func BenchmarkBid(b *testing.B) {
 	nb := 10000
 	np := 100
 	n := 8
-	s := loadStore(nb, np)
+	s := NewStore()
+	// Load
+	for i := 0; i < np; i++ {
+		s.CreateKey(ProductKey(i), int32(0), MAX)
+	}
+	for i := 0; i < nb; i++ {
+		s.CreateKey(UserKey(i), "x", WRITE)
+	}
 	c := NewCoordinator(n, s)
 	val := make([]int32, np)
 
@@ -67,8 +72,8 @@ func BenchmarkBid(b *testing.B) {
 				u := UserKey(i % nb)
 				amt := int32(rand.Intn(100))
 				tx := Query{TXN: D_BID, K1: u, A: amt, K2: p, S1: "xx", W: nil, T: 0}
-				r, err := w.One(tx)
-				if r != nil && err == nil {
+				_, err := w.One(tx)
+				if err == nil {
 					// Change to CAS
 					done := false
 					for !done {
@@ -99,7 +104,14 @@ func BenchmarkBidNC(b *testing.B) {
 	np := 100
 	n := 8
 	s := NewStore()
-	//loadStore(nb, np)
+	// Load
+	for i := 0; i < np; i++ {
+		s.CreateKey(ProductKey(i), int32(0), WRITE)
+	}
+	for i := 0; i < nb; i++ {
+		s.CreateKey(UserKey(i), "x", WRITE)
+	}
+
 	c := NewCoordinator(n, s)
 	val := make([]int32, np)
 
@@ -114,8 +126,8 @@ func BenchmarkBidNC(b *testing.B) {
 				u := UserKey(i % nb)
 				amt := int32(rand.Intn(100))
 				tx := Query{TXN: D_BID_NC, K1: u, A: amt, K2: p, S1: "xx", W: nil, T: 0}
-				r, err := w.One(tx)
-				if r != nil && err == nil {
+				_, err := w.One(tx)
+				if err == nil {
 					// Change to CAS
 					done := false
 					for !done {
@@ -164,8 +176,8 @@ func BenchmarkRead(b *testing.B) {
 				rr := rand.Intn(100)
 				if rr >= read_rate {
 					tx = Query{TXN: D_BUY, K1: u, K2: p, A: amt, W: nil, T: 0}
-					r, err := w.One(tx)
-					if r != nil && err == nil {
+					_, err := w.One(tx)
+					if err == nil {
 						atomic.AddInt32(&val[i%np], amt)
 					}
 				} else {

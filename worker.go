@@ -199,12 +199,15 @@ func (w *Worker) run() {
 			// condition on w.epoch with a call to transition() from
 			// One().  I'm ok with that cause this is just a tickle.
 			if *SysType == DOPPEL {
-				w.Lock()
 				e := w.coordinator.GetEpoch()
 				if e > w.epoch {
-					w.transition(e)
+					w.Lock()
+					e := w.coordinator.GetEpoch()
+					if e > w.epoch {
+						w.transition(e)
+					}
+					w.Unlock()
 				}
-				w.Unlock()
 			}
 		}
 	}
