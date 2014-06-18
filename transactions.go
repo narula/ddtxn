@@ -29,7 +29,7 @@ type Query struct {
 
 type Result struct {
 	V Value
-	C bool // committed?
+	E error
 }
 
 var Allocate = flag.Bool("allocate", true, "Allocate results")
@@ -49,7 +49,7 @@ func BuyTxn(t Query, tx *ETransaction) (*Result, error) {
 		return r, EABORT
 	}
 	if *Allocate {
-		r = &Result{C: true}
+		r = &Result{E: nil}
 	}
 	return r, nil
 }
@@ -76,7 +76,7 @@ func BuyNCTxn(t Query, tx *ETransaction) (*Result, error) {
 		return r, EABORT
 	}
 	if *Allocate {
-		r.C = true
+		r.E = nil
 	}
 	return r, nil
 }
@@ -90,7 +90,7 @@ func BidTxn(t Query, tx *ETransaction) (*Result, error) {
 		return r, EABORT
 	}
 	if *Allocate {
-		r = &Result{C: true}
+		r = &Result{E: nil}
 	}
 	return r, nil
 }
@@ -115,7 +115,7 @@ func BidNCTxn(t Query, tx *ETransaction) (*Result, error) {
 		return r, EABORT
 	}
 	if *Allocate {
-		r.C = true
+		r.E = nil
 	}
 	return r, nil
 }
@@ -131,7 +131,7 @@ func ReadTxn(t Query, tx *ETransaction) (*Result, error) {
 		return r, EABORT
 	}
 	if *Allocate {
-		r = &Result{v1.Value(), true}
+		r = &Result{v1.Value(), nil}
 	}
 	return r, nil
 }

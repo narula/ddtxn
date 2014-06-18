@@ -35,7 +35,7 @@ func BenchmarkMany(b *testing.B) {
 				//w.Incoming <- tx
 				go func(c chan *Result, i int, np int, amt int32) {
 					r := <-c
-					if r != nil && r.C {
+					if r != nil && r.E == nil {
 						atomic.AddInt32(&val[i%np], amt)
 					}
 					dlog.Printf("Got result %v\n", r)
@@ -83,7 +83,7 @@ func BenchmarkBid(b *testing.B) {
 				//w.Incoming <- tx
 				go func(c chan *Result, i int, np int, amt int32) {
 					r := <-c
-					if r != nil && r.C {
+					if r != nil && r.E == nil {
 						// Change to CAS
 						done := false
 						for !done {
@@ -141,7 +141,7 @@ func BenchmarkBidNC(b *testing.B) {
 				//w.Incoming <- tx
 				go func(c chan *Result, i int, np int, amt int32) {
 					r := <-c
-					if r != nil && r.C {
+					if r != nil && r.E == nil {
 						// Change to CAS
 						done := false
 						for !done {
@@ -207,7 +207,7 @@ func BenchmarkRead(b *testing.B) {
 				//w.Incoming <- tx
 				go func(c chan *Result, i int, np int, amt int32, val_txn bool) {
 					r := <-c
-					if val_txn && r != nil && r.C {
+					if val_txn && r != nil && r.E == nil {
 						atomic.AddInt32(&val[i%np], amt)
 					}
 					wg_inner.Done()

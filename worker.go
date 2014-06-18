@@ -18,11 +18,6 @@ const (
 var SysType = flag.Int("sys", DOPPEL, "Type of system to run\n")
 var CountKeys = flag.Bool("ck", false, "Count keys accessed")
 
-const (
-	THRESHOLD  = 500
-	RTHRESHOLD = 500
-)
-
 type TransactionFunc func(Query, *ETransaction) (*Result, error)
 
 const (
