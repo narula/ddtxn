@@ -156,7 +156,6 @@ type ETransaction struct {
 	padding [128]byte
 }
 
-// Re-use this?
 func StartTransaction(w *Worker) *ETransaction {
 	tx := &ETransaction{
 		read:   make([]*BRecord, 0, 60),
