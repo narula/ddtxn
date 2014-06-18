@@ -55,19 +55,20 @@ type Worker struct {
 	sync.RWMutex
 	ID          int
 	store       *Store
-	local_store *LocalStore
 	coordinator *Coordinator
+	local_store *LocalStore
 	next        TID
 	epoch       TID
 	done        chan Query
 	waiters     *TStore
 	E           *ETransaction
+	txns        []TransactionFunc
+
 	// Stats
 	Nstats       []int64
 	Nwait        time.Duration
 	Nwait2       time.Duration
 	NKeyAccesses []int64
-	txns         []TransactionFunc
 }
 
 func (w *Worker) Register(fn int, transaction TransactionFunc) {
@@ -101,7 +102,7 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 	w.Register(RUBIS_NEWITEM, NewItemTxn)
 	w.Register(RUBIS_BID, StoreBidTxn)
 	w.Register(RUBIS_SEARCHCAT, SearchItemsCategTxn)
-	go w.Go()
+	go w.run()
 	return w
 }
 
@@ -130,7 +131,7 @@ func (w *Worker) doTxn(t Query) (*Result, error) {
 	return x, err
 }
 
-func (w *Worker) Transition(e TID) {
+func (w *Worker) transition(e TID) {
 	w.epoch = e
 	if *SysType == DOPPEL {
 		w.local_store.phase = MERGE
@@ -170,7 +171,7 @@ func (w *Worker) Transition(e TID) {
 
 // Periodically check if the epoch changed.  This is important because
 // I might not always be receiving calls to One()
-func (w *Worker) Go() {
+func (w *Worker) run() {
 	duration := time.Duration(BUMP_EPOCH_MS*2) * time.Millisecond
 	tm := time.NewTicker(duration).C
 	_ = tm
@@ -199,13 +200,13 @@ func (w *Worker) Go() {
 		case <-tm:
 			// This is necessary if all worker threads are blocked
 			// waiting for stashed reads, but there's a read race
-			// condition on w.epoch with a call to Transition() from
+			// condition on w.epoch with a call to transition() from
 			// One().  I'm ok with that cause this is just a tickle.
 			if *SysType == DOPPEL {
 				w.Lock()
 				e := w.coordinator.GetEpoch()
 				if e > w.epoch {
-					w.Transition(e)
+					w.transition(e)
 				}
 				w.Unlock()
 			}
@@ -218,7 +219,7 @@ func (w *Worker) One(t Query) (*Result, error) {
 	if *SysType == DOPPEL {
 		e := w.coordinator.GetEpoch()
 		if w.epoch != e {
-			w.Transition(e)
+			w.transition(e)
 		}
 	}
 	r, err := w.doTxn(t)
