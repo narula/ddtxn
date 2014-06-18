@@ -3,6 +3,7 @@ package ddtxn
 import (
 	"ddtxn/dlog"
 	"math/rand"
+	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -10,11 +11,19 @@ import (
 )
 
 func BenchmarkMany(b *testing.B) {
+	runtime.GOMAXPROCS(8)
 	b.StopTimer()
 	nb := 10000
 	np := 100
 	n := 8
-	s := loadStore(nb, np)
+	s := NewStore()
+	// Load
+	for i := 0; i < np; i++ {
+		s.CreateKey(ProductKey(i), int32(0), SUM)
+	}
+	for i := 0; i < nb; i++ {
+		s.CreateKey(UserKey(i), "x", WRITE)
+	}
 	c := NewCoordinator(n, s)
 	val := make([]int32, np)
 
@@ -46,6 +55,7 @@ func BenchmarkMany(b *testing.B) {
 }
 
 func BenchmarkBid(b *testing.B) {
+	runtime.GOMAXPROCS(8)
 	b.StopTimer()
 	nb := 10000
 	np := 100
@@ -99,6 +109,7 @@ func BenchmarkBid(b *testing.B) {
 }
 
 func BenchmarkBidNC(b *testing.B) {
+	runtime.GOMAXPROCS(8)
 	b.StopTimer()
 	nb := 10000
 	np := 100
@@ -153,11 +164,21 @@ func BenchmarkBidNC(b *testing.B) {
 }
 
 func BenchmarkRead(b *testing.B) {
+	runtime.GOMAXPROCS(8)
 	b.StopTimer()
 	nb := 10000
 	np := 100
 	n := 8
-	s := loadStore(nb, np)
+
+	s := NewStore()
+	// Load
+	for i := 0; i < np; i++ {
+		s.CreateKey(ProductKey(i), int32(0), SUM)
+	}
+	for i := 0; i < nb; i++ {
+		s.CreateKey(UserKey(i), "x", WRITE)
+	}
+
 	c := NewCoordinator(n, s)
 	val := make([]int32, np)
 	read_rate := 50

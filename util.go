@@ -134,19 +134,6 @@ func Randstr(sz int) string {
 	return string(bytes)
 }
 
-// For BUY and MAX tests
-func loadStore(nb, np int) *Store {
-	s := NewStore()
-	// Load
-	for i := 0; i < np; i++ {
-		s.CreateKey(ProductKey(i), int32(0), SUM)
-	}
-	for i := 0; i < nb; i++ {
-		s.CreateKey(UserKey(i), "x", WRITE)
-	}
-	return s
-}
-
 func Validate(c *Coordinator, s *Store, nkeys int, nproducts int, val []int32, n int) bool {
 	good := true
 	dlog.Printf("Validate start, store at %x\n", c.GetEpoch())
