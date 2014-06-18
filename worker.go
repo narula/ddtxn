@@ -102,7 +102,6 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 }
 
 func (w *Worker) stashTxn(t Query) {
-	w.Nstats[NSTASHED]++
 	w.waiters.Add(t)
 }
 
@@ -114,6 +113,7 @@ func (w *Worker) doTxn(t Query) (*Result, error) {
 	w.E.Reset()
 	x, err := w.txns[t.TXN](t, w.E)
 	if err == ESTASH {
+		w.Nstats[NSTASHED]++
 		w.stashTxn(t)
 		return nil, err
 	} else if err == nil {
