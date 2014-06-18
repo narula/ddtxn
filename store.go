@@ -14,7 +14,9 @@ type Value interface{}
 
 type Chunk struct {
 	sync.RWMutex
-	rows map[Key]*BRecord
+	padding1 [128]byte
+	rows     map[Key]*BRecord
+	padding2 [128]byte
 }
 
 var UseRLocks = flag.Bool("rlock", true, "Use Rlocks\n")

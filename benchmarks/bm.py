@@ -22,7 +22,7 @@ ben_list_cpus = "socket@0,1,2,7,3-6"
 
 LATENCY_PART = " -latency=%s" % options.latency
 
-BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -ngo %d -nprocs %d -nsec %d -contention %d -rr %d -allocate=%s -sys=%d -rlock=%s -wr=5" + LATENCY_PART
+BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -ngo %d -nprocs %d -nsec %d -contention %d -rr %d -allocate=%s -sys=%d -rlock=%s -wr=3" + LATENCY_PART
 
 def run_one(fn, cmd):
     if options.dprint:
@@ -197,7 +197,9 @@ if __name__ == "__main__":
     if not os.path.exists(fnpath):
         os.mkdir(fnpath)
     if options.exp == "contention":
-        contention_exp(fnpath, host, options.default_contention, options.read_rate)
+        contention_exp(fnpath, host, options.default_contention, 90)
+        contention_exp(fnpath, host, options.default_contention, 10)
+        contention_exp(fnpath, host, options.default_contention, 50)
     elif options.exp == "rw":
         rw_exp(fnpath, host, options.default_contention, options.default_ncores)
     elif options.exp == "products":
