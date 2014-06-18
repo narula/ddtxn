@@ -280,3 +280,31 @@ func SearchItemsCategTxn(t Query, tx *ETransaction) (*Result, error) {
 	}
 	return r, nil
 }
+
+func ViewItemTxn(t Query, tx *ETransaction) (*Result, error) {
+	var r *Result = nil
+	id := t.U1
+	item, err := tx.Read(ItemKey(id))
+	if err != nil {
+		return r, err
+	}
+	maxbid, err := tx.Read(MaxBidKey(id))
+	if err != nil {
+		return r, err
+	}
+	maxbidder, err := tx.Read(MaxBidBidderKey(id))
+	if err != nil {
+		return r, err
+	}
+	if tx.Commit() == 0 {
+		return r, EABORT
+	}
+	if *Allocate {
+		r = &Result{&struct {
+			Item
+			int32
+			uint64
+		}{*item.Value().(*Item), maxbid.Value().(int32), maxbidder.Value().(uint64)}}
+	}
+	return r, nil
+}

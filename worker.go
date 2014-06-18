@@ -35,6 +35,7 @@ const (
 	RUBIS_NEWITEM
 	RUBIS_BID
 	RUBIS_SEARCHCAT
+	RUBIS_VIEW
 	LAST_TXN
 
 	NABORTS
@@ -97,6 +98,7 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 	w.Register(RUBIS_NEWITEM, NewItemTxn)
 	w.Register(RUBIS_BID, StoreBidTxn)
 	w.Register(RUBIS_SEARCHCAT, SearchItemsCategTxn)
+	w.Register(RUBIS_VIEW, ViewItemTxn)
 	go w.run()
 	return w
 }
