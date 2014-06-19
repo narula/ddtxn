@@ -129,12 +129,11 @@ func NewItemTxn(t Query, tx *ETransaction) (*Result, error) {
 	region := urec.value.(*User).Region
 	val := Entry{order: now, top: int(n)}
 	tx.Write(ItemKey(xx), x, WRITE)
-	tx.Write(ItemsByCatKey(x.Categ), val, LIST)
-	tx.Write(ItemsByRegKey(region, x.Categ), val, LIST)
+	tx.WriteList(ItemsByCatKey(x.Categ), val, LIST)
+	tx.WriteList(ItemsByRegKey(region, x.Categ), val, LIST)
 	tx.WriteInt32(MaxBidKey(xx), int32(0), MAX)
 	tx.Write(MaxBidBidderKey(xx), uint64(0), WRITE)
 	tx.WriteInt32(NumBidsKey(xx), int32(0), SUM)
-	tx.Write(BidsPerItemKey(xx), nil, LIST)
 
 	if tx.Commit() == 0 {
 		return r, EABORT
@@ -183,7 +182,8 @@ func StoreBidTxn(t Query, tx *ETransaction) (*Result, error) {
 	tx.WriteInt32(NumBidsKey(item), 1, SUM)
 
 	// add to item's bid list
-	tx.Write(BidsPerItemKey(item), Entry{int(bid.Price), bid_key, 0}, LIST)
+	e := Entry{int(bid.Price), bid_key, 0}
+	tx.WriteList(BidsPerItemKey(item), e, LIST)
 
 	if tx.Commit() == 0 {
 		//dlog.Printf("Bid abort %v\n", t)

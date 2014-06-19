@@ -18,7 +18,10 @@ type Write struct {
 	create bool
 	locked bool
 	vint32 int32
-	dd     bool
+
+	// TODO: Handle writing more than once to a list per txn
+	ve Entry
+	dd bool
 }
 
 // Not threadsafe.  Tracks execution of transaction.
@@ -127,6 +130,21 @@ func (tx *ETransaction) addInt32(k Key, v int32, op KeyType, create bool) {
 	tx.writes[n].locked = false
 }
 
+func (tx *ETransaction) addList(k Key, v Entry, op KeyType, create bool) {
+	if len(tx.writes) == cap(tx.writes) {
+		// TODO: extend
+		log.Fatalf("Ran out of room\n")
+	}
+	n := len(tx.writes)
+	tx.writes = tx.writes[0 : n+1]
+	tx.writes[n].key = k
+	tx.writes[n].br = nil
+	tx.writes[n].ve = v
+	tx.writes[n].op = op
+	tx.writes[n].create = create
+	tx.writes[n].locked = false
+}
+
 func (tx *ETransaction) WriteInt32(k Key, a int32, op KeyType) {
 	tx.addInt32(k, a, op, false)
 }
@@ -137,6 +155,13 @@ func (tx *ETransaction) Write(k Key, v Value, kt KeyType) {
 		return
 	}
 	tx.add(k, v, kt, true)
+}
+
+func (tx *ETransaction) WriteList(k Key, l Entry, kt KeyType) {
+	if kt != LIST {
+		log.Fatalf("Not a list\n")
+	}
+	tx.addList(k, l, kt, true)
 }
 
 func (tx *ETransaction) Abort() TID {
@@ -169,9 +194,11 @@ func (tx *ETransaction) Commit() TID {
 			if br == nil || err != nil {
 				switch w.op {
 				case SUM:
-					br = tx.s.CreateInt32Key(w.key, w.vint32, w.op)
+					br = tx.s.CreateInt32Key(w.key, 0, w.op)
 				case MAX:
-					br = tx.s.CreateInt32Key(w.key, w.vint32, w.op)
+					br = tx.s.CreateInt32Key(w.key, 0, w.op)
+				case LIST:
+					br = tx.s.CreateKey(w.key, nil, LIST)
 				default:
 					if w.v == nil {
 						br = tx.s.CreateKey(w.key, "", WRITE)
@@ -239,6 +266,8 @@ func (tx *ETransaction) Commit() TID {
 				tx.ls.Apply(w.key, w.op, w.vint32, w.op)
 			case MAX:
 				tx.ls.Apply(w.key, w.op, w.vint32, w.op)
+			case LIST:
+				tx.ls.ApplyList(w.key, w.ve)
 			default:
 				tx.ls.Apply(w.key, w.op, w.v, w.op)
 			}
@@ -248,6 +277,8 @@ func (tx *ETransaction) Commit() TID {
 				tx.s.SetInt32(w.br, w.vint32, w.op)
 			case MAX:
 				tx.s.SetInt32(w.br, w.vint32, w.op)
+			case LIST:
+				tx.s.Set(w.br, w.ve, w.op)
 			default:
 				tx.s.Set(w.br, w.v, w.op)
 			}

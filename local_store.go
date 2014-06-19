@@ -42,6 +42,17 @@ func NewLocalStore(s *Store) *LocalStore {
 	return ls
 }
 
+func (ls *LocalStore) ApplyList(key Key, entry Entry) {
+	l, ok := ls.lists[key]
+	if !ok {
+		l = make([]Entry, 0, 300)
+		ls.lists[key] = l
+	}
+	// TODO: Use listApply or add one to list to keep them sorted;
+	// handle duplicates
+	ls.lists[key] = append(l, entry)
+}
+
 func (ls *LocalStore) Apply(key Key, key_type KeyType, v Value, op KeyType) {
 	if op != key_type {
 		// Perhaps do something.  When is this set?
@@ -58,14 +69,7 @@ func (ls *LocalStore) Apply(key Key, key_type KeyType, v Value, op KeyType) {
 	case WRITE:
 		ls.bw[key] = v
 	case LIST:
-		entry := v.(Entry)
-		l, ok := ls.lists[key]
-		if !ok {
-			l = make([]Entry, 0)
-			ls.lists[key] = l
-		}
-		// TODO: Use listApply or add one to list to keep them sorted
-		ls.lists[key] = append(l, entry)
+		ls.ApplyList(key, v.(Entry))
 	}
 }
 
