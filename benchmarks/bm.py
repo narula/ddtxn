@@ -169,7 +169,7 @@ def latency():
     pass
 
 def rubis_exp(fnpath, host, contention, rr):
-    fnn = '%s-rubis-scalability-%d.data' % (host, contention)
+    fnn = '%s-rubis-%d-%d.data' % (host, contention, rr)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     cpus = get_cpus(host)
@@ -197,15 +197,24 @@ if __name__ == "__main__":
     if not os.path.exists(fnpath):
         os.mkdir(fnpath)
     if options.exp == "contention":
-        contention_exp(fnpath, host, options.default_contention, 90)
-        contention_exp(fnpath, host, options.default_contention, 10)
-        contention_exp(fnpath, host, options.default_contention, 50)
+        if options.read_rate == -1:
+            contention_exp(fnpath, host, options.default_contention, 90)
+            contention_exp(fnpath, host, options.default_contention, 10)
+            contention_exp(fnpath, host, options.default_contention, 50)
+        else:
+            contention_exp(fnpath, host, options.default_contention, options.read_rate)
     elif options.exp == "rw":
         rw_exp(fnpath, host, options.default_contention, options.default_ncores)
     elif options.exp == "products":
         products_exp(fnpath, host, options.read_rate, options.default_ncores)
     elif options.exp == "rubis":
-        rubis_exp(fnpath, host, options.default_contention, options.read_rate)
+        if options.read_rate == -1:
+            rubis_exp(fnpath, host, 100000, 50)
+            rubis_exp(fnpath, host, 100000, 10)
+            rubis_exp(fnpath, host, 1000000, 50)
+            rubis_exp(fnpath, host, 1000000, 10)
+        else:
+            rubis_exp(fnpath, host, options.default_contention, options.read_rate)
     elif options.exp == "all":
         options.dynamic = True
         if host == "ben":
