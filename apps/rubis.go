@@ -65,13 +65,15 @@ func InitRubis(s *ddtxn.Store, np, nb, nw, rr, ngo int, ex *ddtxn.ETransaction) 
 			log.Fatalf("Could not create items %v %v\n", i, err)
 		}
 		ex.Reset()
-		// Allocate keys for every combination of user and product
-		// bids. This is to avoid using read locks during execution by
-		// guaranteeing the map of keys won't change.
-		if i < np {
-			for j := 0; j < nb; j++ {
-				k := ddtxn.PairBidKey(uint64(j), uint64(i))
-				s.CreateKey(k, "", ddtxn.WRITE)
+		if !*ddtxn.UseRLocks {
+			// Allocate keys for every combination of user and product
+			// bids. This is to avoid using read locks during execution by
+			// guaranteeing the map of keys won't change.
+			if i < np {
+				for j := 0; j < nb; j++ {
+					k := ddtxn.PairBidKey(uint64(j), uint64(i))
+					s.CreateKey(k, "", ddtxn.WRITE)
+				}
 			}
 		}
 	}

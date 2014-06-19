@@ -148,7 +148,7 @@ func (s *Store) getKey(k Key) (*BRecord, error) {
 	}
 	chunk.RLock()
 	vr, ok := chunk.rows[k]
-	if !ok {
+	if !ok || vr == nil {
 		chunk.RUnlock()
 		return vr, ENOKEY
 	}
@@ -165,7 +165,7 @@ func (s *Store) getKeyStatic(k Key) (*BRecord, error) {
 		log.Fatalf("[store] Didn't initialize chunk for key %v byte %v\n", k, k[0])
 	}
 	vr, ok := chunk.rows[k]
-	if !ok {
+	if !ok || vr == nil {
 		return vr, ENOKEY
 	}
 	return vr, nil
