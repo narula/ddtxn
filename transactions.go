@@ -129,13 +129,29 @@ func ReadTxn(t Query, tx *ETransaction) (*Result, error) {
 
 func BigIncrTxn(t Query, tx *ETransaction) (*Result, error) {
 	var r *Result = nil
-	tx.WriteInt32(BidKey(t.U1), 1, SUM)
-	tx.WriteInt32(BidKey(t.U2), 1, SUM)
-	tx.WriteInt32(BidKey(t.U3), 1, SUM)
-	tx.WriteInt32(BidKey(t.U4), 1, SUM)
-	tx.WriteInt32(BidKey(t.U5), 1, SUM)
-	tx.WriteInt32(BidKey(t.U6), 1, SUM)
-	tx.WriteInt32(BidKey(t.U7), 1, SUM)
+	key := [6]Key{}
+	key[0] = BidKey(t.U1)
+	key[1] = BidKey(t.U2)
+	key[2] = BidKey(t.U3)
+	key[3] = BidKey(t.U4)
+	key[4] = BidKey(t.U5)
+	key[5] = BidKey(t.U6)
+
+	for i := 0; i < 6; i++ {
+		k, err := tx.Read(key[i])
+		if err == ESTASH {
+			return nil, ESTASH
+		}
+		if err == ENOKEY {
+			tx.WriteInt32(key[i], int32(0), SUM)
+		} else if err != nil {
+			return r, EABORT
+		} else {
+			_ = k
+		}
+	}
+
+	tx.WriteInt32(ProductKey(int(t.U7)), 1, SUM)
 	if tx.Commit() == 0 {
 		return r, EABORT
 	}
@@ -154,7 +170,7 @@ func BigRWTxn(t Query, tx *ETransaction) (*Result, error) {
 	key[3] = BidKey(t.U4)
 	key[4] = BidKey(t.U5)
 	key[5] = BidKey(t.U6)
-	key[6] = BidKey(t.U7)
+	key[6] = ProductKey(int(t.U7))
 
 	for i := 0; i < 7; i++ {
 		k, err := tx.Read(key[i])
@@ -162,13 +178,15 @@ func BigRWTxn(t Query, tx *ETransaction) (*Result, error) {
 			return nil, ESTASH
 		}
 		if err == ENOKEY {
-			tx.Write(key[i], int32(0), SUM)
+			tx.WriteInt32(key[i], int32(0), SUM)
 		} else if err != nil {
 			return r, EABORT
 		} else {
-			tx.Write(key[i], k.Value().(int32)+1, WRITE)
+			_ = k
 		}
 	}
+
+	tx.WriteInt32(key[6], 1, SUM)
 
 	if tx.Commit() == 0 {
 		return r, EABORT

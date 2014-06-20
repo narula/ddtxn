@@ -39,6 +39,7 @@ func main() {
 		*nworkers = *nprocs
 	}
 
+	nproducts := *nbidders / *contention
 	if *doValidate {
 		if !*ddtxn.Allocate {
 			log.Fatalf("Cannot correctly validate without waiting for results; add -allocate\n")
@@ -55,7 +56,7 @@ func main() {
 	}
 
 	big_app := &apps.Big{}
-	big_app.Init(*nbidders, *nworkers, *readrate, *clientGoRoutines, *notcontended_readrate)
+	big_app.Init(*nbidders, nproducts, *nworkers, *readrate, *clientGoRoutines, *notcontended_readrate)
 	big_app.Populate(s, coord.Workers[0].E)
 
 	dlog.Printf("Done initializing buy\n")
@@ -116,7 +117,7 @@ func main() {
 		big_app.Validate(s, int(nitr))
 	}
 
-	out := fmt.Sprintf(" sys: %v, nworkers: %v, rr: %v, ncrr: %v, nusers: %v, done: %v, actual time: %v,  epoch changes: %v, total/sec: %v, throughput ns/txn: %v, naborts: %v, nwmoved: %v, nrmoved: %v, ietime: %v, ietime1: %v, etime: %v, etime2: %v, nstashed: %v, rlock: %v, wrratio: %v, nsamples: %v ", *ddtxn.SysType, *nworkers, *readrate, *notcontended_readrate*float64(*readrate), *nbidders, nitr, end, ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, stats[ddtxn.NABORTS], ddtxn.WMoved, ddtxn.RMoved, ddtxn.Time_in_IE.Seconds(), ddtxn.Time_in_IE1.Seconds(), nwait.Seconds()/float64(*nworkers), nwait2.Seconds()/float64(*nworkers), stats[ddtxn.NSTASHED], *ddtxn.UseRLocks, *ddtxn.WRRatio, stats[ddtxn.NSAMPLES])
+	out := fmt.Sprintf(" sys: %v, contention: %v, nworkers: %v, rr: %v, ncrr: %v, nusers: %v, done: %v, actual time: %v,  epoch changes: %v, total/sec: %v, throughput ns/txn: %v, naborts: %v, nwmoved: %v, nrmoved: %v, ietime: %v, ietime1: %v, etime: %v, etime2: %v, nstashed: %v, rlock: %v, wrratio: %v, nsamples: %v ", *ddtxn.SysType, *contention, *nworkers, *readrate, *notcontended_readrate*float64(*readrate), *nbidders, nitr, end, ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, stats[ddtxn.NABORTS], ddtxn.WMoved, ddtxn.RMoved, ddtxn.Time_in_IE.Seconds(), ddtxn.Time_in_IE1.Seconds(), nwait.Seconds()/float64(*nworkers), nwait2.Seconds()/float64(*nworkers), stats[ddtxn.NSTASHED], *ddtxn.UseRLocks, *ddtxn.WRRatio, stats[ddtxn.NSAMPLES])
 	fmt.Printf(out)
 	fmt.Printf("\n")
 	f, err := os.OpenFile(*dataFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)

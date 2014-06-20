@@ -14,6 +14,7 @@ type Big struct {
 	sp              uint32
 	read_rate       int
 	ni              uint64
+	np              int
 	ncontended_rate int
 	nworkers        int
 	ngo             int
@@ -21,8 +22,9 @@ type Big struct {
 	lhw             []*stats.LatencyHist
 }
 
-func (b *Big) Init(ni, nw, rr, ngo int, ncrr float64) {
+func (b *Big) Init(ni, np, nw, rr, ngo int, ncrr float64) {
 	b.ni = uint64(ni)
+	b.np = np
 	b.nworkers = nw
 	b.ngo = ngo
 	b.read_rate = rr
@@ -34,6 +36,10 @@ func (b *Big) Init(ni, nw, rr, ngo int, ncrr float64) {
 func (b *Big) Populate(s *ddtxn.Store, ex *ddtxn.ETransaction) {
 	for i := 0; i < int(b.ni); i++ {
 		k := ddtxn.BidKey(uint64(i))
+		s.CreateKey(k, int32(0), ddtxn.SUM)
+	}
+	for i := 0; i < b.np; i++ {
+		k := ddtxn.ProductKey(i)
 		s.CreateKey(k, int32(0), ddtxn.SUM)
 	}
 	if *Latency {
@@ -57,7 +63,7 @@ func (b *Big) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 	txn.U4 = (rnd * 4) % b.ni
 	txn.U5 = (rnd * 5) % b.ni
 	txn.U6 = (rnd * 6) % b.ni
-	txn.U7 = (rnd * 7) % b.ni
+	txn.U7 = (rnd) % uint64(b.np)
 	if *incr {
 		txn.TXN = ddtxn.BIG_INCR
 	} else {
