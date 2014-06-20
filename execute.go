@@ -184,7 +184,7 @@ func (tx *ETransaction) Commit() TID {
 		}
 		if w.br == nil {
 			br, err := tx.s.getKey(w.key)
-			tx.w.Nstats[NGETKEYCALLS]++
+			//tx.w.Nstats[NGETKEYCALLS]++
 			if *CountKeys {
 				p, r := UndoCKey(w.key)
 				if r == 117 {
@@ -260,7 +260,7 @@ func (tx *ETransaction) Commit() TID {
 			if tx.ls.count {
 				tx.ls.candidates.Write(w.key)
 			}
-			tx.w.Nstats[NDDWRITES]++
+			//tx.w.Nstats[NDDWRITES]++
 			switch w.op {
 			case SUM:
 				tx.ls.Apply(w.key, w.op, w.vint32, w.op)
