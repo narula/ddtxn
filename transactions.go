@@ -126,3 +126,52 @@ func ReadTxn(t Query, tx *ETransaction) (*Result, error) {
 	}
 	return r, nil
 }
+
+func BigIncrTxn(t Query, tx *ETransaction) (*Result, error) {
+	var r *Result = nil
+	tx.WriteInt32(BidKey(t.U1), 1, SUM)
+	tx.WriteInt32(BidKey(t.U2), 1, SUM)
+	tx.WriteInt32(BidKey(t.U3), 1, SUM)
+	tx.WriteInt32(BidKey(t.U4), 1, SUM)
+	tx.WriteInt32(BidKey(t.U5), 1, SUM)
+	tx.WriteInt32(BidKey(t.U6), 1, SUM)
+	tx.WriteInt32(BidKey(t.U7), 1, SUM)
+	if tx.Commit() == 0 {
+		return r, EABORT
+	}
+	return r, nil
+}
+
+// Version of Big that puts keys in read set (doesn't rely on
+// commutativity)
+func BigRWTxn(t Query, tx *ETransaction) (*Result, error) {
+	var r *Result = nil
+
+	key := [7]Key{}
+	key[0] = BidKey(t.U1)
+	key[1] = BidKey(t.U2)
+	key[2] = BidKey(t.U3)
+	key[3] = BidKey(t.U4)
+	key[4] = BidKey(t.U5)
+	key[5] = BidKey(t.U6)
+	key[6] = BidKey(t.U7)
+
+	for i := 0; i < 7; i++ {
+		k, err := tx.Read(key[i])
+		if err == ESTASH {
+			return nil, ESTASH
+		}
+		if err == ENOKEY {
+			tx.Write(key[i], int32(0), SUM)
+		} else if err != nil {
+			return r, EABORT
+		} else {
+			tx.Write(key[i], k.Value().(int32)+1, WRITE)
+		}
+	}
+
+	if tx.Commit() == 0 {
+		return r, EABORT
+	}
+	return r, nil
+}
