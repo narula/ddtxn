@@ -58,11 +58,8 @@ func main() {
 	}
 
 	rubis := &apps.Rubis{}
-	rubis.Init(s, nproducts, *nbidders, *nworkers, *readrate, *clientGoRoutines, *notcontended_readrate, coord.Workers[0].E)
-
-	if *latency {
-		rubis.SetupLatency(100, 1000000, *clientGoRoutines)
-	}
+	rubis.Init(nproducts, *nbidders, *nworkers, *readrate, *clientGoRoutines, *notcontended_readrate)
+	rubis.Populate(s, coord.Workers[0].E)
 
 	dlog.Printf("Done initializing rubis\n")
 
@@ -83,7 +80,7 @@ func main() {
 			var t ddtxn.Query
 			for duration.After(time.Now()) {
 				rubis.MakeOne(w.ID, &local_seed, &t)
-				if *latency || *doValidate {
+				if *apps.Latency || *doValidate {
 					t.W = make(chan struct {
 						R *ddtxn.Result
 						E error
@@ -95,7 +92,7 @@ func main() {
 						err = x.E
 					}
 					txn_end := time.Since(txn_start)
-					if *latency {
+					if *apps.Latency {
 						rubis.Time(&t, txn_end, n)
 					}
 					if *doValidate {
@@ -134,10 +131,8 @@ func main() {
 
 	ddtxn.PrintStats(out, stats, f, coord, s, *nbidders)
 
-	if *latency {
-		x, y := rubis.LatencyString(*clientGoRoutines)
-		f.WriteString(x)
-		f.WriteString(y)
-	}
+	x, y := rubis.LatencyString()
+	f.WriteString(x)
+	f.WriteString(y)
 	f.WriteString("\n")
 }

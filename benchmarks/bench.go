@@ -26,7 +26,6 @@ var nbidders = flag.Int("nb", 1000000, "Bidders in store, default is 1M")
 var readrate = flag.Int("rr", 0, "Read rate %.  Rest are buys")
 var notcontended_readrate = flag.Float64("ncrr", .8, "Uncontended read rate %.  Default to .8")
 
-var latency = flag.Bool("latency", false, "Measure latency")
 var dataFile = flag.String("out", "buy-data.out", "Filename for output")
 var exp = flag.String("exp", "buy", "Experiment to run")
 
@@ -65,10 +64,8 @@ func main() {
 		app = &apps.Rubis{}
 	}
 
-	app.Init(s, nproducts, *nbidders, *nworkers, *readrate, *clientGoRoutines, *notcontended_readrate, coord.Workers[0].E)
-	if *latency {
-		app.SetupLatency(100, 1000000, *clientGoRoutines)
-	}
+	app.Init(nproducts, *nbidders, *nworkers, *readrate, *clientGoRoutines, *notcontended_readrate)
+	app.Populate(s, coord.Workers[0].E)
 
 	dlog.Printf("Done initializing %v\n", *exp)
 
@@ -89,7 +86,7 @@ func main() {
 			var t ddtxn.Query
 			for duration.After(time.Now()) {
 				app.MakeOne(w.ID, &local_seed, &t)
-				if *latency || *doValidate {
+				if *apps.Latency || *doValidate {
 					t.W = make(chan struct {
 						R *ddtxn.Result
 						E error
@@ -101,7 +98,7 @@ func main() {
 						err = x.E
 					}
 					txn_end := time.Since(txn_start)
-					if *latency {
+					if *apps.Latency {
 						app.Time(&t, txn_end, n)
 					}
 					if *doValidate {
@@ -139,10 +136,8 @@ func main() {
 
 	ddtxn.PrintStats(out, stats, f, coord, s, *nbidders)
 
-	if *latency {
-		x, y := app.LatencyString(*clientGoRoutines)
-		f.WriteString(x)
-		f.WriteString(y)
-	}
+	x, y := app.LatencyString()
+	f.WriteString(x)
+	f.WriteString(y)
 	f.WriteString("\n")
 }

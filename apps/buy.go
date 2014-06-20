@@ -16,34 +16,41 @@ type Buy struct {
 	ncontended_rate int
 	nbidders        int
 	nworkers        int
+	ngo             int
 	validate        []int32
 	lhr             []*stats.LatencyHist
 	lhw             []*stats.LatencyHist
 }
 
-func (b *Buy) Init(s *ddtxn.Store, np, nb, nw, rr, ngo int, ncrr float64, ex *ddtxn.ETransaction) {
+func (b *Buy) Init(np, nb, nw, rr, ngo int, ncrr float64) {
 	b.nproducts = np
 	b.nbidders = nb
 	b.nworkers = nw
+	b.ngo = ngo
 	b.read_rate = rr
 	b.ncontended_rate = int(ncrr * float64(rr))
 	b.validate = make([]int32, np)
 	b.lhr = make([]*stats.LatencyHist, ngo)
 	b.lhw = make([]*stats.LatencyHist, ngo)
 	b.sp = uint32(nb / nw)
+}
 
-	for i := 0; i < np; i++ {
+func (b *Buy) Populate(s *ddtxn.Store, ex *ddtxn.ETransaction) {
+	for i := 0; i < b.nproducts; i++ {
 		k := ddtxn.ProductKey(i)
 		s.CreateKey(k, int32(0), ddtxn.SUM)
 	}
 	// Uncontended keys
-	for i := np; i < nb/10; i++ {
+	for i := b.nproducts; i < b.nbidders/10; i++ {
 		k := ddtxn.ProductKey(i)
 		s.CreateKey(k, int32(0), ddtxn.SUM)
 	}
-	for i := 0; i < nb; i++ {
+	for i := 0; i < b.nbidders; i++ {
 		k := ddtxn.UserKey(i)
 		s.CreateKey(k, "x", ddtxn.WRITE)
+	}
+	if *Latency {
+		b.SetupLatency(100, 1000000, b.ngo)
 	}
 }
 
@@ -127,8 +134,11 @@ func (b *Buy) Time(t *ddtxn.Query, txn_end time.Duration, n int) {
 	}
 }
 
-func (b *Buy) LatencyString(ngo int) (string, string) {
-	for i := 1; i < ngo; i++ {
+func (b *Buy) LatencyString() (string, string) {
+	if !*Latency {
+		return "", ""
+	}
+	for i := 1; i < b.ngo; i++ {
 		b.lhr[0].Combine(b.lhr[i])
 		b.lhw[0].Combine(b.lhw[i])
 	}

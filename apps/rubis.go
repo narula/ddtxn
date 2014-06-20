@@ -16,6 +16,7 @@ type Rubis struct {
 	nbidders        int
 	portion_sz      int
 	nworkers        int
+	ngo             int
 	read_rate       int
 	ncontended_rate int
 	maxes           []int32
@@ -25,17 +26,21 @@ type Rubis struct {
 	sp              uint32
 }
 
-func (b *Rubis) Init(s *ddtxn.Store, np, nb, nw, rr, ngo int, ncrr float64, ex *ddtxn.ETransaction) {
+func (b *Rubis) Init(np, nb, nw, rr, ngo int, ncrr float64) {
 	b.nproducts = np
 	b.nbidders = nb
 	b.nworkers = nw
+	b.ngo = ngo
 	b.maxes = make([]int32, np)
 	b.num_bids = make([]int32, np)
 	b.lhr = make([]*stats.LatencyHist, ngo)
 	b.lhw = make([]*stats.LatencyHist, ngo)
 	b.sp = uint32(nb / nw)
 	b.read_rate = rr
-	for i := 0; i < nb; i++ {
+}
+
+func (b *Rubis) Populate(s *ddtxn.Store, ex *ddtxn.ETransaction) {
+	for i := 0; i < b.nbidders; i++ {
 		q := ddtxn.Query{
 			T:  ddtxn.TID(i),
 			S1: fmt.Sprintf("xxx%d", i),
@@ -49,7 +54,7 @@ func (b *Rubis) Init(s *ddtxn.Store, np, nb, nw, rr, ngo int, ncrr float64, ex *
 			T:  ddtxn.TID(i),
 			S1: "xxx",
 			S2: "lovely",
-			U1: uint64(rand.Intn(nb)),
+			U1: uint64(rand.Intn(b.nbidders)),
 			U2: 100,
 			U3: 100,
 			U4: 1000,
@@ -67,13 +72,16 @@ func (b *Rubis) Init(s *ddtxn.Store, np, nb, nw, rr, ngo int, ncrr float64, ex *
 			// Allocate keys for every combination of user and product
 			// bids. This is to avoid using read locks during execution by
 			// guaranteeing the map of keys won't change.
-			if i < np {
-				for j := 0; j < nb; j++ {
+			if i < b.nproducts {
+				for j := 0; j < b.nbidders; j++ {
 					k := ddtxn.PairBidKey(uint64(j), uint64(i))
 					s.CreateKey(k, "", ddtxn.WRITE)
 				}
 			}
 		}
+	}
+	if *Latency {
+		b.SetupLatency(100, 1000000, b.ngo)
 	}
 }
 
@@ -178,8 +186,11 @@ func (b *Rubis) Time(t *ddtxn.Query, txn_end time.Duration, n int) {
 	}
 }
 
-func (b *Rubis) LatencyString(ngo int) (string, string) {
-	for i := 1; i < ngo; i++ {
+func (b *Rubis) LatencyString() (string, string) {
+	if !*Latency {
+		return "", ""
+	}
+	for i := 1; i < b.ngo; i++ {
 		b.lhr[0].Combine(b.lhr[i])
 		b.lhw[0].Combine(b.lhw[i])
 	}
