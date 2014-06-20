@@ -38,9 +38,9 @@ type ETransaction struct {
 
 func StartTransaction(w *Worker) *ETransaction {
 	tx := &ETransaction{
-		read:   make([]*BRecord, 0, 60),
-		lasts:  make([]uint64, 0, 60),
-		writes: make([]Write, 0, 60),
+		read:   make([]*BRecord, 0, 100),
+		lasts:  make([]uint64, 0, 100),
+		writes: make([]Write, 0, 100),
 		w:      w,
 		s:      w.store,
 		ls:     w.local_store,

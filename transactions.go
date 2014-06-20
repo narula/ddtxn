@@ -137,17 +137,19 @@ func BigIncrTxn(t Query, tx *ETransaction) (*Result, error) {
 	key[4] = BidKey(t.U5)
 	key[5] = BidKey(t.U6)
 
-	for i := 0; i < 6; i++ {
-		k, err := tx.Read(key[i])
-		if err == ESTASH {
-			return nil, ESTASH
-		}
-		if err == ENOKEY {
-			tx.WriteInt32(key[i], int32(0), SUM)
-		} else if err != nil {
-			return r, EABORT
-		} else {
-			_ = k
+	for z := 0; z < 10; z++ {
+		for i := 0; i < 6; i++ {
+			k, err := tx.Read(key[i])
+			if err == ESTASH {
+				return nil, ESTASH
+			}
+			if err == ENOKEY {
+				tx.WriteInt32(key[i], int32(0), SUM)
+			} else if err != nil {
+				return r, EABORT
+			} else {
+				_ = k
+			}
 		}
 	}
 
@@ -172,20 +174,33 @@ func BigRWTxn(t Query, tx *ETransaction) (*Result, error) {
 	key[5] = BidKey(t.U6)
 	key[6] = ProductKey(int(t.U7))
 
-	for i := 0; i < 7; i++ {
-		k, err := tx.Read(key[i])
-		if err == ESTASH {
-			return nil, ESTASH
-		}
-		if err == ENOKEY {
-			tx.WriteInt32(key[i], int32(0), SUM)
-		} else if err != nil {
-			return r, EABORT
-		} else {
-			_ = k
+	for z := 0; z < 10; z++ {
+		for i := 0; i < 6; i++ {
+			k, err := tx.Read(key[i])
+			if err == ESTASH {
+				return nil, ESTASH
+			}
+			if err == ENOKEY {
+				tx.WriteInt32(key[i], int32(0), SUM)
+			} else if err != nil {
+				return r, EABORT
+			} else {
+				_ = k
+			}
 		}
 	}
 
+	k, err := tx.Read(key[6])
+	if err == ESTASH {
+		return nil, ESTASH
+	}
+	if err == ENOKEY {
+		tx.WriteInt32(key[6], int32(0), SUM)
+	} else if err != nil {
+		return r, EABORT
+	} else {
+		_ = k
+	}
 	tx.WriteInt32(key[6], 1, SUM)
 
 	if tx.Commit() == 0 {
