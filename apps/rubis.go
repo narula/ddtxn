@@ -25,18 +25,16 @@ type Rubis struct {
 	sp              uint32
 }
 
-func InitRubis(s *ddtxn.Store, np, nb, nw, rr, ngo int, ex *ddtxn.ETransaction) *Rubis {
-	b := &Rubis{
-		nproducts: np,
-		nbidders:  nb,
-		nworkers:  nw,
-		maxes:     make([]int32, np),
-		num_bids:  make([]int32, np),
-		lhr:       make([]*stats.LatencyHist, ngo),
-		lhw:       make([]*stats.LatencyHist, ngo),
-		sp:        uint32(nb / nw),
-		read_rate: rr,
-	}
+func (b *Rubis) Init(s *ddtxn.Store, np, nb, nw, rr, ngo int, ncrr float64, ex *ddtxn.ETransaction) {
+	b.nproducts = np
+	b.nbidders = nb
+	b.nworkers = nw
+	b.maxes = make([]int32, np)
+	b.num_bids = make([]int32, np)
+	b.lhr = make([]*stats.LatencyHist, ngo)
+	b.lhw = make([]*stats.LatencyHist, ngo)
+	b.sp = uint32(nb / nw)
+	b.read_rate = rr
 	for i := 0; i < nb; i++ {
 		q := ddtxn.Query{
 			T:  ddtxn.TID(i),
@@ -77,7 +75,6 @@ func InitRubis(s *ddtxn.Store, np, nb, nw, rr, ngo int, ex *ddtxn.ETransaction) 
 			}
 		}
 	}
-	return b
 }
 
 func (b *Rubis) SetupLatency(nincr int64, nbuckets int64, ngo int) {
@@ -186,5 +183,5 @@ func (b *Rubis) LatencyString(ngo int) (string, string) {
 		b.lhr[0].Combine(b.lhr[i])
 		b.lhw[0].Combine(b.lhw[i])
 	}
-	return fmt.Sprint("Read 25: %v\nRead 50: %v\nRead 75: %v\nRead 99: %v\n", b.lhr[0].GetPercentile(25), b.lhr[0].GetPercentile(50), b.lhr[0].GetPercentile(75), b.lhr[0].GetPercentile(99)), fmt.Sprint("Write 25: %v\nWrite 50: %v\nWrite 75: %v\nWrite 99: %v\n", b.lhw[0].GetPercentile(25), b.lhw[0].GetPercentile(50), b.lhw[0].GetPercentile(75), b.lhw[0].GetPercentile(99))
+	return fmt.Sprintf("Read 25: %v\nRead 50: %v\nRead 75: %v\nRead 99: %v\n", b.lhr[0].GetPercentile(25), b.lhr[0].GetPercentile(50), b.lhr[0].GetPercentile(75), b.lhr[0].GetPercentile(99)), fmt.Sprintf("Write 25: %v\nWrite 50: %v\nWrite 75: %v\nWrite 99: %v\n", b.lhw[0].GetPercentile(25), b.lhw[0].GetPercentile(50), b.lhw[0].GetPercentile(75), b.lhw[0].GetPercentile(99))
 }

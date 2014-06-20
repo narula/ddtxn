@@ -10,9 +10,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
-	"os/exec"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 )
@@ -25,17 +23,11 @@ var doValidate = flag.Bool("validate", false, "Validate")
 
 var contention = flag.Int("contention", 30, "Amount of contention, higher is more")
 var nbidders = flag.Int("nb", 1000000, "Bidders in store, default is 1M")
+var readrate = flag.Int("rr", 0, "Read rate %.  Rest are bids")
+var notcontended_readrate = flag.Float64("ncrr", .8, "Uncontended read rate %.  Default to .8")
 
 var latency = flag.Bool("latency", false, "Measure latency")
-var readrate = flag.Int("rr", 0, "Read rate %.  Rest are bids")
-var skewed = flag.Bool("skewed", false, "Skewed workload")
 var dataFile = flag.String("out", "rubis-data.out", "Filename for output")
-
-var nitr int64
-var nviews int64
-var nbids int64
-var naborts int64
-var ncopies int64
 
 func main() {
 	flag.Parse()
@@ -57,18 +49,27 @@ func main() {
 	nproducts := *nbidders / *contention
 	s := ddtxn.NewStore()
 	coord := ddtxn.NewCoordinator(*nworkers, s)
-	rubis := apps.InitRubis(s, nproducts, *nbidders, *nworkers, *readrate, *clientGoRoutines, coord.Workers[0].E)
+
+	if *ddtxn.CountKeys {
+		for i := 0; i < *nworkers; i++ {
+			w := coord.Workers[i]
+			w.NKeyAccesses = make([]int64, *nbidders)
+		}
+	}
+
+	rubis := &apps.Rubis{}
+	rubis.Init(s, nproducts, *nbidders, *nworkers, *readrate, *clientGoRoutines, *notcontended_readrate, coord.Workers[0].E)
 
 	if *latency {
 		rubis.SetupLatency(100, 1000000, *clientGoRoutines)
 	}
 
-	dlog.Printf("Done initializing buy\n")
+	dlog.Printf("Done initializing rubis\n")
 
 	p := prof.StartProfile()
 	start := time.Now()
-	var wg sync.WaitGroup
 
+	var wg sync.WaitGroup
 	for i := 0; i < *clientGoRoutines; i++ {
 		wg.Add(1)
 		go func(n int) {
@@ -76,6 +77,9 @@ func main() {
 			var local_seed uint32 = uint32(rand.Intn(1000000))
 			wi := n % (*nworkers)
 			w := coord.Workers[wi]
+			// It's ok to reuse t because it gets copied in
+			// w.One(), and if we're actually reading from t later
+			// we pause and don't re-write it until it's done.
 			var t ddtxn.Query
 			for duration.After(time.Now()) {
 				rubis.MakeOne(w.ID, &local_seed, &t)
@@ -111,49 +115,29 @@ func main() {
 	end := time.Since(start)
 	p.Stop()
 	stats := make([]int64, ddtxn.LAST_STAT)
-	for i := 0; i < *nworkers; i++ {
-		for j := 0; j < ddtxn.LAST_STAT; j++ {
-			stats[j] = stats[j] + coord.Workers[i].Nstats[j]
-		}
-	}
-	for i := ddtxn.RUBIS_REGISTER; i < ddtxn.LAST_TXN; i++ {
-		nitr = nitr + stats[i]
-	}
+	nitr, nwait, nwait2 := ddtxn.CollectCounts(coord, stats)
+	_ = nwait
+	_ = nwait2
+
 	if *doValidate {
 		rubis.Validate(s, int(nitr))
 	}
 
-	out := fmt.Sprintf(" sys: %v, nworkers: %v, nbidders: %v, nitems: %v, contention: %v, done: %v, actual time: %v, nviews: %v, nbids: %v, epoch changes: %v, total/sec: %v, throughput: ns/txn: %v, naborts: %v, nwmoved: %v, nrmoved: %v", *ddtxn.SysType, *nworkers, *nbidders, nproducts, *contention, nitr, end, "xx", stats[ddtxn.RUBIS_BID], ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, stats[ddtxn.NABORTS], ddtxn.WMoved, ddtxn.RMoved)
+	out := fmt.Sprintf(" sys: %v, nworkers: %v, nbidders: %v, nitems: %v, contention: %v, done: %v, actual time: %v, epoch changes: %v, total/sec: %v, throughput: ns/txn: %v, naborts: %v, nwmoved: %v, nrmoved: %v", *ddtxn.SysType, *nworkers, *nbidders, nproducts, *contention, nitr, end, ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, stats[ddtxn.NABORTS], ddtxn.WMoved, ddtxn.RMoved)
 	fmt.Printf(out)
 	fmt.Printf("\n")
-
-	st := strings.Split(out, ",")
 	f, err := os.OpenFile(*dataFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
 		panic(err)
 	}
 	defer f.Close()
-	f.WriteString("# ")
-	o2, err := exec.Command("git", "describe", "--always", "HEAD").Output()
-	f.WriteString(string(o2))
-	f.WriteString("# ")
-	f.WriteString(strings.Join(os.Args, " "))
-	f.WriteString("\n")
-	for i := range st {
-		if _, err = f.WriteString(st[i]); err != nil {
-			panic(err)
-		}
-		f.WriteString("\n")
-	}
 
-	for i := 0; i < len(stats); i++ {
-		if stats[i] != 0 {
-			f.WriteString(fmt.Sprintf("txn%v: %v\n", i, stats[i]))
-		}
-	}
+	ddtxn.PrintStats(out, stats, f, coord, s, *nbidders)
+
 	if *latency {
 		x, y := rubis.LatencyString(*clientGoRoutines)
 		f.WriteString(x)
 		f.WriteString(y)
 	}
+	f.WriteString("\n")
 }

@@ -57,7 +57,7 @@ func BuyTxn(t Query, tx *ETransaction) (*Result, error) {
 // commutatitivity)
 func BuyNCTxn(t Query, tx *ETransaction) (*Result, error) {
 	var r *Result = nil
-	tx.Write(t.K1, "x", WRITE)
+	tx.WriteInt32(t.K1, 1, SUM)
 	br, err := tx.Read(t.K2)
 	if err == ESTASH {
 		return nil, ESTASH

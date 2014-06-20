@@ -10,9 +10,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
-	"os/exec"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 )
@@ -30,15 +28,6 @@ var notcontended_readrate = flag.Float64("ncrr", .8, "Uncontended read rate %.  
 
 var latency = flag.Bool("latency", false, "Measure latency")
 var dataFile = flag.String("out", "buy-data.out", "Filename for output")
-
-var nitr int64
-var nreads int64
-var nbuys int64
-var naborts int64
-var nwait time.Duration
-var nwait2 time.Duration
-var nstashed int64
-var nsamples int64
 
 func main() {
 	flag.Parse()
@@ -67,7 +56,8 @@ func main() {
 		}
 	}
 
-	buy_app := apps.InitBuy(s, nproducts, *nbidders, *nworkers, *readrate, *notcontended_readrate, *clientGoRoutines)
+	buy_app := &apps.Buy{}
+	buy_app.Init(s, nproducts, *nbidders, *nworkers, *readrate, *clientGoRoutines, *notcontended_readrate, coord.Workers[0].E)
 	if *latency {
 		buy_app.SetupLatency(100, 1000000, *clientGoRoutines)
 	}
@@ -123,98 +113,28 @@ func main() {
 	end := time.Since(start)
 	p.Stop()
 
-	for i := 0; i < *nworkers; i++ {
-		nreads = nreads + coord.Workers[i].Nstats[ddtxn.D_READ_ONE]
-		nbuys = nbuys + coord.Workers[i].Nstats[ddtxn.D_BUY]
-		naborts = naborts + coord.Workers[i].Nstats[ddtxn.NABORTS]
-		nwait = nwait + coord.Workers[i].Nwait
-		nwait2 = nwait2 + coord.Workers[i].Nwait2
-		nsamples = nsamples + coord.Workers[i].Nstats[ddtxn.NSAMPLES]
-		nstashed = nstashed + coord.Workers[i].Nstats[ddtxn.NSTASHED]
-	}
-	nitr = nreads + nbuys
+	stats := make([]int64, ddtxn.LAST_STAT)
+	nitr, nwait, nwait2 := ddtxn.CollectCounts(coord, stats)
+
 	if *doValidate {
 		buy_app.Validate(s, int(nitr))
 	}
 
-	out := fmt.Sprintf(" sys: %v, nworkers: %v, rr: %v, ncrr: %v, nbids: %v, nproducts: %v, contention: %v, done: %v, actual time: %v, nreads: %v, nbuys: %v, epoch changes: %v, total/sec: %v, throughput ns/txn: %v, naborts: %v, nwmoved: %v, nrmoved: %v, ietime: %v, ietime1: %v, etime: %v, etime2: %v, nstashed: %v, rlock: %v, wrratio: %v, nsamples: %v ", *ddtxn.SysType, *nworkers, *readrate, *notcontended_readrate*float64(*readrate), *nbidders, nproducts, *contention, nitr, end, nreads, nbuys, ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, naborts, ddtxn.WMoved, ddtxn.RMoved, ddtxn.Time_in_IE.Seconds(), ddtxn.Time_in_IE1.Seconds(), nwait.Seconds()/float64(*nworkers), nwait2.Seconds()/float64(*nworkers), nstashed, *ddtxn.UseRLocks, *ddtxn.WRRatio, nsamples)
+	out := fmt.Sprintf(" sys: %v, nworkers: %v, rr: %v, ncrr: %v, nbids: %v, nproducts: %v, contention: %v, done: %v, actual time: %v, nreads: %v, nbuys: %v, epoch changes: %v, total/sec: %v, throughput ns/txn: %v, naborts: %v, nwmoved: %v, nrmoved: %v, ietime: %v, ietime1: %v, etime: %v, etime2: %v, nstashed: %v, rlock: %v, wrratio: %v, nsamples: %v ", *ddtxn.SysType, *nworkers, *readrate, *notcontended_readrate*float64(*readrate), *nbidders, nproducts, *contention, nitr, end, stats[ddtxn.D_READ_ONE], stats[ddtxn.D_BUY], ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, stats[ddtxn.NABORTS], ddtxn.WMoved, ddtxn.RMoved, ddtxn.Time_in_IE.Seconds(), ddtxn.Time_in_IE1.Seconds(), nwait.Seconds()/float64(*nworkers), nwait2.Seconds()/float64(*nworkers), stats[ddtxn.NSTASHED], *ddtxn.UseRLocks, *ddtxn.WRRatio, stats[ddtxn.NSAMPLES])
 	fmt.Printf(out)
-
-	if *ddtxn.Conflicts {
-		ddtxn.PrintLockCounts(s)
-	}
 	fmt.Printf("\n")
-
-	st := strings.Split(out, ",")
 	f, err := os.OpenFile(*dataFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
 		panic(err)
 	}
 	defer f.Close()
-	f.WriteString("# ")
-	o2, err := exec.Command("git", "describe", "--always", "HEAD").Output()
-	f.WriteString(string(o2))
-	f.WriteString("# ")
-	f.WriteString(strings.Join(os.Args, " "))
-	f.WriteString("\n")
-	for i := range st {
-		if _, err = f.WriteString(st[i]); err != nil {
-			panic(err)
-		}
-		f.WriteString("\n")
-	}
 
-	f.WriteString(fmt.Sprintf("txn%v: %v\n", ddtxn.D_BUY, nbuys))
-	f.WriteString(fmt.Sprintf("txn%v: %v\n", ddtxn.D_READ_ONE, nreads))
+	ddtxn.PrintStats(out, stats, f, coord, s, *nbidders)
 
 	if *latency {
 		x, y := buy_app.LatencyString(*clientGoRoutines)
 		f.WriteString(x)
 		f.WriteString(y)
-	}
-
-	mean, stddev := ddtxn.StddevChunks(s.NChunksAccessed)
-	f.WriteString(fmt.Sprintf("mean: %v\nstddev: %v\n", mean, stddev))
-	for i := 0; i < len(s.NChunksAccessed); i++ {
-		x := float64(mean) - float64(s.NChunksAccessed[i])
-		if x < 0 {
-			x = x * -1
-		}
-		if x > stddev {
-			f.WriteString(fmt.Sprintf("Chunk %v: %v\n", i, s.NChunksAccessed[i]))
-		}
-	}
-
-	if *ddtxn.CountKeys {
-		bk := make([]int64, *nbidders)
-		ok := make([]int64, 4)
-		for j := 0; j < *nworkers; j++ {
-			w := coord.Workers[j]
-			for i := 0; i < *nbidders; i++ {
-				bk[i] = bk[i] + w.NKeyAccesses[i]
-			}
-		}
-		mean, stddev = ddtxn.StddevKeys(bk)
-		f.WriteString(fmt.Sprintf("b-kmean: %v\nb-kstddev: %v\n", mean, stddev))
-		for i := 0; i < *nbidders; i++ {
-			x := float64(mean) - float64(bk[i])
-			if x < 0 {
-				x = x * -1
-			}
-			if x < stddev {
-				ok[0]++
-			} else if x < 2*stddev {
-				ok[1]++
-			} else if x < 3*stddev {
-				ok[2]++
-			} else {
-				ok[3]++
-			}
-			if x > 2*stddev && bk[i] != 0 {
-				f.WriteString(fmt.Sprintf("BKey %v: %v\n", i, bk[i]))
-			}
-		}
-		f.WriteString(fmt.Sprintf("b-stddev counts: %v\n", ok))
 	}
 	f.WriteString("\n")
 }

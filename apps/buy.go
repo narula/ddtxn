@@ -21,18 +21,16 @@ type Buy struct {
 	lhw             []*stats.LatencyHist
 }
 
-func InitBuy(s *ddtxn.Store, np, nb, nw, rr int, ncrr float64, ngo int) *Buy {
-	b := &Buy{
-		nproducts:       np,
-		nbidders:        nb,
-		nworkers:        nw,
-		read_rate:       rr,
-		ncontended_rate: int(ncrr * float64(rr)),
-		validate:        make([]int32, np),
-		lhr:             make([]*stats.LatencyHist, ngo),
-		lhw:             make([]*stats.LatencyHist, ngo),
-		sp:              uint32(nb / nw),
-	}
+func (b *Buy) Init(s *ddtxn.Store, np, nb, nw, rr, ngo int, ncrr float64, ex *ddtxn.ETransaction) {
+	b.nproducts = np
+	b.nbidders = nb
+	b.nworkers = nw
+	b.read_rate = rr
+	b.ncontended_rate = int(ncrr * float64(rr))
+	b.validate = make([]int32, np)
+	b.lhr = make([]*stats.LatencyHist, ngo)
+	b.lhw = make([]*stats.LatencyHist, ngo)
+	b.sp = uint32(nb / nw)
 
 	for i := 0; i < np; i++ {
 		k := ddtxn.ProductKey(i)
@@ -47,7 +45,6 @@ func InitBuy(s *ddtxn.Store, np, nb, nw, rr int, ncrr float64, ngo int) *Buy {
 		k := ddtxn.UserKey(i)
 		s.CreateKey(k, "x", ddtxn.WRITE)
 	}
-	return b
 }
 
 func (b *Buy) SetupLatency(nincr int64, nbuckets int64, ngo int) {
@@ -135,5 +132,5 @@ func (b *Buy) LatencyString(ngo int) (string, string) {
 		b.lhr[0].Combine(b.lhr[i])
 		b.lhw[0].Combine(b.lhw[i])
 	}
-	return fmt.Sprint("Read 25: %v\nRead 50: %v\nRead 75: %v\nRead 99: %v\n", b.lhr[0].GetPercentile(25), b.lhr[0].GetPercentile(50), b.lhr[0].GetPercentile(75), b.lhr[0].GetPercentile(99)), fmt.Sprint("Write 25: %v\nWrite 50: %v\nWrite 75: %v\nWrite 99: %v\n", b.lhw[0].GetPercentile(25), b.lhw[0].GetPercentile(50), b.lhw[0].GetPercentile(75), b.lhw[0].GetPercentile(99))
+	return fmt.Sprintf("Read 25: %v\nRead 50: %v\nRead 75: %v\nRead 99: %v\n", b.lhr[0].GetPercentile(25), b.lhr[0].GetPercentile(50), b.lhr[0].GetPercentile(75), b.lhr[0].GetPercentile(99)), fmt.Sprintf("Write 25: %v\nWrite 50: %v\nWrite 75: %v\nWrite 99: %v\n", b.lhw[0].GetPercentile(25), b.lhw[0].GetPercentile(50), b.lhw[0].GetPercentile(75), b.lhw[0].GetPercentile(99))
 }
