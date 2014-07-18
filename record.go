@@ -21,6 +21,7 @@ const (
 )
 
 type BRecord struct {
+	padding   [128]byte
 	key       Key
 	key_type  KeyType
 	dd        bool
