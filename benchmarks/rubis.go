@@ -26,7 +26,6 @@ var nbidders = flag.Int("nb", 1000000, "Bidders in store, default is 1M")
 var readrate = flag.Int("rr", 0, "Read rate %.  Rest are bids")
 var notcontended_readrate = flag.Float64("ncrr", .8, "Uncontended read rate %.  Default to .8")
 
-var latency = flag.Bool("latency", false, "Measure latency")
 var dataFile = flag.String("out", "rubis-data.out", "Filename for output")
 
 func main() {
