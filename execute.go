@@ -26,14 +26,15 @@ type Write struct {
 
 // Not threadsafe.  Tracks execution of transaction.
 type ETransaction struct {
-	read    []*BRecord
-	lasts   []uint64
-	w       *Worker
-	s       *Store
-	ls      *LocalStore
-	writes  []Write
-	t       int64 // Used just as a rough count
-	padding [128]byte
+	read       []*BRecord
+	lasts      []uint64
+	w          *Worker
+	s          *Store
+	ls         *LocalStore
+	writes     []Write
+	t          int64 // Used just as a rough count
+	any_marked bool
+	padding    [128]byte
 }
 
 func StartTransaction(w *Worker) *ETransaction {
@@ -62,7 +63,7 @@ func (tx *ETransaction) Reset() {
 func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	if *SysType == DOPPEL {
 		if tx.ls.phase == SPLIT {
-			if tx.s.IsDD(k) {
+			if tx.any_marked && tx.s.IsDD(k) {
 				if tx.ls.count {
 					tx.ls.candidates.Stash(k)
 				}
@@ -72,7 +73,7 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	}
 	// TODO: If I wrote the key, return that value instead
 	br, err := tx.s.getKey(k)
-	tx.w.Nstats[NGETKEYCALLS]++
+	//tx.w.Nstats[NGETKEYCALLS]++
 	if *CountKeys {
 		p, r := UndoCKey(k)
 		if r == 117 {
