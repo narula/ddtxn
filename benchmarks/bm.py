@@ -15,6 +15,7 @@ parser.add_option("-r", "--rr", action="store", type="int", dest="read_rate", de
 parser.add_option("-l", "--latency", action="store_true", dest="latency", default=False)
 parser.add_option("-x", "--rlock", action="store_false", dest="rlock", default=True)
 parser.add_option("-m", "--scp", action="store_true", dest="scp", default=False)
+parser.add_option("-w", "--wratio", action="store", type="int", dest="wratio", default=3)
 
 (options, args) = parser.parse_args()
 
@@ -55,7 +56,7 @@ def get_cpus(host):
         ncpus=[2, 4]
     return ncpus
 
-def fill_cmd(rr, contention, ncpus, systype, cpus_arg=""):
+def fill_cmd(rr, contention, ncpus, systype, cpus_arg="", wratio=options.wratio):
     nsec = 10
     if options.short:
         nsec = 1
@@ -65,10 +66,34 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg=""):
     cmd = BASE_CMD % (ncpus, cpus_arg, bn, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock)
     return cmd
 
-def do(f, rr, contention, ncpu, list_cpus, sys):
-    cmd = fill_cmd(rr, contention, ncpu, sys, list_cpus)
+def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio):
+    cmd = fill_cmd(rr, contention, ncpu, sys, list_cpus, wratio)
     run_one(f, cmd)
     f.write("\t")
+
+def wratio_exp(fnpath, host, contention, rr):
+    fnn = '%s-wratio-%d-%d-False.data' % (host, contention, rr)
+    filename=os.path.join(fnpath, fnn)
+    f = open(filename, 'w')
+    cpus = get_cpus(host)
+    f.write("#Doppel-2\tDoppel-3\tDoppel-4\tDoppel-5\tOCC\n")
+    cpu_args = ""
+    if host == "ben":
+        cpu_args = ben_list_cpus
+
+    for i in cpus:
+        f.write("%d"% i)
+        f.write("\t")
+        do(f, rr, contention, i, cpu_args, 0, 2)
+        do(f, rr, contention, i, cpu_args, 0, 3)
+        do(f, rr, contention, i, cpu_args, 0, 4)
+        do(f, rr, contention, i, cpu_args, 0, 5)
+        do(f, rr, contention, i, cpu_args, 1)
+        f.write("\n")
+    f.close()
+    if options.scp:
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 # x-axis is # cores
 def contention_exp(fnpath, host, contention, rr):
@@ -209,10 +234,8 @@ if __name__ == "__main__":
         products_exp(fnpath, host, options.read_rate, options.default_ncores)
     elif options.exp == "rubis":
         if options.read_rate == -1:
-            rubis_exp(fnpath, host, 100000, 50)
-            rubis_exp(fnpath, host, 100000, 10)
+            rubis_exp(fnpath, host, 30, 90)
             rubis_exp(fnpath, host, 1000000, 50)
-            rubis_exp(fnpath, host, 1000000, 10)
         else:
             rubis_exp(fnpath, host, options.default_contention, options.read_rate)
     elif options.exp == "all":
@@ -228,3 +251,5 @@ if __name__ == "__main__":
         contention_exp(fnpath, host, options.default_contention, 90)
         contention_exp(fnpath, host, options.default_contention, 10)
         contention_exp(fnpath, host, options.default_contention, 50)
+    elif options.exp == "wratio":
+        wratio_exp(fnpath, host, options.default_contention, options.read_rate)
