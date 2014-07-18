@@ -23,7 +23,7 @@ ben_list_cpus = "socket@0,1,2,7,3-6"
 
 LATENCY_PART = " -latency=%s" % options.latency
 
-BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -ngo %d -nprocs %d -nsec %d -contention %d -rr %d -allocate=%s -sys=%d -rlock=%s -wr=4" + LATENCY_PART
+BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -ngo %d -nprocs %d -nsec %d -contention %d -rr %d -allocate=%s -sys=%d -rlock=%s -wr=%s" + LATENCY_PART
 
 def run_one(fn, cmd):
     if options.dprint:
@@ -63,7 +63,7 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg="", wratio=options.wratio)
     bn = "buy"
     if options.exp == "rubis":
         bn = "rubis"
-    cmd = BASE_CMD % (ncpus, cpus_arg, bn, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock)
+    cmd = BASE_CMD % (ncpus, cpus_arg, bn, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio)
     return cmd
 
 def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio):
