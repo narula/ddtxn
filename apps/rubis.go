@@ -12,6 +12,7 @@ import (
 )
 
 type Rubis struct {
+	padding         [128]byte
 	nproducts       int
 	nbidders        int
 	portion_sz      int

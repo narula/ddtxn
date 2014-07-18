@@ -10,6 +10,7 @@ import (
 )
 
 type Buy struct {
+	padding         [128]byte
 	sp              uint32
 	read_rate       int
 	nproducts       int
