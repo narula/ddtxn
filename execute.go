@@ -179,9 +179,11 @@ func (tx *ETransaction) Commit() TID {
 	//  if global get from global store and lock
 	for i, _ := range tx.writes {
 		w := &tx.writes[i]
-		if *SysType == DOPPEL && tx.ls.phase == SPLIT && tx.s.IsDD(w.key) {
-			w.dd = true
-			continue
+		if *SysType == DOPPEL && tx.ls.phase == SPLIT {
+			if tx.any_marked && tx.s.IsDD(w.key) {
+				w.dd = true
+				continue
+			}
 		}
 		if w.br == nil {
 			br, err := tx.s.getKey(w.key)
