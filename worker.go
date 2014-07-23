@@ -135,13 +135,11 @@ func (w *Worker) doTxn(t Query) (*Result, error) {
 func (w *Worker) transition(e TID) {
 	w.epoch = e
 	if *SysType == DOPPEL {
+		start := time.Now()
 		w.local_store.phase = MERGE
 		w.local_store.Merge()
-		start := time.Now()
 		w.coordinator.wepoch[w.ID] <- true
 		<-w.coordinator.wsafe[w.ID]
-		end := time.Since(start)
-		w.Nwait += end
 		if len(w.store.dd) > 0 {
 			w.E.any_marked = true
 		} else {
@@ -162,11 +160,10 @@ func (w *Worker) transition(e TID) {
 		}
 		w.waiters.clear()
 		w.local_store.phase = SPLIT
-		start = time.Now()
 		w.coordinator.wdone[w.ID] <- true
 		<-w.coordinator.wgo[w.ID]
-		end = time.Since(start)
-		w.Nwait2 += end
+		end := time.Since(start)
+		w.Nwait += end
 	}
 }
 

@@ -91,10 +91,10 @@ func (c *Coordinator) IncrementEpoch() {
 		<-c.wdone[i]
 	}
 
-	start2 := time.Now()
 	// Reads done!  Check stats
 	s := c.Workers[0].store
 	if c.epochTID%(10*EPOCH_INCR) == 0 {
+		start2 := time.Now()
 		for i := 0; i < c.n; i++ {
 			w := c.Workers[i]
 			s.cand.Merge(w.local_store.candidates)
@@ -147,15 +147,14 @@ func (c *Coordinator) IncrementEpoch() {
 		x := make([]*OneStat, 0)
 		sh := StatsHeap(x)
 		s.cand = &Candidates{make(map[Key]*OneStat), &sh}
+		end := time.Since(start2)
+		Time_in_IE1 += end
 	}
-	end := time.Since(start2)
-	Time_in_IE1 += end
-
 	for i := 0; i < c.n; i++ {
 		c.wgo[i] <- true
 		//dlog.Printf("Sent go to %v for %v\n", i, c.epochTID)
 	}
-	end = time.Since(start)
+	end := time.Since(start)
 	Time_in_IE += end
 }
 
