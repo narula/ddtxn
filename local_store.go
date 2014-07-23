@@ -17,6 +17,7 @@ const (
 )
 
 type LocalStore struct {
+	padding0   [128]byte
 	sums       map[Key]int32
 	max        map[Key]int32
 	bw         map[Key]Value
@@ -26,6 +27,7 @@ type LocalStore struct {
 	Ncopy      int64
 	candidates *Candidates
 	count      bool
+	padding    [128]byte
 }
 
 func NewLocalStore(s *Store) *LocalStore {

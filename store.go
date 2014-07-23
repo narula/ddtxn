@@ -33,11 +33,12 @@ const (
 
 // Global data
 type Store struct {
-	padding         [128]byte
+	padding1        [128]byte
 	store           []*Chunk
 	NChunksAccessed []int64
 	dd              map[Key]bool
 	cand            *Candidates
+	padding2        [128]byte
 }
 
 func NewStore() *Store {

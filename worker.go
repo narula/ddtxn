@@ -51,6 +51,7 @@ const (
 
 type Worker struct {
 	sync.RWMutex
+	padding     [128]byte
 	ID          int
 	store       *Store
 	coordinator *Coordinator

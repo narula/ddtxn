@@ -26,6 +26,7 @@ type Write struct {
 
 // Not threadsafe.  Tracks execution of transaction.
 type ETransaction struct {
+	padding0   [128]byte
 	read       []*BRecord
 	lasts      []uint64
 	w          *Worker
