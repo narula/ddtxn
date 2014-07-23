@@ -23,7 +23,7 @@ ben_list_cpus = "socket@0,1,2,7,3-6"
 
 LATENCY_PART = " -latency=%s" % options.latency
 
-BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -ngo %d -nprocs %d -nsec %d -contention %d -rr %d -allocate=%s -sys=%d -rlock=%s -wr=%s" + LATENCY_PART
+BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -nprocs %d -ngo %d -nw %d -nsec %d -contention %d -rr %d -allocate=%s -sys=%d -rlock=%s -wr=%s" + LATENCY_PART
 
 def run_one(fn, cmd):
     if options.dprint:
@@ -63,7 +63,7 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg="", wratio=options.wratio)
     bn = "buy"
     if options.exp == "rubis":
         bn = "rubis"
-    cmd = BASE_CMD % (ncpus, cpus_arg, bn, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio)
+    cmd = BASE_CMD % (ncpus, cpus_arg, bn, ncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio)
     return cmd
 
 def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio):
@@ -231,6 +231,12 @@ if __name__ == "__main__":
     elif options.exp == "rw":
         rw_exp(fnpath, host, options.default_contention, options.default_ncores)
     elif options.exp == "products":
+        if host == "ben":
+            options.default_ncores = 40
+        elif host == "mat":
+            options.default_ncores = 24
+        elif host == "tom":
+            options.default_ncores = 48
         products_exp(fnpath, host, options.read_rate, options.default_ncores)
     elif options.exp == "rubis":
         if options.read_rate == -1:

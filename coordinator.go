@@ -110,6 +110,7 @@ func (c *Coordinator) IncrementEpoch() {
 				WMoved += 1
 				dlog.Printf("Moved %v %v to split %v\n", x, y, o.ratio())
 				s.dd[o.k] = true
+				s.any_dd = true
 			} else {
 				dlog.Printf("No need to Move %v %v to split; already dd\n", x, y)
 			}
@@ -135,6 +136,9 @@ func (c *Coordinator) IncrementEpoch() {
 				s.dd[k] = false
 				//s.dd[i], s.dd = s.dd[len(s.dd)-1], s.dd[:len(s.dd)-1]
 			}
+		}
+		if len(s.dd) == 0 {
+			s.any_dd = false
 		}
 		for i := 0; i < c.n; i++ {
 			// Reset local stores

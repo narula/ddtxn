@@ -26,16 +26,14 @@ type Write struct {
 
 // Not threadsafe.  Tracks execution of transaction.
 type ETransaction struct {
-	padding0   [128]byte
-	read       []*BRecord
-	lasts      []uint64
-	w          *Worker
-	s          *Store
-	ls         *LocalStore
-	writes     []Write
-	t          int64 // Used just as a rough count
-	any_marked bool
-	padding    [128]byte
+	read    []*BRecord
+	lasts   []uint64
+	w       *Worker
+	s       *Store
+	ls      *LocalStore
+	writes  []Write
+	t       int64 // Used just as a rough count
+	padding [128]byte
 }
 
 func StartTransaction(w *Worker) *ETransaction {
@@ -64,7 +62,7 @@ func (tx *ETransaction) Reset() {
 func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	if *SysType == DOPPEL {
 		if tx.ls.phase == SPLIT {
-			if tx.any_marked && tx.s.IsDD(k) {
+			if tx.s.IsDD(k) {
 				if tx.ls.count {
 					tx.ls.candidates.Stash(k)
 				}
@@ -181,7 +179,7 @@ func (tx *ETransaction) Commit() TID {
 	for i, _ := range tx.writes {
 		w := &tx.writes[i]
 		if *SysType == DOPPEL && tx.ls.phase == SPLIT {
-			if tx.any_marked && tx.s.IsDD(w.key) {
+			if tx.s.IsDD(w.key) {
 				w.dd = true
 				continue
 			}

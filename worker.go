@@ -141,11 +141,6 @@ func (w *Worker) transition(e TID) {
 		w.local_store.Merge()
 		w.coordinator.wepoch[w.ID] <- true
 		<-w.coordinator.wsafe[w.ID]
-		if len(w.store.dd) > 0 {
-			w.E.any_marked = true
-		} else {
-			w.E.any_marked = false
-		}
 		w.local_store.phase = JOIN
 		for i := 0; i < len(w.waiters.t); i++ {
 			r, err := w.doTxn(w.waiters.t[i])

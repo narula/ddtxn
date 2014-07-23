@@ -2,7 +2,6 @@ package ddtxn
 
 import (
 	"container/heap"
-	"ddtxn/dlog"
 	"flag"
 )
 
@@ -55,8 +54,6 @@ func (c *Candidates) Merge(c2 *Candidates) {
 		o.reads += o2.reads
 		o.writes += o2.writes
 		o.conflicts += o2.conflicts
-		x, y := UndoCKey(o2.k)
-		dlog.Printf("key %v %v Added %v reads and %v writes and %v conflicts ratio %v\n", x, y, o2.reads, o2.writes, o2.conflicts, o.ratio())
 		if o.ratio() > *WRRatio {
 			c.h.update(o)
 		}

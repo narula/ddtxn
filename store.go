@@ -37,6 +37,7 @@ type Store struct {
 	store           []*Chunk
 	NChunksAccessed []int64
 	dd              map[Key]bool
+	any_dd          bool
 	cand            *Candidates
 	padding2        [128]byte
 }
@@ -173,6 +174,9 @@ func (s *Store) getKeyStatic(k Key) (*BRecord, error) {
 }
 
 func (s *Store) IsDD(k Key) bool {
+	if !s.any_dd {
+		return false
+	}
 	x, ok := s.dd[k]
 	return x && ok
 }
