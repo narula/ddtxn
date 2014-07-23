@@ -133,15 +133,23 @@ func (w *Worker) doTxn(t Query) (*Result, error) {
 	return x, err
 }
 
-func (w *Worker) transition(e TID) {
-	w.epoch = e
+func (w *Worker) transition() {
 	if *SysType == DOPPEL {
+		w.Lock()
+		defer w.Unlock()
+		e := w.coordinator.GetEpoch()
+		if e == w.epoch {
+			return
+		}
 		start := time.Now()
 		w.local_store.phase = MERGE
 		w.local_store.Merge()
+		dlog.Printf("[%v] Sending ack for epoch change %v\n", w.ID, e)
 		w.coordinator.wepoch[w.ID] <- true
+		dlog.Printf("[%v] Waiting for safe for epoch change %v\n", w.ID, e)
 		<-w.coordinator.wsafe[w.ID]
 		w.local_store.phase = JOIN
+		dlog.Printf("[%v] Entering join phase %v\n", w.ID, e)
 		for i := 0; i < len(w.waiters.t); i++ {
 			r, err := w.doTxn(w.waiters.t[i])
 			if err == ESTASH {
@@ -156,10 +164,14 @@ func (w *Worker) transition(e TID) {
 		}
 		w.waiters.clear()
 		w.local_store.phase = SPLIT
+		dlog.Printf("[%v] Sending done %v\n", w.ID, e)
 		w.coordinator.wdone[w.ID] <- true
+		dlog.Printf("[%v] Awaiting go %v\n", w.ID, e)
 		<-w.coordinator.wgo[w.ID]
+		dlog.Printf("[%v] Done transitioning %v\n", w.ID, e)
 		end := time.Since(start)
 		w.Nwait += end
+		w.epoch = e
 	}
 }
 
@@ -205,12 +217,7 @@ func (w *Worker) run() {
 			if *SysType == DOPPEL {
 				e := w.coordinator.GetEpoch()
 				if e > w.epoch {
-					w.Lock()
-					e := w.coordinator.GetEpoch()
-					if e > w.epoch {
-						w.transition(e)
-					}
-					w.Unlock()
+					w.transition()
 				}
 			}
 		}
@@ -222,7 +229,9 @@ func (w *Worker) One(t Query) (*Result, error) {
 	if *SysType == DOPPEL {
 		e := w.coordinator.GetEpoch()
 		if w.epoch != e {
-			w.transition(e)
+			w.RUnlock()
+			w.transition()
+			w.RLock()
 		}
 	}
 	r, err := w.doTxn(t)

@@ -164,9 +164,9 @@ func (c *Coordinator) IncrementEpoch() {
 
 func (c *Coordinator) Finish() {
 	dlog.Printf("Coordinator finishing\n")
-	x := make(chan bool)
-	c.Done <- x
-	<-x
+	if *SysType == DOPPEL {
+		c.IncrementEpoch()
+	}
 }
 
 func (c *Coordinator) Process() {

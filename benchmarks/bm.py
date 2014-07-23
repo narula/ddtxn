@@ -15,7 +15,8 @@ parser.add_option("-r", "--rr", action="store", type="int", dest="read_rate", de
 parser.add_option("-l", "--latency", action="store_true", dest="latency", default=False)
 parser.add_option("-x", "--rlock", action="store_false", dest="rlock", default=True)
 parser.add_option("-m", "--scp", action="store_true", dest="scp", default=True)
-parser.add_option("-w", "--wratio", action="store", type="int", dest="wratio", default=3)
+parser.add_option("-w", "--wratio", action="store", type="int", dest="wratio", default=4)
+parser.add_option("-z", "--sr", action="store", type="int", dest="sr", default=10000)
 
 (options, args) = parser.parse_args()
 
@@ -23,7 +24,7 @@ ben_list_cpus = "socket@0,1,2,7,3-6"
 
 LATENCY_PART = " -latency=%s" % options.latency
 
-BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -nprocs %d -ngo %d -nw %d -nsec %d -contention %d -rr %d -allocate=%s -sys=%d -rlock=%s -wr=%s" + LATENCY_PART
+BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -nprocs %d -ngo %d -nw %d -nsec %d -contention %d -rr %d -allocate=%s -sys=%d -rlock=%s -wr=%s -sr=%d" + LATENCY_PART
 
 def run_one(fn, cmd):
     if options.dprint:
@@ -63,7 +64,10 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg="", wratio=options.wratio)
     bn = "buy"
     if options.exp == "rubis":
         bn = "rubis"
-    cmd = BASE_CMD % (ncpus, cpus_arg, bn, ncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio)
+    xncpus = ncpus
+    if xncpus < 80:
+        xncpus += 1
+    cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, options.sr)
     return cmd
 
 def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio):

@@ -31,6 +31,7 @@ type BRecord struct {
 	entries   []Entry
 	last      wfmutex.WFMutex
 	conflict  int32 // how many times was the lock already held when someone wanted it
+	padding1  [128]byte
 }
 
 func MakeBR(k Key, val Value, kt KeyType) *BRecord {
