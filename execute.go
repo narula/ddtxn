@@ -6,7 +6,7 @@ import (
 	"runtime/debug"
 )
 
-var SampleRate = flag.Int64("sr", 1000, "Sample every sr nanoseconds\n")
+var SampleRate = flag.Int64("sr", 10000, "Sample every sr nanoseconds\n")
 
 // TODO: 2PL
 
@@ -26,14 +26,15 @@ type Write struct {
 
 // Not threadsafe.  Tracks execution of transaction.
 type ETransaction struct {
-	read    []*BRecord
-	lasts   []uint64
-	w       *Worker
-	s       *Store
-	ls      *LocalStore
-	writes  []Write
-	t       int64 // Used just as a rough count
-	padding [128]byte
+	padding0 [128]byte
+	read     []*BRecord
+	lasts    []uint64
+	w        *Worker
+	s        *Store
+	ls       *LocalStore
+	writes   []Write
+	t        int64 // Used just as a rough count
+	padding  [128]byte
 }
 
 func StartTransaction(w *Worker) *ETransaction {
@@ -52,7 +53,7 @@ func (tx *ETransaction) Reset() {
 	tx.lasts = tx.lasts[:0]
 	tx.read = tx.read[:0]
 	tx.writes = tx.writes[:0]
-	tx.ls.count = (*SysType == DOPPEL && tx.t%*SampleRate == 0)
+	tx.ls.count = (*SysType == DOPPEL && tx.t%(*SampleRate) == 0)
 	if tx.ls.count {
 		tx.w.Nstats[NSAMPLES]++
 	}
