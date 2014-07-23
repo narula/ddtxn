@@ -21,6 +21,7 @@ type Buy struct {
 	validate        []int32
 	lhr             []*stats.LatencyHist
 	lhw             []*stats.LatencyHist
+	padding1        [128]byte
 }
 
 func (b *Buy) Init(np, nb, nw, rr, ngo int, ncrr float64) {
@@ -46,13 +47,16 @@ func (b *Buy) Populate(s *ddtxn.Store, ex *ddtxn.ETransaction) {
 		k := ddtxn.ProductKey(i)
 		s.CreateKey(k, int32(0), ddtxn.SUM)
 	}
+	dlog.Printf("Created products")
 	for i := 0; i < b.nbidders; i++ {
 		k := ddtxn.UserKey(i)
 		s.CreateKey(k, "x", ddtxn.WRITE)
 	}
+	dlog.Printf("Created bidders")
 	if *Latency {
 		b.SetupLatency(100, 1000000, b.ngo)
 	}
+	dlog.Printf("Done with Populate")
 }
 
 func (b *Buy) SetupLatency(nincr int64, nbuckets int64, ngo int) {
