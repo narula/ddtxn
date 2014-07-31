@@ -61,9 +61,11 @@ func (tx *ETransaction) Reset() {
 }
 
 func (tx *ETransaction) Read(k Key) (*BRecord, error) {
-	if *SysType == DOPPEL {
+	// TODO: If I wrote the key, return that value instead
+	br, err := tx.s.getKey(k)
+	if br != nil && *SysType == DOPPEL {
 		if tx.ls.phase == SPLIT {
-			if tx.s.IsDD(k) {
+			if br.dd {
 				if tx.ls.count {
 					tx.ls.candidates.Stash(k)
 				}
@@ -71,8 +73,6 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 			}
 		}
 	}
-	// TODO: If I wrote the key, return that value instead
-	br, err := tx.s.getKey(k)
 	//tx.w.Nstats[NGETKEYCALLS]++
 	if *CountKeys {
 		p, r := UndoCKey(k)
