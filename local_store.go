@@ -26,7 +26,6 @@ type LocalStore struct {
 	phase      uint32
 	Ncopy      int64
 	candidates *Candidates
-	count      bool
 	padding    [128]byte
 }
 

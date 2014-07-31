@@ -34,6 +34,8 @@ type ETransaction struct {
 	ls       *LocalStore
 	writes   []Write
 	t        int64 // Used just as a rough count
+	count    bool
+	sr_rate  int64
 	padding  [128]byte
 }
 
@@ -53,9 +55,12 @@ func (tx *ETransaction) Reset() {
 	tx.lasts = tx.lasts[:0]
 	tx.read = tx.read[:0]
 	tx.writes = tx.writes[:0]
-	tx.ls.count = (*SysType == DOPPEL && tx.t%(*SampleRate) == 0)
-	if tx.ls.count {
+	tx.count = (*SysType == DOPPEL && tx.sr_rate == 0)
+	if tx.count {
 		tx.w.Nstats[NSAMPLES]++
+		tx.sr_rate = *SampleRate
+	} else {
+		tx.sr_rate--
 	}
 	tx.t++
 }
@@ -66,7 +71,7 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	if br != nil && *SysType == DOPPEL {
 		if tx.ls.phase == SPLIT {
 			if br.dd {
-				if tx.ls.count {
+				if tx.count {
 					tx.ls.candidates.Stash(k)
 				}
 				return nil, ESTASH
@@ -87,7 +92,7 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	// if locked and not by me, abort
 	// else note the last timestamp, save it, return value
 	if !ok {
-		if tx.ls.count {
+		if tx.count {
 			tx.ls.candidates.Conflict(k)
 		}
 		tx.Abort()
@@ -213,7 +218,7 @@ func (tx *ETransaction) Commit() TID {
 			w.br = br
 		}
 		if !w.br.Lock() {
-			if tx.ls.count {
+			if tx.count {
 				tx.ls.candidates.Conflict(w.key)
 			}
 			return tx.Abort()
@@ -232,7 +237,7 @@ func (tx *ETransaction) Commit() TID {
 	}
 	for i, _ := range tx.read {
 		// Would have checked for dd earlier
-		if tx.ls.count {
+		if tx.count {
 			tx.ls.candidates.Read(tx.read[i].key)
 		}
 		rd := false
@@ -248,7 +253,7 @@ func (tx *ETransaction) Commit() TID {
 			if rd {
 				continue
 			}
-			if tx.ls.count {
+			if tx.count {
 				tx.ls.candidates.Conflict(tx.read[i].key)
 			}
 			return tx.Abort()
@@ -260,7 +265,7 @@ func (tx *ETransaction) Commit() TID {
 	for i, _ := range tx.writes {
 		w := &tx.writes[i]
 		if tx.ls.phase == SPLIT && w.dd {
-			if tx.ls.count {
+			if tx.count {
 				tx.ls.candidates.Write(w.key)
 			}
 			//tx.w.Nstats[NDDWRITES]++
