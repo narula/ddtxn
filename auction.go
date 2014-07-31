@@ -198,7 +198,6 @@ func StoreBidTxn(t Query, tx *ETransaction) (*Result, error) {
 }
 
 func StoreCommentTxn(t Query, tx *ETransaction) (*Result, error) {
-	var r *Result = nil
 	touser := t.U1
 	fromuser := t.U2
 	item := t.U3
@@ -223,11 +222,94 @@ func StoreCommentTxn(t Query, tx *ETransaction) (*Result, error) {
 
 	if tx.Commit() == 0 {
 		dlog.Printf("Comment abort %v\n", t)
-		return r, EABORT
+		return nil, EABORT
 	}
+	var r *Result = nil
 	if *Allocate {
 		r = &Result{uint64(n)}
 		dlog.Printf("%v Comment %v %v\n", touser, fromuser, item)
+	}
+	return r, nil
+}
+
+func StoreBuyNowTxn(t Query, tx *ETransaction) (*Result, error) {
+	now := 1
+	user := t.U1
+	item := t.U2
+	qty := t.U3
+	bnrec := &BuyNow{
+		BuyerID: user,
+		ItemID:  item,
+		Qty:     qty,
+		Date:    now,
+	}
+	uk := UserKey(int(t.U1))
+	_, err := tx.Read(uk)
+	if err != nil {
+		if err == ESTASH {
+			dlog.Printf("User  %v stashed\n", t.U1)
+			return nil, ESTASH
+		}
+		dlog.Printf("No user? %v\n", t.U1)
+		return nil, err
+	}
+	ik := ItemKey(item)
+	irec, err := tx.Read(ik)
+	if err != nil {
+		if err == ESTASH {
+			dlog.Printf("Item key  %v stashed\n", item)
+			return nil, ESTASH
+		}
+		dlog.Printf("No item? %v\n", item)
+		return nil, err
+	}
+	itemv := irec.Value().(*Item)
+	maxqty := itemv.Qty
+	newq := maxqty - qty
+
+	if maxqty < qty {
+		dlog.Printf("Req quantity > quantity %v %v\n", qty, maxqty)
+		return nil, nil
+	}
+	bnk := BuyNowKey(uint64(t.T))
+	tx.Write(bnk, bnrec, WRITE)
+
+	if newq == 0 {
+		itemv.Enddate = now
+		itemv.Qty = 0
+	} else {
+		itemv.Qty = newq
+	}
+
+	tx.Write(ik, itemv, WRITE)
+	if tx.Commit() == 0 {
+		return nil, EABORT
+	}
+
+	var r *Result = nil
+	if *Allocate {
+		r = &Result{qty}
+	}
+	return r, nil
+}
+
+func ViewUserInfoTxn(t Query, tx *ETransaction) (*Result, error) {
+	uk := UserKey(int(t.U1))
+	urec, err := tx.Read(uk)
+	if err != nil {
+		if err == ESTASH {
+			dlog.Printf("User  %v stashed\n", t.U1)
+			return nil, ESTASH
+		}
+		dlog.Printf("No user? %v\n", t.U1)
+		return nil, err
+	}
+	if tx.Commit() == 0 {
+		return nil, EABORT
+	}
+	var r *Result = nil
+	if *Allocate {
+		r = &Result{urec.Value()}
 	}
 	return r, nil
 }
@@ -279,7 +361,9 @@ func PutBidTxn(t Query, tx *ETransaction) (*Result, error) {
 		return nil, err
 	}
 	nb := numbrec.int_value
-
+	if tx.Commit() == 0 {
+		return nil, EABORT
+	}
 	var r *Result = nil
 	if *Allocate {
 		r = &Result{
