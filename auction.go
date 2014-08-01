@@ -64,7 +64,7 @@ type Comment struct {
 	Comment string
 }
 
-func RegisterUserTxn(t Query, tx *ETransaction) (*Result, error) {
+func RegisterUserTxn(t Query, tx ETransaction) (*Result, error) {
 	nickname := t.S1
 	region := t.U1
 
@@ -98,7 +98,7 @@ func RegisterUserTxn(t Query, tx *ETransaction) (*Result, error) {
 	return r, nil
 }
 
-func NewItemTxn(t Query, tx *ETransaction) (*Result, error) {
+func NewItemTxn(t Query, tx ETransaction) (*Result, error) {
 	var r *Result = nil
 	now := time.Now().Second()
 	n := t.T
@@ -141,11 +141,12 @@ func NewItemTxn(t Query, tx *ETransaction) (*Result, error) {
 
 	if *Allocate {
 		r = &Result{xx}
+		dlog.Printf("Registered new item %v %v\n", x, n)
 	}
 	return r, nil
 }
 
-func StoreBidTxn(t Query, tx *ETransaction) (*Result, error) {
+func StoreBidTxn(t Query, tx ETransaction) (*Result, error) {
 	var r *Result = nil
 	user := t.U1
 	item := t.U2
@@ -184,9 +185,7 @@ func StoreBidTxn(t Query, tx *ETransaction) (*Result, error) {
 	// add to item's bid list
 	e := Entry{int(bid.Price), bid_key, 0}
 	tx.WriteList(BidsPerItemKey(item), e, LIST)
-
 	if tx.Commit() == 0 {
-		//dlog.Printf("Bid abort %v\n", t)
 		return r, EABORT
 	}
 
@@ -197,7 +196,7 @@ func StoreBidTxn(t Query, tx *ETransaction) (*Result, error) {
 	return r, nil
 }
 
-func StoreCommentTxn(t Query, tx *ETransaction) (*Result, error) {
+func StoreCommentTxn(t Query, tx ETransaction) (*Result, error) {
 	touser := t.U1
 	fromuser := t.U2
 	item := t.U3
@@ -232,7 +231,7 @@ func StoreCommentTxn(t Query, tx *ETransaction) (*Result, error) {
 	return r, nil
 }
 
-func StoreBuyNowTxn(t Query, tx *ETransaction) (*Result, error) {
+func StoreBuyNowTxn(t Query, tx ETransaction) (*Result, error) {
 	now := 1
 	user := t.U1
 	item := t.U2
@@ -293,7 +292,7 @@ func StoreBuyNowTxn(t Query, tx *ETransaction) (*Result, error) {
 	return r, nil
 }
 
-func ViewBidHistoryTxn(t Query, tx *ETransaction) (*Result, error) {
+func ViewBidHistoryTxn(t Query, tx ETransaction) (*Result, error) {
 	item := t.U1
 	ik := ItemKey(item)
 	_, err := tx.Read(ik)
@@ -369,7 +368,7 @@ func ViewBidHistoryTxn(t Query, tx *ETransaction) (*Result, error) {
 	return r, nil
 }
 
-func ViewUserInfoTxn(t Query, tx *ETransaction) (*Result, error) {
+func ViewUserInfoTxn(t Query, tx ETransaction) (*Result, error) {
 	uk := UserKey(int(t.U1))
 	urec, err := tx.Read(uk)
 	if err != nil {
@@ -390,7 +389,7 @@ func ViewUserInfoTxn(t Query, tx *ETransaction) (*Result, error) {
 	return r, nil
 }
 
-func PutBidTxn(t Query, tx *ETransaction) (*Result, error) {
+func PutBidTxn(t Query, tx ETransaction) (*Result, error) {
 	item := t.U1
 
 	ik := ItemKey(item)
@@ -453,7 +452,7 @@ func PutBidTxn(t Query, tx *ETransaction) (*Result, error) {
 	return r, nil
 }
 
-func PutCommentTxn(t Query, tx *ETransaction) (*Result, error) {
+func PutCommentTxn(t Query, tx ETransaction) (*Result, error) {
 	var r *Result = nil
 	touser := t.U1
 	item := t.U2
@@ -493,7 +492,7 @@ func PutCommentTxn(t Query, tx *ETransaction) (*Result, error) {
 	return r, nil
 }
 
-func SearchItemsCategTxn(t Query, tx *ETransaction) (*Result, error) {
+func SearchItemsCategTxn(t Query, tx ETransaction) (*Result, error) {
 	categ := t.U1
 	num := t.U2
 	var r *Result = nil
@@ -573,11 +572,12 @@ func SearchItemsCategTxn(t Query, tx *ETransaction) (*Result, error) {
 				numbids []int32
 			}{ret, maxb, numb},
 		}
+		dlog.Printf("Searched categ %v %v\n", categ, *r)
 	}
 	return r, nil
 }
 
-func SearchItemsRegionTxn(t Query, tx *ETransaction) (*Result, error) {
+func SearchItemsRegionTxn(t Query, tx ETransaction) (*Result, error) {
 	region := t.U1
 	categ := t.U2
 	num := t.U3
@@ -662,7 +662,7 @@ func SearchItemsRegionTxn(t Query, tx *ETransaction) (*Result, error) {
 	return r, nil
 }
 
-func ViewItemTxn(t Query, tx *ETransaction) (*Result, error) {
+func ViewItemTxn(t Query, tx ETransaction) (*Result, error) {
 	var r *Result = nil
 	id := t.U1
 	item, err := tx.Read(ItemKey(id))

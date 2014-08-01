@@ -2,6 +2,7 @@ package ddtxn
 
 import (
 	"ddtxn/dlog"
+	"fmt"
 	"testing"
 )
 
@@ -194,7 +195,10 @@ func TestAuction(t *testing.T) {
 		numbids []int32
 	})
 	if len(st.items) != 1 {
-		t.Errorf("Wrong length %v\n", st.items)
+		for i := 0; i < len(st.items); i++ {
+			fmt.Println(st.items[i])
+		}
+		t.Fatalf("Wrong length %v\n", st.items)
 	}
 	if st.numbids[0] != 1 {
 		t.Errorf("Wrong numbids %v\n", st.numbids)

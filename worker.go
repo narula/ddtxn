@@ -18,7 +18,7 @@ const (
 var SysType = flag.Int("sys", DOPPEL, "Type of system to run\n")
 var CountKeys = flag.Bool("ck", false, "Count keys accessed")
 
-type TransactionFunc func(Query, *ETransaction) (*Result, error)
+type TransactionFunc func(Query, ETransaction) (*Result, error)
 
 const (
 	BUFFER     = 100000
@@ -69,7 +69,7 @@ type Worker struct {
 	epoch       TID
 	done        chan Query
 	waiters     *TStore
-	E           *ETransaction
+	E           ETransaction
 	txns        []TransactionFunc
 
 	// Stats
@@ -100,7 +100,11 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 		w.waiters = TSInit(1)
 	}
 	w.local_store.phase = SPLIT
-	w.E = StartTransaction(w)
+	if *SysType == LOCKING {
+		w.E = StartLTransaction(w)
+	} else {
+		w.E = StartOTransaction(w)
+	}
 	w.Register(D_BUY, BuyTxn)
 	w.Register(D_BUY_NC, BuyNCTxn)
 	w.Register(D_BID, BidTxn)
