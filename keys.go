@@ -93,7 +93,7 @@ func MaxBidBidderKey(item uint64) Key {
 }
 
 func BuyNowKey(item uint64) Key {
-	return CKey(item, 'n')
+	return CKey(item, 'k')
 }
 
 func CommentKey(item uint64) Key {

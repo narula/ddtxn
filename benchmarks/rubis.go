@@ -57,7 +57,7 @@ func main() {
 	}
 
 	rubis := &apps.Rubis{}
-	rubis.Init(nproducts, *nbidders, *nworkers, *readrate, *clientGoRoutines, *notcontended_readrate)
+	rubis.Init(nproducts, *nbidders, *nworkers, *clientGoRoutines)
 	rubis.Populate(s, coord.Workers[0].E)
 
 	dlog.Printf("Done initializing rubis\n")
@@ -119,7 +119,7 @@ func main() {
 		rubis.Validate(s, int(nitr))
 	}
 
-	out := fmt.Sprintf(" sys: %v, nworkers: %v, nbidders: %v, nitems: %v, contention: %v, done: %v, actual time: %v, epoch changes: %v, total/sec: %v, throughput: ns/txn: %v, naborts: %v, nwmoved: %v, nrmoved: %v", *ddtxn.SysType, *nworkers, *nbidders, nproducts, *contention, nitr, end, ddtxn.NextEpoch, float64(nitr)/end.Seconds(), end.Nanoseconds()/nitr, stats[ddtxn.NABORTS], ddtxn.WMoved, ddtxn.RMoved)
+	out := fmt.Sprintf("  nworkers: %v, nwmoved: %v, nrmoved: %v, sys: %v, total/sec: %v, abortrate: %.2f, stashrate: %.2f, nbidders: %v, nitems: %v, contention: %v, done: %v, actual time: %v, epoch changes: %v, throughput: ns/txn: %v, naborts: %v", *nworkers, ddtxn.WMoved, ddtxn.RMoved, *ddtxn.SysType, float64(nitr)/end.Seconds(), 100*float64(stats[ddtxn.NABORTS])/float64(nitr+stats[ddtxn.NABORTS]), 100*float64(stats[ddtxn.NSTASHED])/float64(nitr+stats[ddtxn.NABORTS]), *nbidders, nproducts, *contention, nitr, end, ddtxn.NextEpoch, end.Nanoseconds()/nitr, stats[ddtxn.NABORTS])
 	fmt.Printf(out)
 	fmt.Printf("\n")
 	f, err := os.OpenFile(*dataFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)

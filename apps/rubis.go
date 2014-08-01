@@ -4,6 +4,7 @@ import (
 	"ddtxn"
 	"ddtxn/dlog"
 	"ddtxn/stats"
+	"flag"
 	"fmt"
 	"log"
 	"math/rand"
@@ -11,23 +12,24 @@ import (
 	"time"
 )
 
+var Skewed = flag.Bool("skew", false, "Rubis-C (skewed workload) or not, default Rubis-B")
+
 type Rubis struct {
-	padding         [128]byte
-	nproducts       int
-	nbidders        int
-	portion_sz      int
-	nworkers        int
-	ngo             int
-	read_rate       int
-	ncontended_rate int
-	maxes           []int32
-	num_bids        []int32
-	lhr             []*stats.LatencyHist
-	lhw             []*stats.LatencyHist
-	sp              uint32
+	padding    [128]byte
+	nproducts  int
+	nbidders   int
+	portion_sz int
+	nworkers   int
+	ngo        int
+	maxes      []int32
+	num_bids   []int32
+	lhr        []*stats.LatencyHist
+	lhw        []*stats.LatencyHist
+	sp         uint32
+	rates      []float64
 }
 
-func (b *Rubis) Init(np, nb, nw, rr, ngo int, ncrr float64) {
+func (b *Rubis) Init(np, nb, nw, ngo int) {
 	b.nproducts = np
 	b.nbidders = nb
 	b.nworkers = nw
@@ -37,7 +39,7 @@ func (b *Rubis) Init(np, nb, nw, rr, ngo int, ncrr float64) {
 	b.lhr = make([]*stats.LatencyHist, ngo)
 	b.lhw = make([]*stats.LatencyHist, ngo)
 	b.sp = uint32(nb / nw)
-	b.read_rate = rr
+	b.rates = ddtxn.GetTxns(*Skewed)
 }
 
 func (b *Rubis) Populate(s *ddtxn.Store, ex *ddtxn.ETransaction) {
@@ -94,20 +96,82 @@ func (b *Rubis) SetupLatency(nincr int64, nbuckets int64, ngo int) {
 }
 
 func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
-	x := int(ddtxn.RandN(local_seed, 100))
-	if x > b.read_rate {
-		rnd := ddtxn.RandN(local_seed, b.sp)
-		lb := int(rnd)
-		bidder := lb + w*int(b.sp)
+	x := float64(ddtxn.RandN(local_seed, 100))
+	if x < b.rates[0] {
+		txn.TXN = ddtxn.RUBIS_BID
+		bidder := int(ddtxn.RandN(local_seed, b.sp)) + w*int(b.sp)
 		product := ddtxn.RandN(local_seed, uint32(b.nproducts))
 		txn.U1 = uint64(bidder)
 		txn.U2 = uint64(product)
 		txn.A = int32(ddtxn.RandN(local_seed, 10))
-		txn.TXN = ddtxn.RUBIS_BID
-	} else {
+	} else if x < b.rates[1] {
+		txn.TXN = ddtxn.RUBIS_VIEWBIDHIST
+		product := ddtxn.RandN(local_seed, uint32(b.nproducts))
+		txn.U1 = uint64(product)
+	} else if x < b.rates[2] {
+		txn.TXN = ddtxn.RUBIS_BUYNOW
+		bidder := int(ddtxn.RandN(local_seed, b.sp)) + w*int(b.sp)
+		product := ddtxn.RandN(local_seed, uint32(b.nproducts))
+		txn.U1 = uint64(bidder)
+		txn.U2 = uint64(product)
+		txn.A = int32(ddtxn.RandN(local_seed, 10))
+	} else if x < b.rates[3] {
+		txn.TXN = ddtxn.RUBIS_COMMENT
+		u1 := int(ddtxn.RandN(local_seed, b.sp)) + w*int(b.sp)
+		u2 := int(ddtxn.RandN(local_seed, b.sp)) + w*int(b.sp)
+		product := ddtxn.RandN(local_seed, uint32(b.nproducts))
+		txn.U1 = uint64(u1)
+		txn.U2 = uint64(u2)
+		txn.U3 = uint64(product)
+		txn.S1 = "xxxx"
+		txn.U4 = 1
+	} else if x < b.rates[4] {
+		txn.TXN = ddtxn.RUBIS_NEWITEM
+		bidder := int(ddtxn.RandN(local_seed, b.sp)) + w*int(b.sp)
+		amt := uint64(ddtxn.RandN(local_seed, 10))
+		txn.U1 = uint64(bidder)
+		txn.S1 = "yyyy"
+		txn.S2 = "zzzz"
+		txn.U2 = amt
+		txn.U3 = amt
+		txn.U4 = amt
+		txn.U5 = 1
+		txn.U6 = 1
+		txn.I = 1
+		txn.U7 = uint64(ddtxn.RandN(local_seed, uint32(ddtxn.NUM_CATEGORIES)))
+	} else if x < b.rates[5] {
+		txn.TXN = ddtxn.RUBIS_PUTBID
+		product := ddtxn.RandN(local_seed, uint32(b.nproducts))
+		txn.U1 = uint64(product)
+	} else if x < b.rates[6] {
+		txn.TXN = ddtxn.RUBIS_PUTCOMMENT
+		product := ddtxn.RandN(local_seed, uint32(b.nproducts))
+		bidder := int(ddtxn.RandN(local_seed, b.sp)) + w*int(b.sp)
+		txn.U1 = uint64(bidder)
+		txn.U2 = uint64(product)
+	} else if x < b.rates[7] {
+		txn.TXN = ddtxn.RUBIS_REGISTER
+		txn.S1 = "aaaaaaa"
+		txn.U1 = uint64(ddtxn.RandN(local_seed, uint32(ddtxn.NUM_REGIONS)))
+	} else if x < b.rates[8] {
 		txn.TXN = ddtxn.RUBIS_SEARCHCAT
 		txn.U1 = uint64(ddtxn.RandN(local_seed, uint32(ddtxn.NUM_CATEGORIES)))
 		txn.U2 = 5
+	} else if x < b.rates[9] {
+		txn.TXN = ddtxn.RUBIS_SEARCHREG
+		txn.U1 = uint64(ddtxn.RandN(local_seed, uint32(ddtxn.NUM_REGIONS)))
+		txn.U2 = uint64(ddtxn.RandN(local_seed, uint32(ddtxn.NUM_CATEGORIES)))
+		txn.U3 = 5
+	} else if x < b.rates[10] {
+		txn.TXN = ddtxn.RUBIS_VIEW
+		product := ddtxn.RandN(local_seed, uint32(b.nproducts))
+		txn.U1 = uint64(product)
+	} else if x < b.rates[11] {
+		txn.TXN = ddtxn.RUBIS_VIEWUSER
+		bidder := int(ddtxn.RandN(local_seed, b.sp)) + w*int(b.sp)
+		txn.U1 = uint64(bidder)
+	} else {
+		log.Fatalf("No such transaction\n")
 	}
 }
 
