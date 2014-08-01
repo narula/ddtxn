@@ -23,6 +23,7 @@ type Rubis struct {
 	ngo        int
 	maxes      []int32
 	num_bids   []int32
+	ratings    map[uint64]int32
 	lhr        []*stats.LatencyHist
 	lhw        []*stats.LatencyHist
 	sp         uint32
@@ -36,6 +37,7 @@ func (b *Rubis) Init(np, nb, nw, ngo int) {
 	b.ngo = ngo
 	b.maxes = make([]int32, np)
 	b.num_bids = make([]int32, np)
+	b.ratings = make(map[uint64]int32)
 	b.lhr = make([]*stats.LatencyHist, ngo)
 	b.lhw = make([]*stats.LatencyHist, ngo)
 	b.sp = uint32(nb / nw)
@@ -186,12 +188,29 @@ func (b *Rubis) Add(t ddtxn.Query) {
 				break
 			}
 		}
+	} else if t.TXN == ddtxn.RUBIS_COMMENT {
+		b.ratings[t.U1] += 1
 	}
 }
 
 func (b *Rubis) Validate(s *ddtxn.Store, nitr int) bool {
 	good := true
 	zero_cnt := 0
+	for k, rat := range b.ratings {
+		key := ddtxn.RatingKey(k)
+		v, err := s.Get(key)
+		if err != nil {
+			fmt.Printf("Validating key %v failed; store: doesn't have rating for user %v: %v\n", key, k, err)
+			good = false
+			continue
+		}
+		r := v.Value().(int32)
+		if r != rat {
+			fmt.Printf("Validating key %v failed; store: has different rating for user %v (%v vs. %v): %v\n", key, k, rat, r, err)
+			good = false
+			continue
+		}
+	}
 	for j := 0; j < b.nproducts; j++ {
 		var x int32
 		k := ddtxn.MaxBidKey(uint64(j))
