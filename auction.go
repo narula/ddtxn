@@ -293,6 +293,82 @@ func StoreBuyNowTxn(t Query, tx *ETransaction) (*Result, error) {
 	return r, nil
 }
 
+func ViewBidHistoryTxn(t Query, tx *ETransaction) (*Result, error) {
+	item := t.U1
+	ik := ItemKey(item)
+	_, err := tx.Read(ik)
+	if err != nil {
+		if err == ESTASH {
+			dlog.Printf("Item key  %v stashed\n", item)
+			return nil, ESTASH
+		}
+		dlog.Printf("No item? %v\n", item)
+		return nil, err
+	}
+
+	bids := BidsPerItemKey(item)
+	brec, err := tx.Read(bids)
+	if err != nil {
+		if err == ESTASH {
+			dlog.Printf("BidsPerItem key  %v stashed\n", item)
+			return nil, ESTASH
+		}
+		dlog.Printf("No bids for item? %v\n", item)
+		return nil, err
+	}
+	listy := brec.entries
+
+	var rbids []Bid
+	var rnn []string
+
+	if *Allocate {
+		rbids = make([]Bid, len(listy))
+		rnn = make([]string, len(listy))
+	}
+
+	for i := 0; i < len(listy); i++ {
+		b, err := tx.Read(listy[i].key)
+		if err != nil {
+			if err == ESTASH {
+				dlog.Printf("key stashed %v\n", listy[i].key)
+				return nil, ESTASH
+			}
+			dlog.Printf("No such key %v\n", listy[i].key)
+			return nil, err
+		}
+		bid := b.Value().(*Bid)
+		if *Allocate {
+			rbids[i] = *bid
+		}
+		uk := UserKey(int(bid.Bidder))
+		u, err := tx.Read(uk)
+		if err != nil {
+			if err == ESTASH {
+				dlog.Printf("user stashed %v\n", uk)
+				return nil, ESTASH
+			}
+			dlog.Printf("No such user %v\n", uk)
+			return nil, err
+		}
+		if *Allocate {
+			rnn[i] = u.Value().(*User).Nickname
+		}
+	}
+
+	if tx.Commit() == 0 {
+		return nil, EABORT
+	}
+	var r *Result = nil
+	if *Allocate {
+		r = &Result{
+			&struct {
+				bids []Bid
+				nns  []string
+			}{rbids, rnn}}
+	}
+	return r, nil
+}
+
 func ViewUserInfoTxn(t Query, tx *ETransaction) (*Result, error) {
 	uk := UserKey(int(t.U1))
 	urec, err := tx.Read(uk)
