@@ -31,11 +31,20 @@ const (
 	D_BID
 	D_BID_NC
 	D_READ_ONE
-	RUBIS_REGISTER
-	RUBIS_NEWITEM
-	RUBIS_BID
-	RUBIS_SEARCHCAT
-	RUBIS_VIEW
+
+	RUBIS_BID         // 12  7%
+	RUBIS_VIEWBIDHIST // 13  3%
+	RUBIS_BUYNOW      // 14  3%
+	RUBIS_COMMENT     // 15  1%
+	RUBIS_NEWITEM     // 16  4%
+	RUBIS_PUTBID      // 17  10%
+	RUBIS_PUTCOMMENT  // 18  1%
+	RUBIS_REGISTER    // 19  4%
+	RUBIS_SEARCHCAT   // 20  27%
+	RUBIS_SEARCHREG   // 21  12%
+	RUBIS_VIEW        // 22  23%
+	RUBIS_VIEWUSER    // 23  4%
+
 	BIG_INCR
 	BIG_RW
 	LAST_TXN
@@ -97,11 +106,20 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 	w.Register(D_BID, BidTxn)
 	w.Register(D_BID_NC, BidNCTxn)
 	w.Register(D_READ_ONE, ReadTxn)
-	w.Register(RUBIS_REGISTER, RegisterUserTxn)
-	w.Register(RUBIS_NEWITEM, NewItemTxn)
+
 	w.Register(RUBIS_BID, StoreBidTxn)
+	w.Register(RUBIS_VIEWBIDHIST, ViewBidHistoryTxn)
+	w.Register(RUBIS_BUYNOW, StoreBuyNowTxn)
+	w.Register(RUBIS_COMMENT, StoreCommentTxn)
+	w.Register(RUBIS_NEWITEM, NewItemTxn)
+	w.Register(RUBIS_PUTBID, PutBidTxn)
+	w.Register(RUBIS_PUTCOMMENT, PutCommentTxn)
+	w.Register(RUBIS_REGISTER, RegisterUserTxn)
 	w.Register(RUBIS_SEARCHCAT, SearchItemsCategTxn)
+	w.Register(RUBIS_SEARCHREG, SearchItemsRegionTxn)
 	w.Register(RUBIS_VIEW, ViewItemTxn)
+	w.Register(RUBIS_VIEWUSER, ViewUserInfoTxn)
+
 	w.Register(BIG_INCR, BigIncrTxn)
 	w.Register(BIG_RW, BigRWTxn)
 	go w.run()
