@@ -15,7 +15,7 @@ parser.add_option("-r", "--rr", action="store", type="int", dest="read_rate", de
 parser.add_option("-l", "--latency", action="store_true", dest="latency", default=False)
 parser.add_option("-x", "--rlock", action="store_false", dest="rlock", default=True)
 parser.add_option("-m", "--scp", action="store_true", dest="scp", default=True)
-parser.add_option("-w", "--wratio", action="store", type="int", dest="wratio", default=4)
+parser.add_option("-w", "--wratio", action="store", type="float", dest="wratio", default=4)
 parser.add_option("-z", "--sr", action="store", type="int", dest="sr", default=10000)
 
 (options, args) = parser.parse_args()

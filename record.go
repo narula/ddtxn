@@ -25,11 +25,11 @@ type BRecord struct {
 	key       Key
 	key_type  KeyType
 	dd        bool
-	mu        sync.RWMutex
+	last      wfmutex.WFMutex
 	value     Value
 	int_value int32
 	entries   []Entry
-	last      wfmutex.WFMutex
+	mu        sync.RWMutex
 	conflict  int32 // how many times was the lock already held when someone wanted it
 	padding1  [128]byte
 }

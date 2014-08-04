@@ -133,6 +133,27 @@ func (w *Worker) doTxn(t Query) (*Result, error) {
 	return x, err
 }
 
+func (w *Worker) doTxn2(t Query) (*Result, error) {
+	if t.TXN >= LAST_TXN {
+		debug.PrintStack()
+		log.Fatalf("Unknown transaction number %v\n", t.TXN)
+	}
+	w.E.Reset()
+	x, err := w.txns[t.TXN](t, w.E)
+	if err == ESTASH {
+		w.Nstats[NSTASHED]++
+		w.stashTxn(t)
+		return nil, err
+	} else if err == nil {
+		w.Nstats[t.TXN]++
+	} else if err == EABORT {
+		w.Nstats[NABORTS]++
+	} else if err == ENOKEY {
+		w.Nstats[NENOKEY]++
+	}
+	return x, err
+}
+
 func (w *Worker) transition() {
 	if *SysType == DOPPEL {
 		w.Lock()
@@ -151,7 +172,7 @@ func (w *Worker) transition() {
 		w.local_store.phase = JOIN
 		dlog.Printf("[%v] Entering join phase %v\n", w.ID, e)
 		for i := 0; i < len(w.waiters.t); i++ {
-			r, err := w.doTxn(w.waiters.t[i])
+			r, err := w.doTxn2(w.waiters.t[i])
 			if err == ESTASH {
 				log.Fatalf("Stashing when trying to execute stashed\n")
 			}
@@ -193,7 +214,7 @@ func (w *Worker) run() {
 				w.local_store.phase = JOIN
 				for i := 0; i < len(w.waiters.t); i++ {
 					t := w.waiters.t[i]
-					r, err := w.doTxn(t)
+					r, err := w.doTxn2(t)
 					if t.W != nil {
 						t.W <- struct {
 							R *Result
