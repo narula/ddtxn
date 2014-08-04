@@ -13,8 +13,8 @@ type Key [16]byte
 type Value interface{}
 
 type Chunk struct {
-	sync.RWMutex
 	padding1 [128]byte
+	sync.RWMutex
 	rows     map[Key]*BRecord
 	padding2 [128]byte
 }
