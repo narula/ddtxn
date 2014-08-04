@@ -44,7 +44,7 @@ func (b *Rubis) Init(np, nb, nw, ngo int) {
 	b.rates = ddtxn.GetTxns(*Skewed)
 }
 
-func (b *Rubis) Populate(s *ddtxn.Store, ex *ddtxn.ETransaction) {
+func (b *Rubis) Populate(s *ddtxn.Store, ex ddtxn.ETransaction) {
 	for i := 0; i < b.nbidders; i++ {
 		q := ddtxn.Query{
 			T:  ddtxn.TID(i),
