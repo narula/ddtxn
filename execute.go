@@ -451,8 +451,8 @@ func (tx *LTransaction) Abort() TID {
 func (tx *LTransaction) Commit() TID {
 	tid := tx.w.commitTID()
 	for i := len(tx.keys) - 1; i >= 0; i-- {
-		x, y := UndoCKey(tx.keys[i].br.key)
-		dlog.Printf("Dealing with key %v %v", x, y)
+		//x, y := UndoCKey(tx.keys[i].br.key)
+		//dlog.Printf("Dealing with key %v %v", x, y)
 		// Apply and unlock
 		if tx.keys[i].read == false {
 			switch tx.keys[i].kt {

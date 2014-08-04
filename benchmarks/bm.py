@@ -17,6 +17,8 @@ parser.add_option("-x", "--rlock", action="store_false", dest="rlock", default=T
 parser.add_option("-m", "--scp", action="store_true", dest="scp", default=True)
 parser.add_option("-w", "--wratio", action="store", type="float", dest="wratio", default=4)
 parser.add_option("-z", "--sr", action="store", type="int", dest="sr", default=10000)
+parser.add_option("-y", "--phase", action="store", type="int", dest="phase", default=80)
+
 
 (options, args) = parser.parse_args()
 
@@ -24,7 +26,7 @@ ben_list_cpus = "socket@0,1,2,7,3-6"
 
 LATENCY_PART = " -latency=%s" % options.latency
 
-BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -nprocs %d -ngo %d -nw %d -nsec %d -contention %d -rr %d -allocate=%s -sys=%d -rlock=%s -wr=%s -sr=%d" + LATENCY_PART
+BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -nprocs %d -ngo %d -nw %d -nsec %d -contention %d -rr %d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d" + LATENCY_PART
 
 def run_one(fn, cmd):
     if options.dprint:
@@ -57,7 +59,7 @@ def get_cpus(host):
         ncpus=[2, 4]
     return ncpus
 
-def fill_cmd(rr, contention, ncpus, systype, cpus_arg="", wratio=options.wratio):
+def fill_cmd(rr, contention, ncpus, systype, cpus_arg="", wratio=options.wratio, phase=options.phase):
     nsec = 10
     if options.short:
         nsec = 1
@@ -67,11 +69,11 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg="", wratio=options.wratio)
     xncpus = ncpus
     if xncpus < 80:
         xncpus += 1
-    cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, options.sr)
+    cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr)
     return cmd
 
-def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio):
-    cmd = fill_cmd(rr, contention, ncpu, sys, list_cpus, wratio)
+def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=options.phase):
+    cmd = fill_cmd(rr, contention, ncpu, sys, list_cpus, wratio, phase)
     run_one(f, cmd)
     f.write("\t")
 
@@ -115,6 +117,7 @@ def contention_exp(fnpath, host, contention, rr):
         f.write("\t")
         do(f, rr, contention, i, cpu_args, 0)
         do(f, rr, contention, i, cpu_args, 1)
+        do(f, rr, contention, i, cpu_args, 2)
         f.write("\n")
     f.close()
     if options.scp:
@@ -138,6 +141,7 @@ def rw_exp(fnpath, host, contention, ncores):
         f.write("\t")
         do(f, i, contention, ncores, cpu_args, 0)
         do(f, i, contention, ncores, cpu_args, 1)
+        do(f, i, contention, ncores, cpu_args, 2)
         f.write("\n")
     f.close()
     if options.scp:
@@ -161,11 +165,37 @@ def products_exp(fnpath, host, rr, ncores):
         f.write("\t")
         do(f, rr, i, ncores, cpu_args, 0)
         do(f, rr, i, ncores, cpu_args, 1)
+        do(f, rr, i, ncores, cpu_args, 2)
         f.write("\n")
     f.close()
     if options.scp:
         system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
         system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
+
+def phase_exp(fnpath, host, contention, rr, ncores):
+    fnn = '%s-phase-%d-%d-%d-True.data' % (host, contention, rr, ncores)
+    filename=os.path.join(fnpath, fnn)
+    f = open(filename, 'w')
+    phase_len = [10, 40, 80, 120, 160, 200, 320]
+    if options.short:
+        phase_len = [20, 160]
+    cpu_args = ""
+    if host == "ben":
+        cpu_args = ben_list_cpus
+
+    f.write("#Doppel\n")
+    for i in phase_len:
+        f.write("%d"% i)
+        f.write("\t")
+        do(f, rr, 10, ncores, cpu_args, 0, options.wratio, i)
+        do(f, rr, contention, ncores, cpu_args, 0, options.wratio, i)
+        do(f, 10, contention, ncores, cpu_args, 0, options.wratio, i)
+        f.write("\n")
+    f.close()
+    if options.scp:
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
+    
 
 def print_output(output, prefix, sys):
     x = output.split("Read ")[1]
@@ -240,6 +270,14 @@ if __name__ == "__main__":
         elif host == "tom":
             options.default_ncores = 48
         rw_exp(fnpath, host, options.default_contention, options.default_ncores)
+    elif options.exp == "phase":
+        if host == "ben":
+            options.default_ncores = 40
+        elif host == "mat":
+            options.default_ncores = 24
+        elif host == "tom":
+            options.default_ncores = 48
+        phase_exp(fnpath, host, options.default_contention, options.read_rate, options.default_ncores)
     elif options.exp == "products":
         if host == "ben":
             options.default_ncores = 40

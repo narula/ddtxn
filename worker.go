@@ -221,7 +221,7 @@ func (w *Worker) transition() {
 // Periodically check if the epoch changed.  This is important because
 // I might not always be receiving calls to One()
 func (w *Worker) run() {
-	duration := time.Duration(BUMP_EPOCH_MS*2) * time.Millisecond
+	duration := time.Duration((*PhaseLength)*2) * time.Millisecond
 	tm := time.NewTicker(duration).C
 	_ = tm
 	for {

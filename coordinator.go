@@ -3,6 +3,7 @@ package ddtxn
 import (
 	"container/heap"
 	"ddtxn/dlog"
+	"flag"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -14,6 +15,8 @@ const (
 	TXID_MASK     = 0x00000000ffffffff
 	CLEAR_TID     = 0xffffffff00000000
 )
+
+var PhaseLength = flag.Int("phase", 80, "Phase length in milliseconds, default 80")
 
 type Coordinator struct {
 	n        int
@@ -170,7 +173,7 @@ func (c *Coordinator) Finish() {
 }
 
 func (c *Coordinator) Process() {
-	tm := time.NewTicker(time.Duration(BUMP_EPOCH_MS) * time.Millisecond).C
+	tm := time.NewTicker(time.Duration(*PhaseLength) * time.Millisecond).C
 	for {
 		select {
 		case x := <-c.Done:
