@@ -233,6 +233,12 @@ if __name__ == "__main__":
         else:
             contention_exp(fnpath, host, options.default_contention, options.read_rate)
     elif options.exp == "rw":
+        if host == "ben":
+            options.default_ncores = 40
+        elif host == "mat":
+            options.default_ncores = 24
+        elif host == "tom":
+            options.default_ncores = 48
         rw_exp(fnpath, host, options.default_contention, options.default_ncores)
     elif options.exp == "products":
         if host == "ben":
