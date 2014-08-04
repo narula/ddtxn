@@ -2,6 +2,7 @@ package ddtxn
 
 import (
 	"ddtxn/dlog"
+	"fmt"
 	"testing"
 )
 
@@ -194,13 +195,35 @@ func TestAuction(t *testing.T) {
 		numbids []int32
 	})
 	if len(st.items) != 1 {
-		t.Errorf("Wrong length %v\n", st.items)
+		for i := 0; i < len(st.items); i++ {
+			fmt.Println(st.items[i])
+		}
+		t.Fatalf("Wrong length %v\n", st.items)
 	}
 	if st.numbids[0] != 1 {
 		t.Errorf("Wrong numbids %v\n", st.numbids)
 	}
 	if st.maxbids[0] != 20 {
 		t.Errorf("Wrong numbids %v\n", st.maxbids)
+	}
+
+	tx = Query{TXN: RUBIS_VIEWBIDHIST, U1: burrito}
+	r, err = w.One(tx)
+	if err != nil {
+		t.Errorf("View Bid Hist\n", err)
+	}
+	lst := r.V.(*struct {
+		bids []Bid
+		nns  []string
+	})
+	if len(lst.bids) != 1 || len(lst.nns) != 1 {
+		t.Errorf("Wrong length\n")
+	}
+	if lst.nns[0] != "johnny appleseed" {
+		t.Errorf("Wrong nickname %v\n", lst.nns[0])
+	}
+	if lst.bids[0].Price != 20 {
+		t.Errorf("Wrong price %v\n", lst.bids[0])
 	}
 }
 

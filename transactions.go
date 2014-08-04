@@ -43,7 +43,7 @@ func IsRead(t int) bool {
 	return false
 }
 
-func BuyTxn(t Query, tx *ETransaction) (*Result, error) {
+func BuyTxn(t Query, tx ETransaction) (*Result, error) {
 	var r *Result = nil
 	tx.WriteInt32(t.K1, 1, SUM)
 	tx.WriteInt32(t.K2, t.A, SUM)
@@ -55,7 +55,7 @@ func BuyTxn(t Query, tx *ETransaction) (*Result, error) {
 
 // Verison of BUY that puts total in read set (doesn't rely on
 // commutatitivity)
-func BuyNCTxn(t Query, tx *ETransaction) (*Result, error) {
+func BuyNCTxn(t Query, tx ETransaction) (*Result, error) {
 	var r *Result = nil
 	tx.WriteInt32(t.K1, 1, SUM)
 	br, err := tx.Read(t.K2)
@@ -78,7 +78,7 @@ func BuyNCTxn(t Query, tx *ETransaction) (*Result, error) {
 }
 
 // Commutative BID
-func BidTxn(t Query, tx *ETransaction) (*Result, error) {
+func BidTxn(t Query, tx ETransaction) (*Result, error) {
 	var r *Result = nil
 	tx.Write(t.K1, t.S1, WRITE)
 	tx.Write(t.K2, t.A, MAX)
@@ -90,7 +90,7 @@ func BidTxn(t Query, tx *ETransaction) (*Result, error) {
 
 // Version of Bid that puts bid in read set (doesn't rely on
 // commutativity)
-func BidNCTxn(t Query, tx *ETransaction) (*Result, error) {
+func BidNCTxn(t Query, tx ETransaction) (*Result, error) {
 	var r *Result = nil
 	tx.Write(t.K1, t.S1, WRITE)
 	high_bid, err := tx.Read(t.K2)
@@ -111,7 +111,7 @@ func BidNCTxn(t Query, tx *ETransaction) (*Result, error) {
 	return r, nil
 }
 
-func ReadTxn(t Query, tx *ETransaction) (*Result, error) {
+func ReadTxn(t Query, tx ETransaction) (*Result, error) {
 	var r *Result = nil
 	v1, err := tx.Read(t.K1)
 	if err != nil {
@@ -129,7 +129,7 @@ func ReadTxn(t Query, tx *ETransaction) (*Result, error) {
 	return r, nil
 }
 
-func BigIncrTxn(t Query, tx *ETransaction) (*Result, error) {
+func BigIncrTxn(t Query, tx ETransaction) (*Result, error) {
 	var r *Result = nil
 	key := [6]Key{}
 	key[0] = BidKey(t.U1)
@@ -164,7 +164,7 @@ func BigIncrTxn(t Query, tx *ETransaction) (*Result, error) {
 
 // Version of Big that puts keys in read set (doesn't rely on
 // commutativity)
-func BigRWTxn(t Query, tx *ETransaction) (*Result, error) {
+func BigRWTxn(t Query, tx ETransaction) (*Result, error) {
 	var r *Result = nil
 
 	key := [7]Key{}

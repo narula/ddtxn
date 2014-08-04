@@ -1,6 +1,7 @@
 package ddtxn
 
 import (
+	"ddtxn/dlog"
 	"flag"
 	"log"
 	"runtime/debug"
@@ -24,8 +25,18 @@ type Write struct {
 	dd bool
 }
 
+type ETransaction interface {
+	Reset()
+	Read(k Key) (*BRecord, error)
+	WriteInt32(k Key, a int32, op KeyType)
+	WriteList(k Key, l Entry, kt KeyType)
+	Write(k Key, v Value, kt KeyType)
+	Abort() TID
+	Commit() TID
+}
+
 // Not threadsafe.  Tracks execution of transaction.
-type ETransaction struct {
+type OTransaction struct {
 	padding0 [128]byte
 	read     []*BRecord
 	lasts    []uint64
@@ -39,8 +50,8 @@ type ETransaction struct {
 	padding  [128]byte
 }
 
-func StartTransaction(w *Worker) *ETransaction {
-	tx := &ETransaction{
+func StartOTransaction(w *Worker) *OTransaction {
+	tx := &OTransaction{
 		read:   make([]*BRecord, 0, 100),
 		lasts:  make([]uint64, 0, 100),
 		writes: make([]Write, 0, 100),
@@ -51,7 +62,7 @@ func StartTransaction(w *Worker) *ETransaction {
 	return tx
 }
 
-func (tx *ETransaction) Reset() {
+func (tx *OTransaction) Reset() {
 	tx.lasts = tx.lasts[:0]
 	tx.read = tx.read[:0]
 	tx.writes = tx.writes[:0]
@@ -65,7 +76,7 @@ func (tx *ETransaction) Reset() {
 	tx.t++
 }
 
-func (tx *ETransaction) Read(k Key) (*BRecord, error) {
+func (tx *OTransaction) Read(k Key) (*BRecord, error) {
 	// TODO: If I wrote the key, return that value instead
 	br, err := tx.s.getKey(k)
 	if br != nil && *SysType == DOPPEL {
@@ -106,7 +117,7 @@ func (tx *ETransaction) Read(k Key) (*BRecord, error) {
 	return br, nil
 }
 
-func (tx *ETransaction) add(k Key, v Value, op KeyType, create bool) {
+func (tx *OTransaction) add(k Key, v Value, op KeyType, create bool) {
 	if len(tx.writes) == cap(tx.writes) {
 		// TODO: extend
 		log.Fatalf("Ran out of room\n")
@@ -121,7 +132,7 @@ func (tx *ETransaction) add(k Key, v Value, op KeyType, create bool) {
 	tx.writes[n].locked = false
 }
 
-func (tx *ETransaction) addInt32(k Key, v int32, op KeyType, create bool) {
+func (tx *OTransaction) addInt32(k Key, v int32, op KeyType, create bool) {
 	if len(tx.writes) == cap(tx.writes) {
 		// TODO: extend
 		log.Fatalf("Ran out of room\n")
@@ -136,7 +147,7 @@ func (tx *ETransaction) addInt32(k Key, v int32, op KeyType, create bool) {
 	tx.writes[n].locked = false
 }
 
-func (tx *ETransaction) addList(k Key, v Entry, op KeyType, create bool) {
+func (tx *OTransaction) addList(k Key, v Entry, op KeyType, create bool) {
 	if len(tx.writes) == cap(tx.writes) {
 		// TODO: extend
 		log.Fatalf("Ran out of room\n")
@@ -151,11 +162,11 @@ func (tx *ETransaction) addList(k Key, v Entry, op KeyType, create bool) {
 	tx.writes[n].locked = false
 }
 
-func (tx *ETransaction) WriteInt32(k Key, a int32, op KeyType) {
+func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) {
 	tx.addInt32(k, a, op, false)
 }
 
-func (tx *ETransaction) Write(k Key, v Value, kt KeyType) {
+func (tx *OTransaction) Write(k Key, v Value, kt KeyType) {
 	if kt == SUM || kt == MAX {
 		tx.addInt32(k, v.(int32), kt, true)
 		return
@@ -163,14 +174,14 @@ func (tx *ETransaction) Write(k Key, v Value, kt KeyType) {
 	tx.add(k, v, kt, true)
 }
 
-func (tx *ETransaction) WriteList(k Key, l Entry, kt KeyType) {
+func (tx *OTransaction) WriteList(k Key, l Entry, kt KeyType) {
 	if kt != LIST {
 		log.Fatalf("Not a list\n")
 	}
 	tx.addList(k, l, kt, true)
 }
 
-func (tx *ETransaction) Abort() TID {
+func (tx *OTransaction) Abort() TID {
 	for i, _ := range tx.writes {
 		if tx.writes[i].locked {
 			tx.writes[i].br.Unlock(0)
@@ -179,7 +190,7 @@ func (tx *ETransaction) Abort() TID {
 	return 0
 }
 
-func (tx *ETransaction) Commit() TID {
+func (tx *OTransaction) Commit() TID {
 	// for each write key
 	//  if global get from global store and lock
 	for i, _ := range tx.writes {
@@ -291,6 +302,172 @@ func (tx *ETransaction) Commit() TID {
 				tx.s.Set(w.br, w.v, w.op)
 			}
 			w.br.Unlock(tid)
+		}
+	}
+	return tid
+}
+
+type Rec struct {
+	br     *BRecord
+	read   bool
+	v      interface{}
+	vint32 int32
+	ve     Entry
+	kt     KeyType
+}
+
+// Not threadsafe.  Tracks execution of transaction.
+type LTransaction struct {
+	padding0 [128]byte
+	keys     []Rec
+	w        *Worker
+	s        *Store
+	t        int64 // Used just as a rough count
+	ls       *LocalStore
+	padding  [128]byte
+}
+
+func StartLTransaction(w *Worker) *LTransaction {
+	tx := &LTransaction{
+		keys: make([]Rec, 0, 100),
+		w:    w,
+		s:    w.store,
+		ls:   w.local_store,
+	}
+	return tx
+}
+
+func (tx *LTransaction) Reset() {
+	tx.keys = tx.keys[:0]
+	tx.t++
+}
+
+func (tx *LTransaction) Read(k Key) (*BRecord, error) {
+	// TODO: If I wrote the key, return that value instead
+	br, err := tx.s.getKey(k)
+	if *CountKeys {
+		p, r := UndoCKey(k)
+		if r == 117 {
+			tx.w.NKeyAccesses[p]++
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	br.mu.RLock()
+	n := len(tx.keys)
+	tx.keys = tx.keys[0 : n+1]
+	tx.keys[n] = Rec{br: br, read: true}
+	return br, nil
+}
+
+func (tx *LTransaction) upgrade(k Key) int {
+	for i := 0; i < len(tx.keys); i++ {
+		if tx.keys[i].br.key == k && tx.keys[i].read == true {
+			tx.keys[i].read = false
+			tx.keys[i].br.mu.RUnlock()
+			return i
+		}
+	}
+	return -1
+}
+
+func (tx *LTransaction) WriteInt32(k Key, a int32, op KeyType) {
+	if len(tx.keys) == cap(tx.keys) {
+		// TODO: extend
+		log.Fatalf("Ran out of room\n")
+	}
+	n := len(tx.keys)
+	if x := tx.upgrade(k); x >= 0 {
+		n = x
+	} else {
+		tx.keys = tx.keys[0 : n+1]
+	}
+	br, err := tx.s.getKey(k)
+	if br == nil || err != nil {
+		br = tx.s.CreateInt32Key(k, a, op)
+	}
+	br.mu.Lock()
+	tx.keys[n] = Rec{br: br, read: false, vint32: a, kt: op}
+}
+
+func (tx *LTransaction) Write(k Key, v Value, kt KeyType) {
+	if kt == SUM || kt == MAX {
+		tx.WriteInt32(k, v.(int32), kt)
+		return
+	}
+	if len(tx.keys) == cap(tx.keys) {
+		// TODO: extend
+		log.Fatalf("Ran out of room\n")
+	}
+	n := len(tx.keys)
+	if x := tx.upgrade(k); x >= 0 {
+		n = x
+	} else {
+		tx.keys = tx.keys[0 : n+1]
+	}
+	br, err := tx.s.getKey(k)
+	if br == nil || err != nil {
+		dlog.Printf("Creating %v %v %v\n", k, v, kt)
+		br = tx.s.CreateKey(k, v, kt)
+	}
+	br.mu.Lock()
+	tx.keys[n] = Rec{br: br, read: false, v: v, kt: kt}
+}
+
+func (tx *LTransaction) WriteList(k Key, l Entry, kt KeyType) {
+	if kt != LIST {
+		log.Fatalf("Not a list\n")
+	}
+	if len(tx.keys) == cap(tx.keys) {
+		// TODO: extend
+		log.Fatalf("Ran out of room\n")
+	}
+	n := len(tx.keys)
+	if x := tx.upgrade(k); x >= 0 {
+		n = x
+	} else {
+		tx.keys = tx.keys[0 : n+1]
+	}
+	br, err := tx.s.getKey(k)
+	if br == nil || err != nil {
+		br = tx.s.CreateKey(k, nil, LIST)
+	}
+	br.mu.Lock()
+	tx.keys[n] = Rec{br: br, read: false, ve: l, kt: kt}
+}
+
+func (tx *LTransaction) Abort() TID {
+	for i := len(tx.keys) - 1; i >= 0; i-- {
+		if tx.keys[i].read {
+			tx.keys[i].br.mu.RUnlock()
+		} else {
+			tx.keys[i].br.mu.Unlock()
+		}
+	}
+	return 0
+}
+
+func (tx *LTransaction) Commit() TID {
+	tid := tx.w.commitTID()
+	for i := len(tx.keys) - 1; i >= 0; i-- {
+		x, y := UndoCKey(tx.keys[i].br.key)
+		dlog.Printf("Dealing with key %v %v", x, y)
+		// Apply and unlock
+		if tx.keys[i].read == false {
+			switch tx.keys[i].kt {
+			case SUM:
+				tx.s.SetInt32(tx.keys[i].br, tx.keys[i].vint32, tx.keys[i].kt)
+			case MAX:
+				tx.s.SetInt32(tx.keys[i].br, tx.keys[i].vint32, tx.keys[i].kt)
+			case LIST:
+				tx.s.Set(tx.keys[i].br, tx.keys[i].ve, tx.keys[i].kt)
+			default:
+				tx.s.Set(tx.keys[i].br, tx.keys[i].v, tx.keys[i].kt)
+			}
+			tx.keys[i].br.mu.Unlock()
+		} else {
+			tx.keys[i].br.mu.RUnlock()
 		}
 	}
 	return tid
