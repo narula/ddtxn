@@ -178,16 +178,16 @@ def single_exp(fnpath, host, rr, ncores):
     fnn = '%s-single-%d.data' % (host, ncores)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
-    prob = [0, .5, 1, 1.5, 2, 3, 5, 10]
+    prob = [0, 1, 1.5, 2, 3, 5, 10]
     if options.short:
-        prob = [10, 100]
+        prob = [1, 5]
     cpu_args = ""
     if host == "ben":
         cpu_args = ben_list_cpus
 
     f.write("#Doppel\tOCC\n")
     for i in prob:
-        f.write("%d"% i)
+        f.write("%0.2f"% i)
         f.write("\t")
         do(f, rr, i, ncores, cpu_args, 0)
         do(f, rr, i, ncores, cpu_args, 1)
