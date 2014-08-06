@@ -9,7 +9,7 @@ parser.add_option("-e", "--exp", action="store", type="string", dest="exp", defa
 parser.add_option("-s", "--short", action="store_true", dest="short", default=False)
 parser.add_option("-p", "--print", action="store_true", dest="dprint", default=False)
 parser.add_option("-a", "--allocate", action="store_true", dest="allocate", default=False)
-parser.add_option("-n", "--ncores", action="store", type="int", dest="default_ncores", default=8)
+parser.add_option("-n", "--ncores", action="store", type="int", dest="default_ncores", default=-1)
 parser.add_option("-c", "--contention", action="store", type="int", dest="default_contention", default=100000)
 parser.add_option("-r", "--rr", action="store", type="int", dest="read_rate", default=50)
 parser.add_option("-l", "--latency", action="store_true", dest="latency", default=False)
@@ -282,6 +282,15 @@ if __name__ == "__main__":
     fnpath = 'tmp/'
     if not os.path.exists(fnpath):
         os.mkdir(fnpath)
+        
+    if options.default_ncores == -1:
+        if host == "ben":
+            options.default_ncores = 40
+        elif host == "mat":
+            options.default_ncores = 24
+        elif host == "tom":
+            options.default_ncores = 16
+
     if options.exp == "contention":
         if options.read_rate == -1:
             contention_exp(fnpath, host, options.default_contention, 90)
@@ -290,36 +299,12 @@ if __name__ == "__main__":
         else:
             contention_exp(fnpath, host, options.default_contention, options.read_rate)
     elif options.exp == "rw":
-        if host == "ben":
-            options.default_ncores = 40
-        elif host == "mat":
-            options.default_ncores = 24
-        elif host == "tom":
-            options.default_ncores = 48
         rw_exp(fnpath, host, options.default_contention, options.default_ncores)
     elif options.exp == "phase":
-        if host == "ben":
-            options.default_ncores = 40
-        elif host == "mat":
-            options.default_ncores = 24
-        elif host == "tom":
-            options.default_ncores = 48
         phase_exp(fnpath, host, options.default_contention, options.read_rate, options.default_ncores)
     elif options.exp == "products":
-        if host == "ben":
-            options.default_ncores = 40
-        elif host == "mat":
-            options.default_ncores = 24
-        elif host == "tom":
-            options.default_ncores = 48
         products_exp(fnpath, host, options.read_rate, options.default_ncores)
     elif options.exp == "single":
-        if host == "ben":
-            options.default_ncores = 40
-        elif host == "mat":
-            options.default_ncores = 24
-        elif host == "tom":
-            options.default_ncores = 48
         single_exp(fnpath, host, 0, options.default_ncores)
     elif options.exp == "rubis":
         if options.read_rate == -1:
@@ -328,13 +313,6 @@ if __name__ == "__main__":
         else:
             rubis_exp(fnpath, host, options.default_contention, options.read_rate)
     elif options.exp == "all":
-        options.dynamic = True
-        if host == "ben":
-            options.default_ncores = 40
-        elif host == "mat":
-            options.default_ncores = 24
-        elif host == "tom":
-            options.default_ncores = 48
         rw_exp(fnpath, host, options.default_contention, options.default_ncores)
         products_exp(fnpath, host, options.read_rate, options.default_ncores)
         contention_exp(fnpath, host, options.default_contention, 90)
