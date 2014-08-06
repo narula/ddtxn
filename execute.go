@@ -211,15 +211,6 @@ func (tx *OTransaction) Commit() TID {
 	//  if global get from global store and lock
 	for i, _ := range tx.writes {
 		w := &tx.writes[i]
-		if *SysType == DOPPEL && tx.phase == SPLIT {
-			if tx.s.IsDD(w.key) {
-				w.dd = true
-				tx.w.Nstats[NDDWRITES]++
-				continue
-			} else {
-				w.dd = false
-			}
-		}
 		if w.br == nil {
 			br, err := tx.s.getKey(w.key)
 			tx.w.Nstats[NGETKEYCALLS]++
@@ -246,6 +237,15 @@ func (tx *OTransaction) Commit() TID {
 				}
 			}
 			w.br = br
+		}
+		if *SysType == DOPPEL && tx.phase == SPLIT {
+			if w.br.dd {
+				w.dd = true
+				tx.w.Nstats[NDDWRITES]++
+				continue
+			} else {
+				w.dd = false
+			}
 		}
 		if !w.br.Lock() {
 			if tx.count {

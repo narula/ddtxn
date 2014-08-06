@@ -10,7 +10,7 @@ parser.add_option("-s", "--short", action="store_true", dest="short", default=Fa
 parser.add_option("-p", "--print", action="store_true", dest="dprint", default=False)
 parser.add_option("-a", "--allocate", action="store_true", dest="allocate", default=False)
 parser.add_option("-n", "--ncores", action="store", type="int", dest="default_ncores", default=-1)
-parser.add_option("-c", "--contention", action="store", type="int", dest="default_contention", default=100000)
+parser.add_option("-c", "--contention", action="store", type="float", dest="default_contention", default=100000)
 parser.add_option("-r", "--rr", action="store", type="int", dest="read_rate", default=50)
 parser.add_option("-l", "--latency", action="store_true", dest="latency", default=False)
 parser.add_option("-x", "--rlock", action="store_false", dest="rlock", default=True)
@@ -26,7 +26,7 @@ ben_list_cpus = "socket@0,1,2,7,3-6"
 
 LATENCY_PART = " -latency=%s" % options.latency
 
-BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -nprocs %d -ngo %d -nw %d -nsec %d -contention %d -rr %d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d" + LATENCY_PART
+BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -nprocs %d -ngo %d -nw %d -nsec %d -contention %s -rr %d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d" + LATENCY_PART
 
 def run_one(fn, cmd):
     if options.dprint:
@@ -154,7 +154,7 @@ def products_exp(fnpath, host, rr, ncores):
     fnn = '%s-products-%d-%d-True.data' % (host, rr, ncores)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
-    cont = [1, 10, 100, 1000, 10000, 50000, 100000, 200000, 500000, 1000000]
+    cont = [1, 10, 100, 1000, 10000, 50000, 100000, 200000, 1000000]
     if options.short:
         cont = [100, 100000]
     cpu_args = ""
@@ -178,7 +178,7 @@ def single_exp(fnpath, host, rr, ncores):
     fnn = '%s-single-%d.data' % (host, ncores)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
-    prob = [0, 1, 2, 5, 10, 20, 50, 100]
+    prob = [0, .5, 1, 1.5, 2, 3, 5, 10]
     if options.short:
         prob = [10, 100]
     cpu_args = ""

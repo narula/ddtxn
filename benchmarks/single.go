@@ -19,7 +19,7 @@ var nsec = flag.Int("nsec", 2, "Time to run in seconds")
 var clientGoRoutines = flag.Int("ngo", 0, "Number of goroutines/workers generating client requests.")
 var nworkers = flag.Int("nw", 0, "Number of workers")
 var nbidders = flag.Int("nb", 1000000, "Keys in store, default is 1M")
-var prob = flag.Int("contention", 100, "Probability contended key is in txn")
+var prob = flag.Float64("contention", 100.0, "Probability contended key is in txn")
 var readrate = flag.Int("rr", 0, "Read rate %.  Rest are writes")
 var dataFile = flag.String("out", "single-data.out", "Filename for output")
 var latency = flag.Bool("latency", false, "dummy")
@@ -71,9 +71,9 @@ func main() {
 			r := rand.New(rand.NewSource(int64(top))) // + time.Now().UnixNano()))
 			for duration.After(time.Now()) {
 				var t ddtxn.Query
-				x := r.Intn(100)
+				flt := r.Float64() * 100
 				//x := int(ddtxn.RandN(&local_seed, 100))
-				if x < *prob {
+				if flt < *prob {
 					// contended txn
 					t.K1 = ddtxn.ProductKey(pkey)
 				} else {
@@ -89,7 +89,7 @@ func main() {
 				}
 				t.TXN = ddtxn.D_INCR_ONE
 				//x = int(ddtxn.RandN(&local_seed, 100))
-				x = r.Intn(100)
+				x := r.Intn(100)
 				if x < *readrate {
 					t.TXN = ddtxn.D_READ_ONE
 				}

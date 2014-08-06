@@ -82,10 +82,19 @@ func main() {
 						E error
 					})
 					txn_start := time.Now()
-					_, err := w.One(t)
-					if err == ddtxn.ESTASH {
-						x := <-t.W
-						err = x.E
+					committed := false
+					var err error
+					for !committed {
+						_, err = w.One(t)
+						if err == ddtxn.ESTASH {
+							x := <-t.W
+							err = x.E
+							committed = true
+						} else if err == ddtxn.EABORT {
+							committed = false
+						} else {
+							committed = true
+						}
 					}
 					txn_end := time.Since(txn_start)
 					if *apps.Latency {
@@ -97,7 +106,15 @@ func main() {
 						}
 					}
 				} else {
-					w.One(t)
+					committed := false
+					for !committed {
+						_, err := w.One(t)
+						if err == ddtxn.EABORT {
+							committed = false
+						} else {
+							committed = true
+						}
+					}
 				}
 			}
 			wg.Done()
