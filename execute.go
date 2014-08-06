@@ -9,6 +9,13 @@ import (
 
 var SampleRate = flag.Int64("sr", 10000, "Sample every sr nanoseconds\n")
 
+// Phases
+const (
+	SPLIT = iota
+	MERGE
+	JOIN
+)
+
 // TODO: 2PL
 
 type Write struct {
@@ -33,6 +40,7 @@ type ETransaction interface {
 	Write(k Key, v Value, kt KeyType)
 	Abort() TID
 	Commit() TID
+	SetPhase(int)
 }
 
 // Not threadsafe.  Tracks execution of transaction.
@@ -43,6 +51,7 @@ type OTransaction struct {
 	w        *Worker
 	s        *Store
 	ls       *LocalStore
+	phase    int
 	writes   []Write
 	t        int64 // Used just as a rough count
 	count    bool
@@ -80,7 +89,7 @@ func (tx *OTransaction) Read(k Key) (*BRecord, error) {
 	// TODO: If I wrote the key, return that value instead
 	br, err := tx.s.getKey(k)
 	if br != nil && *SysType == DOPPEL {
-		if tx.ls.phase == SPLIT {
+		if tx.phase == SPLIT {
 			if br.dd {
 				if tx.count {
 					tx.ls.candidates.Stash(k)
@@ -92,7 +101,7 @@ func (tx *OTransaction) Read(k Key) (*BRecord, error) {
 	//tx.w.Nstats[NGETKEYCALLS]++
 	if *CountKeys {
 		p, r := UndoCKey(k)
-		if r == 117 {
+		if r == 112 {
 			tx.w.NKeyAccesses[p]++
 		}
 	}
@@ -130,6 +139,7 @@ func (tx *OTransaction) add(k Key, v Value, op KeyType, create bool) {
 	tx.writes[n].op = op
 	tx.writes[n].create = create
 	tx.writes[n].locked = false
+	tx.writes[n].dd = false
 }
 
 func (tx *OTransaction) addInt32(k Key, v int32, op KeyType, create bool) {
@@ -145,6 +155,7 @@ func (tx *OTransaction) addInt32(k Key, v int32, op KeyType, create bool) {
 	tx.writes[n].op = op
 	tx.writes[n].create = create
 	tx.writes[n].locked = false
+	tx.writes[n].dd = false
 }
 
 func (tx *OTransaction) addList(k Key, v Entry, op KeyType, create bool) {
@@ -160,6 +171,7 @@ func (tx *OTransaction) addList(k Key, v Entry, op KeyType, create bool) {
 	tx.writes[n].op = op
 	tx.writes[n].create = create
 	tx.writes[n].locked = false
+	tx.writes[n].dd = false
 }
 
 func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) {
@@ -181,6 +193,10 @@ func (tx *OTransaction) WriteList(k Key, l Entry, kt KeyType) {
 	tx.addList(k, l, kt, true)
 }
 
+func (tx *OTransaction) SetPhase(p int) {
+	tx.phase = p
+}
+
 func (tx *OTransaction) Abort() TID {
 	for i, _ := range tx.writes {
 		if tx.writes[i].locked {
@@ -195,18 +211,21 @@ func (tx *OTransaction) Commit() TID {
 	//  if global get from global store and lock
 	for i, _ := range tx.writes {
 		w := &tx.writes[i]
-		if *SysType == DOPPEL && tx.ls.phase == SPLIT {
+		if *SysType == DOPPEL && tx.phase == SPLIT {
 			if tx.s.IsDD(w.key) {
 				w.dd = true
+				tx.w.Nstats[NDDWRITES]++
 				continue
+			} else {
+				w.dd = false
 			}
 		}
 		if w.br == nil {
 			br, err := tx.s.getKey(w.key)
-			//tx.w.Nstats[NGETKEYCALLS]++
+			tx.w.Nstats[NGETKEYCALLS]++
 			if *CountKeys {
 				p, r := UndoCKey(w.key)
-				if r == 117 {
+				if r == 112 {
 					tx.w.NKeyAccesses[p]++
 				}
 			}
@@ -232,6 +251,7 @@ func (tx *OTransaction) Commit() TID {
 			if tx.count {
 				tx.ls.candidates.Conflict(w.key)
 			}
+			tx.w.Nstats[NO_LOCK]++
 			return tx.Abort()
 		}
 		w.locked = true
@@ -268,6 +288,7 @@ func (tx *OTransaction) Commit() TID {
 				tx.ls.candidates.Conflict(tx.read[i].key)
 			}
 			return tx.Abort()
+			tx.w.Nstats[NFAIL_VERIFY]++
 		}
 	}
 	// for each write key
@@ -275,11 +296,10 @@ func (tx *OTransaction) Commit() TID {
 	//  else apply globally and unlock
 	for i, _ := range tx.writes {
 		w := &tx.writes[i]
-		if tx.ls.phase == SPLIT && w.dd {
+		if *SysType == DOPPEL && tx.phase == SPLIT && w.dd {
 			if tx.count {
 				tx.ls.candidates.Write(w.key)
 			}
-			//tx.w.Nstats[NDDWRITES]++
 			switch w.op {
 			case SUM:
 				tx.ls.Apply(w.key, w.op, w.vint32, w.op)
@@ -324,6 +344,7 @@ type LTransaction struct {
 	s        *Store
 	t        int64 // Used just as a rough count
 	ls       *LocalStore
+	phase    int
 	padding  [128]byte
 }
 
@@ -435,6 +456,10 @@ func (tx *LTransaction) WriteList(k Key, l Entry, kt KeyType) {
 	}
 	br.mu.Lock()
 	tx.keys[n] = Rec{br: br, read: false, ve: l, kt: kt}
+}
+
+func (tx *LTransaction) SetPhase(p int) {
+	tx.phase = p
 }
 
 func (tx *LTransaction) Abort() TID {

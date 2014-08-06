@@ -139,9 +139,9 @@ func (br *BRecord) Apply(val Value) {
 		entries := val.([]Entry)
 		br.listApply(entries)
 	}
-	if *Conflicts {
-		br.conflict = 0
-	}
+	// if *Conflicts {
+	// 	br.conflict = 0
+	// }
 }
 
 type Entry struct {

@@ -9,13 +9,6 @@ import (
 // Local per-worker store. Specific types to more quickly apply local
 // changes
 
-// Phases
-const (
-	SPLIT = iota
-	MERGE
-	JOIN
-)
-
 type LocalStore struct {
 	padding0   [128]byte
 	sums       map[Key]int32
@@ -23,7 +16,6 @@ type LocalStore struct {
 	bw         map[Key]Value
 	lists      map[Key][]Entry
 	s          *Store
-	phase      uint32
 	Ncopy      int64
 	candidates *Candidates
 	padding    [128]byte

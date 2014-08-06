@@ -136,7 +136,7 @@ func TestStddev(t *testing.T) {
 		t.Errorf("Wrong stddev %v\n", stddev)
 	}
 	mean, stddev = StddevKeys(x) // ignores 0s
-	if mean != 50 {
+	if mean != 49 {
 		t.Errorf("Wrong mean %v\n", mean)
 	}
 	if stddev > 29 || stddev < 28 {

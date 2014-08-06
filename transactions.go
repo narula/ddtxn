@@ -128,6 +128,26 @@ func ReadTxn(t Query, tx ETransaction) (*Result, error) {
 	return r, nil
 }
 
+func IncrTxn(t Query, tx ETransaction) (*Result, error) {
+	if *SysType == DOPPEL {
+		tx.WriteInt32(t.K1, 1, SUM)
+	} else {
+		br, err := tx.Read(t.K1)
+		if err == EABORT {
+			dlog.Println(err)
+			return nil, EABORT
+		}
+		sum := br.int_value
+		_ = sum
+		tx.WriteInt32(t.K1, 1, SUM)
+	}
+
+	if tx.Commit() == 0 {
+		return nil, EABORT
+	}
+	return nil, nil
+}
+
 func BigIncrTxn(t Query, tx ETransaction) (*Result, error) {
 	var r *Result = nil
 	key := [6]Key{}

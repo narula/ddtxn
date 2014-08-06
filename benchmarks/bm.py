@@ -66,6 +66,8 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg="", wratio=options.wratio,
     bn = "buy"
     if options.exp == "rubis":
         bn = "rubis"
+    if options.exp == "single":
+        bn = "single"
     xncpus = ncpus
     if xncpus < 80:
         xncpus += 1
@@ -166,6 +168,31 @@ def products_exp(fnpath, host, rr, ncores):
         do(f, rr, i, ncores, cpu_args, 0)
         do(f, rr, i, ncores, cpu_args, 1)
         do(f, rr, i, ncores, cpu_args, 2)
+        f.write("\n")
+    f.close()
+    if options.scp:
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
+
+def single_exp(fnpath, host, rr, ncores):
+    fnn = '%s-single-%d.data' % (host, ncores)
+    filename=os.path.join(fnpath, fnn)
+    f = open(filename, 'w')
+    prob = [0, 1, 2, 5, 10, 20, 50, 100]
+    if options.short:
+        prob = [10, 100]
+    cpu_args = ""
+    if host == "ben":
+        cpu_args = ben_list_cpus
+
+    f.write("#Doppel\tOCC\n")
+    for i in prob:
+        f.write("%d"% i)
+        f.write("\t")
+        do(f, rr, i, ncores, cpu_args, 0)
+        do(f, rr, i, ncores, cpu_args, 1)
+        f.write("1000000")
+        #do(f, rr, i, ncores, cpu_args, 2)
         f.write("\n")
     f.close()
     if options.scp:
@@ -286,6 +313,14 @@ if __name__ == "__main__":
         elif host == "tom":
             options.default_ncores = 48
         products_exp(fnpath, host, options.read_rate, options.default_ncores)
+    elif options.exp == "single":
+        if host == "ben":
+            options.default_ncores = 40
+        elif host == "mat":
+            options.default_ncores = 24
+        elif host == "tom":
+            options.default_ncores = 48
+        single_exp(fnpath, host, 0, options.default_ncores)
     elif options.exp == "rubis":
         if options.read_rate == -1:
             rubis_exp(fnpath, host, 30, 90)

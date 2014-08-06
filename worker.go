@@ -31,6 +31,7 @@ const (
 	D_BID
 	D_BID_NC
 	D_READ_ONE
+	D_INCR_ONE
 
 	RUBIS_BID         // 12  7%
 	RUBIS_VIEWBIDHIST // 13  3%
@@ -55,6 +56,8 @@ const (
 	NSAMPLES
 	NGETKEYCALLS
 	NDDWRITES
+	NO_LOCK
+	NFAIL_VERIFY
 	LAST_STAT
 )
 
@@ -99,17 +102,18 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 	} else {
 		w.waiters = TSInit(1)
 	}
-	w.local_store.phase = SPLIT
 	if *SysType == LOCKING {
 		w.E = StartLTransaction(w)
 	} else {
 		w.E = StartOTransaction(w)
 	}
+	w.E.SetPhase(SPLIT)
 	w.Register(D_BUY, BuyTxn)
 	w.Register(D_BUY_NC, BuyNCTxn)
 	w.Register(D_BID, BidTxn)
 	w.Register(D_BID_NC, BidNCTxn)
 	w.Register(D_READ_ONE, ReadTxn)
+	w.Register(D_INCR_ONE, IncrTxn)
 
 	w.Register(RUBIS_BID, StoreBidTxn)
 	w.Register(RUBIS_VIEWBIDHIST, ViewBidHistoryTxn)
@@ -185,13 +189,13 @@ func (w *Worker) transition() {
 			return
 		}
 		start := time.Now()
-		w.local_store.phase = MERGE
+		w.E.SetPhase(MERGE)
 		w.local_store.Merge()
 		dlog.Printf("[%v] Sending ack for epoch change %v\n", w.ID, e)
 		w.coordinator.wepoch[w.ID] <- true
 		dlog.Printf("[%v] Waiting for safe for epoch change %v\n", w.ID, e)
 		<-w.coordinator.wsafe[w.ID]
-		w.local_store.phase = JOIN
+		w.E.SetPhase(JOIN)
 		dlog.Printf("[%v] Entering join phase %v\n", w.ID, e)
 		for i := 0; i < len(w.waiters.t); i++ {
 			r, err := w.doTxn2(w.waiters.t[i])
@@ -206,7 +210,7 @@ func (w *Worker) transition() {
 			}
 		}
 		w.waiters.clear()
-		w.local_store.phase = SPLIT
+		w.E.SetPhase(SPLIT)
 		dlog.Printf("[%v] Sending done %v\n", w.ID, e)
 		w.coordinator.wdone[w.ID] <- true
 		dlog.Printf("[%v] Awaiting go %v\n", w.ID, e)
@@ -230,10 +234,10 @@ func (w *Worker) run() {
 			if *SysType == DOPPEL {
 				dlog.Printf("%v Received done\n", w.ID)
 				w.Lock()
-				w.local_store.phase = MERGE
+				w.E.SetPhase(MERGE)
 				w.local_store.Merge()
 				dlog.Printf("%v Done last merge, doing %v waiters\n", w.ID, len(w.waiters.t))
-				w.local_store.phase = JOIN
+				w.E.SetPhase(JOIN)
 				for i := 0; i < len(w.waiters.t); i++ {
 					t := w.waiters.t[i]
 					r, err := w.doTxn2(t)

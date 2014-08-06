@@ -62,12 +62,14 @@ func Validate(c *Coordinator, s *Store, nkeys int, nproducts int, val []int32, n
 }
 
 func PrintLockCounts(s *Store) {
-	fmt.Println()
-	for _, chunk := range s.store {
+	if *Conflicts == false {
+		fmt.Println("Didn't measure conflicts!")
+	}
+	for i, chunk := range s.store {
 		for k, v := range chunk.rows {
 			if v.conflict > 0 {
 				x, y := UndoCKey(k)
-				fmt.Printf("%v %v\t:%v\n", x, y, v.conflict)
+				fmt.Printf("CONFLICT! chunk[%v] %v %v\t:%v\n", i, x, y, v.conflict)
 			}
 		}
 	}
@@ -105,7 +107,7 @@ func StddevKeys(nc []int64) (int64, float64) {
 	var n int64
 	var i int64
 	n = int64(len(nc))
-	var cnt int64
+	var cnt int64 = 1
 	for i = 0; i < n; i++ {
 		if nc[i] != 0 {
 			total += nc[i]
@@ -115,7 +117,7 @@ func StddevKeys(nc []int64) (int64, float64) {
 	mean := total / cnt
 	variances := make([]int64, cnt)
 
-	cnt = 0
+	cnt = 1
 	for i = 0; i < n; i++ {
 		if nc[i] != 0 {
 			x := nc[i] - mean
@@ -137,7 +139,7 @@ func StddevKeys(nc []int64) (int64, float64) {
 
 func WriteChunkStats(s *Store, f *os.File) {
 	mean, stddev := StddevChunks(s.NChunksAccessed)
-	f.WriteString(fmt.Sprintf("mean: %v\nstddev: %v\n", mean, stddev))
+	f.WriteString(fmt.Sprintf("chunk-mean: %v\nchunk-stddev: %v\n", mean, stddev))
 	for i := 0; i < len(s.NChunksAccessed); i++ {
 		x := float64(mean) - float64(s.NChunksAccessed[i])
 		if x < 0 {
@@ -203,6 +205,9 @@ func WriteCountKeyStats(coord *Coordinator, nb int, f *os.File) {
 			ok[3]++
 		}
 		if x > 2*stddev && bk[i] != 0 {
+			f.WriteString(fmt.Sprintf("BKey %v: %v\n", i, bk[i]))
+		}
+		if x > stddev && bk[i] != 0 && x < 2*stddev {
 			f.WriteString(fmt.Sprintf("BKey %v: %v\n", i, bk[i]))
 		}
 	}

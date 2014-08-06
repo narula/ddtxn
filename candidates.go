@@ -3,6 +3,7 @@ package ddtxn
 import (
 	"container/heap"
 	"flag"
+	"fmt"
 )
 
 var WRRatio = flag.Float64("wr", 3, "Ratio of sampled write conflicts and sampled writes to sampled reads at which to move a piece of data to split.  Default 3")
@@ -99,6 +100,17 @@ func (c *Candidates) Conflict(k Key) {
 	if o.ratio() > *WRRatio {
 		//dlog.Printf("Conflict; updating %v %v\n", o.ratio(), o.k)
 		c.h.update(o)
+	}
+}
+
+func (c *Candidates) Print() {
+	for i := 0; i < len(*c.h); i++ {
+		if i > 20 {
+			return
+		}
+		x := (*c.h)[i]
+		z, y := UndoCKey(x.k)
+		fmt.Printf("k: %v %v, r: %v, w: %v, conflicts: %v\n", z, y, x.reads, x.writes, x.conflicts)
 	}
 }
 
