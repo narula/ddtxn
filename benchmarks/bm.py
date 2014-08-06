@@ -191,8 +191,7 @@ def single_exp(fnpath, host, rr, ncores):
         f.write("\t")
         do(f, rr, i, ncores, cpu_args, 0)
         do(f, rr, i, ncores, cpu_args, 1)
-        f.write("1000000")
-        #do(f, rr, i, ncores, cpu_args, 2)
+        do(f, rr, i, ncores, cpu_args, 2)
         f.write("\n")
     f.close()
     if options.scp:
