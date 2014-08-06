@@ -118,6 +118,7 @@ func ReadTxn(t Query, tx ETransaction) (*Result, error) {
 		return r, err
 	}
 	x := v1.Value()
+	_ = x
 	var txid TID
 	if txid = tx.Commit(); txid == 0 {
 		return r, EABORT
