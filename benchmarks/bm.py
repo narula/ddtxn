@@ -52,7 +52,7 @@ def get_cpus(host):
     elif host == "tbilisi":
         ncpus = [1, 2, 4, 8, 12]
     elif host == "tom":
-        ncpus = [1, 2, 6, 12, 18, 24, 30, 42, 48]
+        ncpus = [1, 2, 6, 12, 18]
     elif host == "ben":
         ncpus = [1, 4, 10, 20, 30, 40, 50, 60, 70, 80]
     if options.short:
@@ -289,7 +289,7 @@ if __name__ == "__main__":
         elif host == "mat":
             options.default_ncores = 24
         elif host == "tom":
-            options.default_ncores = 16
+            options.default_ncores = 18
 
     if options.exp == "contention":
         if options.read_rate == -1:
