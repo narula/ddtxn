@@ -16,8 +16,6 @@ const (
 	JOIN
 )
 
-// TODO: 2PL
-
 type Write struct {
 	key    Key
 	br     *BRecord
@@ -29,7 +27,6 @@ type Write struct {
 
 	// TODO: Handle writing more than once to a list per txn
 	ve Entry
-	dd bool
 }
 
 type ETransaction interface {
@@ -98,7 +95,6 @@ func (tx *OTransaction) Read(k Key) (*BRecord, error) {
 			}
 		}
 	}
-	//tx.w.Nstats[NGETKEYCALLS]++
 	if *CountKeys {
 		p, r := UndoCKey(k)
 		if r == 112 {
@@ -139,7 +135,6 @@ func (tx *OTransaction) add(k Key, v Value, op KeyType, create bool) {
 	tx.writes[n].op = op
 	tx.writes[n].create = create
 	tx.writes[n].locked = false
-	tx.writes[n].dd = false
 }
 
 func (tx *OTransaction) addInt32(k Key, v int32, op KeyType, create bool) {
@@ -155,7 +150,6 @@ func (tx *OTransaction) addInt32(k Key, v int32, op KeyType, create bool) {
 	tx.writes[n].op = op
 	tx.writes[n].create = create
 	tx.writes[n].locked = false
-	tx.writes[n].dd = false
 }
 
 func (tx *OTransaction) addList(k Key, v Entry, op KeyType, create bool) {
@@ -171,7 +165,6 @@ func (tx *OTransaction) addList(k Key, v Entry, op KeyType, create bool) {
 	tx.writes[n].op = op
 	tx.writes[n].create = create
 	tx.writes[n].locked = false
-	tx.writes[n].dd = false
 }
 
 func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) {
@@ -213,7 +206,6 @@ func (tx *OTransaction) Commit() TID {
 		w := &tx.writes[i]
 		if w.br == nil {
 			br, err := tx.s.getKey(w.key)
-			tx.w.Nstats[NGETKEYCALLS]++
 			if *CountKeys {
 				p, r := UndoCKey(w.key)
 				if r == 112 {
@@ -240,11 +232,7 @@ func (tx *OTransaction) Commit() TID {
 		}
 		if *SysType == DOPPEL && tx.phase == SPLIT {
 			if w.br.dd {
-				w.dd = true
-				tx.w.Nstats[NDDWRITES]++
 				continue
-			} else {
-				w.dd = false
 			}
 		}
 		if !w.br.Lock() {
@@ -296,7 +284,7 @@ func (tx *OTransaction) Commit() TID {
 	//  else apply globally and unlock
 	for i, _ := range tx.writes {
 		w := &tx.writes[i]
-		if *SysType == DOPPEL && tx.phase == SPLIT && w.dd {
+		if *SysType == DOPPEL && tx.phase == SPLIT && w.br.dd {
 			if tx.count {
 				tx.ls.candidates.Write(w.key)
 			}

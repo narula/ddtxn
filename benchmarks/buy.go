@@ -25,8 +25,8 @@ var contention = flag.Int("contention", 1000, "Amount of contention, higher is m
 var nbidders = flag.Int("nb", 1000000, "Bidders in store, default is 1M")
 var readrate = flag.Int("rr", 0, "Read rate %.  Rest are buys")
 var notcontended_readrate = flag.Float64("ncrr", .8, "Uncontended read rate %.  Default to .8")
-
 var dataFile = flag.String("out", "buy-data.out", "Filename for output")
+var Retry = flag.Bool("retry", false, "Whether to retry aborted transactions until they commit.  Changes the composition of reads/writes issued to the system (but maintains the read rate ratio specified for transactions *completed*. Default false.")
 
 func main() {
 	flag.Parse()
@@ -106,14 +106,18 @@ func main() {
 						}
 					}
 				} else {
-					committed := false
-					for !committed {
-						_, err := w.One(t)
-						if err == ddtxn.EABORT {
-							committed = false
-						} else {
-							committed = true
+					if *Retry {
+						committed := false
+						for !committed {
+							_, err := w.One(t)
+							if err == ddtxn.EABORT {
+								committed = false
+							} else {
+								committed = true
+							}
 						}
+					} else {
+						w.One(t)
 					}
 				}
 			}
