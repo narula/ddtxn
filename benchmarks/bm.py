@@ -183,7 +183,7 @@ def single_exp(fnpath, host, rr, ncores):
     fnn = '%s-single-%d-%s.data' % (host, ncores, options.retry)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
-    prob = [0, 1, 1.5, 2, 3, 5, 10]
+    prob = [0, 1, 3, 5, 10, 20, 50]
     if options.short:
         prob = [1, 5]
     cpu_args = ""
