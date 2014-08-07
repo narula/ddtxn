@@ -5,6 +5,8 @@ import (
 	"flag"
 )
 
+var AtomicIncr = flag.Bool("atomic", true, "Use atomic increment version of Buy (LIKE) transaction")
+
 // I tried keeping a slice of interfaces; the reflection was costly.
 // Hard code in random parameter types to re-use for now.
 // TODO: clean this up.
@@ -44,6 +46,9 @@ func IsRead(t int) bool {
 }
 
 func BuyTxn(t Query, tx ETransaction) (*Result, error) {
+	if *AtomicIncr == false {
+		return BuyNCTxn(t, tx)
+	}
 	var r *Result = nil
 	tx.WriteInt32(t.K1, 1, SUM)
 	tx.WriteInt32(t.K2, t.A, SUM)

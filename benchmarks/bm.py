@@ -5,20 +5,21 @@ from os import system
 import socket
 
 parser = OptionParser()
-parser.add_option("-e", "--exp", action="store", type="string", dest="exp", default="contention")
-parser.add_option("-s", "--short", action="store_true", dest="short", default=False)
-parser.add_option("-p", "--print", action="store_true", dest="dprint", default=False)
-parser.add_option("-a", "--allocate", action="store_true", dest="allocate", default=False)
-parser.add_option("-n", "--ncores", action="store", type="int", dest="default_ncores", default=-1)
-parser.add_option("-c", "--contention", action="store", type="float", dest="default_contention", default=100000)
-parser.add_option("-r", "--rr", action="store", type="int", dest="read_rate", default=50)
-parser.add_option("-l", "--latency", action="store_true", dest="latency", default=False)
-parser.add_option("-x", "--rlock", action="store_false", dest="rlock", default=True)
-parser.add_option("-m", "--scp", action="store_true", dest="scp", default=True)
-parser.add_option("-w", "--wratio", action="store", type="float", dest="wratio", default=4)
-parser.add_option("-z", "--sr", action="store", type="int", dest="sr", default=10000)
-parser.add_option("-y", "--phase", action="store", type="int", dest="phase", default=80)
-parser.add_option("-b", "--retry", action="store_true", dest="retry", default=False)
+parser.add_option("-p", "--print", action="store_true", dest="dprint", default=True)
+parser.add_option("--exp", action="store", type="string", dest="exp", default="contention")
+parser.add_option("--short", action="store_true", dest="short", default=False)
+parser.add_option("--allocate", action="store_true", dest="allocate", default=False)
+parser.add_option("--ncores", action="store", type="int", dest="default_ncores", default=-1)
+parser.add_option("--contention", action="store", type="float", dest="default_contention", default=100000)
+parser.add_option("--rr", action="store", type="int", dest="read_rate", default=50)
+parser.add_option("--latency", action="store_true", dest="latency", default=False)
+parser.add_option("--rlock", action="store_false", dest="rlock", default=True)
+parser.add_option("--scp", action="store_true", dest="scp", default=True)
+parser.add_option("--wratio", action="store", type="float", dest="wratio", default=4)
+parser.add_option("--sr", action="store", type="int", dest="sr", default=10000)
+parser.add_option("--phase", action="store", type="int", dest="phase", default=80)
+parser.add_option("--retry", action="store_true", dest="retry", default=False)
+parser.add_option("--atomic", action="store_true", dest="atomic", default=True)
 
 
 (options, args) = parser.parse_args()
@@ -27,7 +28,7 @@ ben_list_cpus = "socket@0,1,2,7,3-6"
 
 LATENCY_PART = " -latency=%s" % options.latency
 
-BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -nprocs %d -ngo %d -nw %d -nsec %d -contention %s -rr %d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -retry=%s" + LATENCY_PART
+BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -nprocs %d -ngo %d -nw %d -nsec %d -contention %s -rr %d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -retry=%s -atomic=%s" + LATENCY_PART
 
 def run_one(fn, cmd):
     if options.dprint:
@@ -60,7 +61,7 @@ def get_cpus(host):
         ncpus=[2, 4]
     return ncpus
 
-def fill_cmd(rr, contention, ncpus, systype, cpus_arg="", wratio=options.wratio, phase=options.phase, retry=options.retry):
+def fill_cmd(rr, contention, ncpus, systype, cpus_arg="", wratio=options.wratio, phase=options.phase, retry=options.retry, atomic=options.atomic):
     nsec = 10
     if options.short:
         nsec = 1
@@ -72,11 +73,11 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg="", wratio=options.wratio,
     xncpus = ncpus
     if xncpus < 80:
         xncpus += 1
-    cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr, retry)
+    cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr, retry, atomic)
     return cmd
 
-def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=options.phase):
-    cmd = fill_cmd(rr, contention, ncpu, sys, list_cpus, wratio, phase)
+def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=options.phase, atomic=options.atomic):
+    cmd = fill_cmd(rr, contention, ncpu, sys, list_cpus, wratio, phase, atomic=atomic)
     run_one(f, cmd)
     f.write("\t")
 
@@ -120,8 +121,8 @@ def contention_exp(fnpath, host, contention, rr):
         f.write("\t")
         do(f, rr, contention, i, cpu_args, 0)
         do(f, rr, contention, i, cpu_args, 1)
+        do(f, rr, contention, i, cpu_args, 1, atomic=False)
         #do(f, rr, contention, i, cpu_args, 2)
-        f.write("1000000")
         f.write("\n")
     f.close()
     if options.scp:
@@ -145,7 +146,7 @@ def rw_exp(fnpath, host, contention, ncores):
         f.write("\t")
         do(f, i, contention, ncores, cpu_args, 0)
         do(f, i, contention, ncores, cpu_args, 1)
-        f.write("1000000")
+        do(f, i, contention, ncores, cpu_args, 1, atomic=False)
         #do(f, i, contention, ncores, cpu_args, 2)
         f.write("\n")
     f.close()
@@ -170,7 +171,7 @@ def products_exp(fnpath, host, rr, ncores):
         f.write("\t")
         do(f, rr, i, ncores, cpu_args, 0)
         do(f, rr, i, ncores, cpu_args, 1)
-        f.write("1000000")
+        do(f, rr, i, ncores, cpu_args, 1, atomic=False)
         #do(f, rr, i, ncores, cpu_args, 2)
         f.write("\n")
     f.close()
@@ -195,7 +196,7 @@ def single_exp(fnpath, host, rr, ncores):
         f.write("\t")
         do(f, rr, i, ncores, cpu_args, 0)
         do(f, rr, i, ncores, cpu_args, 1)
-        f.write("1000000")
+        do(f, rr, i, ncores, cpu_args, 1, atomic=False)
         #do(f, rr, i, ncores, cpu_args, 2)
         f.write("\n")
     f.close()
@@ -317,7 +318,9 @@ if __name__ == "__main__":
         else:
             rubis_exp(fnpath, host, options.default_contention, options.read_rate)
     elif options.exp == "all":
+        options.exp = "single"
         single_exp(fnpath, host, 0, options.default_ncores)
+        options.exp = "all"
         rw_exp(fnpath, host, options.default_contention, options.default_ncores)
         products_exp(fnpath, host, options.read_rate, options.default_ncores)
         contention_exp(fnpath, host, options.default_contention, 90)

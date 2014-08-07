@@ -38,9 +38,13 @@ func (b *Buy) Init(np, nb, nw, rr, ngo int, ncrr float64) {
 }
 
 func (b *Buy) Populate(s *ddtxn.Store, ex *ddtxn.ETransaction) {
+	var op ddtxn.KeyType = ddtxn.SUM
+	if *ddtxn.AtomicIncr != true {
+		op = ddtxn.WRITE
+	}
 	for i := 0; i < b.nproducts; i++ {
 		k := ddtxn.ProductKey(i)
-		s.CreateKey(k, int32(0), ddtxn.SUM)
+		s.CreateKey(k, int32(0), op)
 	}
 	// Uncontended keys
 	for i := b.nproducts; i < b.nbidders/10; i++ {
