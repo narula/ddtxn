@@ -83,7 +83,9 @@ func (tx *OTransaction) Reset() {
 }
 
 func (tx *OTransaction) Read(k Key) (*BRecord, error) {
-	// TODO: If I wrote the key, return that value instead
+	if len(tx.read) > 0 {
+		// TODO: If I wrote the key, return that value instead
+	}
 	br, err := tx.s.getKey(k)
 	if br != nil && *SysType == DOPPEL {
 		if tx.phase == SPLIT {
@@ -263,10 +265,17 @@ func (tx *OTransaction) Commit() TID {
 		if !tx.read[i].Verify(tx.lasts[i]) {
 			for j, _ := range tx.writes {
 				if tx.writes[j].key == tx.read[i].key {
-					// We would have aborted if we did not successfully
-					// lock this earlier
-					rd = true
-					break
+					// We would have aborted if we did not
+					// successfully lock this earlier, but check to
+					// make sure the version didn't change after I
+					// read but before I locked
+					if !tx.read[i].Own(tx.lasts[i]) {
+						rd = false
+						break
+					} else {
+						rd = true
+						break
+					}
 				}
 			}
 			if rd {

@@ -11,7 +11,7 @@ func TestBasic(t *testing.T) {
 	c := NewCoordinator(1, s)
 	w := c.Workers[0]
 	s.CreateKey(ProductKey(4), int32(0), SUM)
-	s.CreateKey(ProductKey(5), int32(0), SUM)
+	s.CreateKey(ProductKey(5), int32(0), WRITE)
 	s.CreateKey(UserKey(1), "u1", WRITE)
 	s.CreateKey(UserKey(2), "u2", WRITE)
 	s.CreateKey(UserKey(3), "u3", WRITE)
@@ -30,20 +30,17 @@ func TestBasic(t *testing.T) {
 		t.Errorf("Wrong answer %v\n", r)
 	}
 
-	// Bidding
-	tx = Query{TXN: D_BID, K1: BidKey(5), K2: MaxBidKey(5), W: nil, A: 27, S1: "bid on x"}
-	r, err = w.One(tx)
-
-	tx = Query{TXN: D_READ_ONE, K1: MaxBidKey(5), W: nil}
-	r, err = w.One(tx)
-	if r.V.(int32) != 27 {
-		t.Errorf("Wrong answer %v\n", r)
+	tx = Query{TXN: D_BUY_NC, K1: UserKey(1), A: int32(7), K2: ProductKey(5), W: nil, T: 0}
+	_, err = w.One(tx)
+	if err != nil {
+		t.Errorf("Non nil result returned\n")
 	}
-	tx = Query{TXN: D_BID, K1: BidKey(5), K2: MaxBidKey(5), W: nil, A: 29, S1: "bid on x"}
+	tx = Query{TXN: D_READ_ONE, K1: ProductKey(5), W: make(chan struct {
+		R *Result
+		E error
+	}), T: 0}
 	r, err = w.One(tx)
-	tx = Query{TXN: D_READ_ONE, K1: MaxBidKey(5), W: nil}
-	r, err = w.One(tx)
-	if r.V.(int32) != 29 {
+	if r.V.(int32) != 7 {
 		t.Errorf("Wrong answer %v\n", r)
 	}
 }
@@ -174,7 +171,7 @@ func TestAuction(t *testing.T) {
 	tx = Query{TXN: RUBIS_BID, U1: jaid, U2: burrito, A: 20}
 	r, err = w.One(tx)
 	if err != nil {
-		t.Errorf("Bid %v\n", err)
+		t.Fatalf("Bid %v\n", err)
 	}
 	tx = Query{TXN: D_READ_ONE, K1: MaxBidKey(burrito)}
 	r, err = w.One(tx)
@@ -210,14 +207,14 @@ func TestAuction(t *testing.T) {
 	tx = Query{TXN: RUBIS_VIEWBIDHIST, U1: burrito}
 	r, err = w.One(tx)
 	if err != nil {
-		t.Errorf("View Bid Hist\n", err)
+		t.Fatalf("View Bid Hist\n", err)
 	}
 	lst := r.V.(*struct {
 		bids []Bid
 		nns  []string
 	})
 	if len(lst.bids) != 1 || len(lst.nns) != 1 {
-		t.Errorf("Wrong length\n")
+		t.Fatalf("Wrong length\n")
 	}
 	if lst.nns[0] != "johnny appleseed" {
 		t.Errorf("Wrong nickname %v\n", lst.nns[0])

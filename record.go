@@ -116,6 +116,21 @@ func (br *BRecord) Verify(last uint64) bool {
 	return true
 }
 
+func (br *BRecord) Own(last uint64) bool {
+	ok, new_last := br.IsUnlocked()
+	if ok {
+		// Not locked, I can't own it.
+		return false
+	}
+	if uint64(new_last) != wfmutex.LOCKED|last {
+		if *Conflicts {
+			atomic.AddInt32(&br.conflict, 1)
+		}
+		return false
+	}
+	return true
+}
+
 // Used during "merge" phase, along with br.mu
 func (br *BRecord) Apply(val Value) {
 	switch br.key_type {

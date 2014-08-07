@@ -2,6 +2,7 @@ package ddtxn
 
 import (
 	"ddtxn/dlog"
+	"fmt"
 	"math/rand"
 	"runtime"
 	"strconv"
@@ -51,10 +52,9 @@ func BenchmarkMany(b *testing.B) {
 	b.StopTimer()
 	c.Finish()
 	Validate(c, s, nb, np, val, b.N)
-	//PrintLockCounts(s, nb, np, false)
 }
 
-func BenchmarkBid(b *testing.B) {
+func BenchmarkBuy(b *testing.B) {
 	runtime.GOMAXPROCS(8)
 	b.StopTimer()
 	nb := 10000
@@ -81,19 +81,10 @@ func BenchmarkBid(b *testing.B) {
 				p := ProductKey(i % np)
 				u := UserKey(i % nb)
 				amt := int32(rand.Intn(100))
-				tx := Query{TXN: D_BID, K1: u, A: amt, K2: p, S1: "xx", W: nil, T: 0}
+				tx := Query{TXN: D_BUY, K1: u, A: amt, K2: p, W: nil, T: 0}
 				_, err := w.One(tx)
 				if err == nil {
-					// Change to CAS
-					done := false
-					for !done {
-						x := atomic.LoadInt32(&val[i%np])
-						if amt > x {
-							done = atomic.CompareAndSwapInt32(&val[i%np], x, amt)
-						} else {
-							done = true
-						}
-					}
+					atomic.AddInt32(&val[i%np], amt)
 				}
 			}
 			wg.Done()
@@ -108,7 +99,7 @@ func BenchmarkBid(b *testing.B) {
 	//PrintLockCounts(s, nb, np, false)
 }
 
-func BenchmarkBidNC(b *testing.B) {
+func BenchmarkBuyNC(b *testing.B) {
 	runtime.GOMAXPROCS(8)
 	b.StopTimer()
 	nb := 10000
@@ -136,30 +127,25 @@ func BenchmarkBidNC(b *testing.B) {
 				p := ProductKey(i % np)
 				u := UserKey(i % nb)
 				amt := int32(rand.Intn(100))
-				tx := Query{TXN: D_BID_NC, K1: u, A: amt, K2: p, S1: "xx", W: nil, T: 0}
+				tx := Query{TXN: D_BUY_NC, K1: u, A: amt, K2: p, W: nil, T: 0}
 				_, err := w.One(tx)
 				if err == nil {
-					// Change to CAS
-					done := false
-					for !done {
-						x := atomic.LoadInt32(&val[i%np])
-						if amt > x {
-							done = atomic.CompareAndSwapInt32(&val[i%np], x, amt)
-						} else {
-							done = true
-						}
-					}
+					atomic.AddInt32(&val[i%np], amt)
+				} else if err == ESTASH {
+					fmt.Println("Stashing %v\n", p)
+					atomic.AddInt32(&val[i%np], amt)
 				}
 			}
 			wg.Done()
 		}(p)
 	}
-	dlog.Printf("Waiting on outer\n")
 	wg.Wait()
 	dlog.Printf("done\n")
 	b.StopTimer()
 	c.Finish()
-	Validate(c, s, nb, np, val, b.N)
+	if !Validate(c, s, nb, np, val, b.N) {
+		b.Errorf("Validate failed\n")
+	}
 	//PrintLockCounts(s, nb, np, false)
 }
 

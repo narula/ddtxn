@@ -37,18 +37,18 @@ func Validate(c *Coordinator, s *Store, nkeys int, nproducts int, val []int32, n
 		if err != nil {
 			if val[j] != 0 {
 				fmt.Printf("Validating key %v failed; store: none should have: %v\n", k, val[j])
+				dlog.Printf("Validating key %v failed; store: none should have: %v\n", k, val[j])
 				good = false
 			}
 			continue
 		}
 		x = v.Value().(int32)
-		dlog.Printf("Validate: %v %v\n", k, x)
 		if x != val[j] {
-			fmt.Printf("Validating key %v failed; store: %v should have: %v\n", k, x, val[j])
+			dlog.Printf("Validating key %v failed; store: %v should have: %v\n", k, x, val[j])
 			good = false
 		}
 		if x == 0 {
-			dlog.Printf("Saying x is zero %v %v\n", x, zero_cnt)
+			//dlog.Printf("Saying x is zero %v %v\n", x, zero_cnt)
 			zero_cnt++
 		}
 	}
@@ -58,6 +58,9 @@ func Validate(c *Coordinator, s *Store, nkeys int, nproducts int, val []int32, n
 		good = false
 	}
 	dlog.Printf("Done validating\n")
+	if !good {
+		fmt.Printf("Validating failed\n")
+	}
 	return good
 }
 

@@ -63,48 +63,14 @@ func BuyNCTxn(t Query, tx ETransaction) (*Result, error) {
 		return nil, ESTASH
 	}
 	if err == EABORT {
-		dlog.Println("Abort", br, err, t.K2)
+		dlog.Println("Abort", err, t.K2)
 		return r, EABORT
 	}
-	var sum int32
-	if err == nil {
-		sum = br.value.(int32)
+	if err != nil {
+		dlog.Fatalf("???")
 	}
+	var sum int32 = br.value.(int32)
 	tx.Write(t.K2, t.A+sum, WRITE)
-	if tx.Commit() == 0 {
-		return r, EABORT
-	}
-	return r, nil
-}
-
-// Commutative BID
-func BidTxn(t Query, tx ETransaction) (*Result, error) {
-	var r *Result = nil
-	tx.Write(t.K1, t.S1, WRITE)
-	tx.Write(t.K2, t.A, MAX)
-	if tx.Commit() == 0 {
-		return r, EABORT
-	}
-	return r, nil
-}
-
-// Version of Bid that puts bid in read set (doesn't rely on
-// commutativity)
-func BidNCTxn(t Query, tx ETransaction) (*Result, error) {
-	var r *Result = nil
-	tx.Write(t.K1, t.S1, WRITE)
-	high_bid, err := tx.Read(t.K2)
-	if err == ESTASH {
-		return nil, ESTASH
-	}
-	if err == ENOKEY {
-		tx.Write(t.K2, t.A, WRITE)
-	} else if err != nil {
-		dlog.Println("Abort", high_bid, err, t.K2)
-		return r, EABORT
-	} else if t.A > high_bid.Value().(int32) {
-		tx.Write(t.K2, t.A, WRITE)
-	}
 	if tx.Commit() == 0 {
 		return r, EABORT
 	}

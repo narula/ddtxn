@@ -28,8 +28,6 @@ const (
 const (
 	D_BUY = iota
 	D_BUY_NC
-	D_BID
-	D_BID_NC
 	D_READ_ONE
 	D_INCR_ONE
 
@@ -110,8 +108,6 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 	w.E.SetPhase(SPLIT)
 	w.Register(D_BUY, BuyTxn)
 	w.Register(D_BUY_NC, BuyNCTxn)
-	w.Register(D_BID, BidTxn)
-	w.Register(D_BID_NC, BidNCTxn)
 	w.Register(D_READ_ONE, ReadTxn)
 	w.Register(D_INCR_ONE, IncrTxn)
 
