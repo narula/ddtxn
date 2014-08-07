@@ -23,6 +23,7 @@ var prob = flag.Float64("contention", 100.0, "Probability contended key is in tx
 var readrate = flag.Int("rr", 0, "Read rate %.  Rest are writes")
 var dataFile = flag.String("out", "single-data.out", "Filename for output")
 var latency = flag.Bool("latency", false, "dummy")
+var Retry = flag.Bool("retry", false, "Whether to retry aborted transactions until they commit.  Changes the composition of reads/writes issued to the system (but maintains the read rate ratio specified for transactions *completed*. Default false.")
 
 func main() {
 	flag.Parse()
@@ -93,14 +94,18 @@ func main() {
 				if x < *readrate {
 					t.TXN = ddtxn.D_READ_ONE
 				}
-				committed := false
-				for !committed {
-					_, err := w.One(t)
-					if err == ddtxn.EABORT {
-						committed = false
-					} else {
-						committed = true
+				if *Retry {
+					committed := false
+					for !committed {
+						_, err := w.One(t)
+						if err == ddtxn.EABORT {
+							committed = false
+						} else {
+							committed = true
+						}
 					}
+				} else {
+					w.One(t)
 				}
 			}
 			wg.Done()
