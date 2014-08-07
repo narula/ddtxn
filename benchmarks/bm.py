@@ -15,6 +15,7 @@ parser.add_option("--rr", action="store", type="int", dest="read_rate", default=
 parser.add_option("--latency", action="store_true", dest="latency", default=False)
 parser.add_option("--rlock", action="store_false", dest="rlock", default=True)
 parser.add_option("--scp", action="store_true", dest="scp", default=True)
+parser.add_option("--noscp", action="store_false", dest="scp")
 parser.add_option("--wratio", action="store", type="float", dest="wratio", default=4)
 parser.add_option("--sr", action="store", type="int", dest="sr", default=10000)
 parser.add_option("--phase", action="store", type="int", dest="phase", default=80)
