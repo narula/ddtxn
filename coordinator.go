@@ -4,7 +4,6 @@ import (
 	"container/heap"
 	"ddtxn/dlog"
 	"flag"
-	"fmt"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -112,7 +111,7 @@ func (c *Coordinator) IncrementEpoch() {
 			if !br.dd {
 				br.dd = true
 				WMoved += 1
-				fmt.Printf("Moved %v %v to split %v\n", x, y, o.ratio())
+				dlog.Printf("Moved %v %v to split %v\n", x, y, o.ratio())
 				s.dd[o.k] = true
 				s.any_dd = true
 			} else {
