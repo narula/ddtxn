@@ -171,18 +171,18 @@ func (tx *OTransaction) addList(k Key, v Entry, op KeyType, create bool) {
 }
 
 func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
-	if tx.phase == SPLIT {
-		tx.addInt32(k, a, op, false)
+	// RTM requests that during the normal phase, Doppel operates
+	// just like OCC, for ease of exposition.  That means it would
+	// have to put the key into the read set and potentially abort
+	// accordingly.  Doing so here, but not using the value until
+	// commit time.
+	br, err := tx.s.getKey(k)
+	if err != nil {
+		return err
+	}
+	if *SysType == DOPPEL && tx.phase == SPLIT && br.dd == true {
+		// Do not need to read-validate
 	} else {
-		// RTM requests that during the normal phase, Doppel operates
-		// just like OCC, for ease of exposition.  That means it would
-		// have to put the key into the read set and potentially abort
-		// accordingly.  Doing so here, but not using the value until
-		// commit time.
-		br, err := tx.s.getKey(k)
-		if err != nil {
-			return err
-		}
 		ok, last := br.IsUnlocked()
 		// if locked and not by me, abort
 		// else note the last timestamp and save it
@@ -195,8 +195,15 @@ func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 		tx.read[n] = br
 		tx.lasts = tx.lasts[0 : n+1]
 		tx.lasts[n] = last
-		tx.addInt32(k, a, op, false)
 	}
+	n := len(tx.writes)
+	tx.writes = tx.writes[0 : n+1]
+	tx.writes[n].key = k
+	tx.writes[n].br = br
+	tx.writes[n].vint32 = a
+	tx.writes[n].op = op
+	tx.writes[n].create = false
+	tx.writes[n].locked = false
 	return nil
 }
 

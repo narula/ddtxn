@@ -20,7 +20,7 @@ parser.add_option("--wratio", action="store", type="float", dest="wratio", defau
 parser.add_option("--sr", action="store", type="int", dest="sr", default=10000)
 parser.add_option("--phase", action="store", type="int", dest="phase", default=80)
 parser.add_option("--retry", action="store_true", dest="retry", default=False)
-parser.add_option("--atomic", action="store_true", dest="atomic", default=True)
+parser.add_option("--atomic", action="store_true", dest="atomic", default=False)
 
 
 (options, args) = parser.parse_args()
@@ -181,7 +181,7 @@ def single_exp(fnpath, host, rr, ncores):
     fnn = '%s-single-%d-%s.data' % (host, ncores, options.retry)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
-    prob = [0, 1, 2, 3, 5, 10, 20, 50]
+    prob = [0, 0.1, 0.5, 1, 2, 3, 5, 10, 20, 50]
     if options.short:
         prob = [1, 5]
     cpu_args = ""
@@ -192,8 +192,8 @@ def single_exp(fnpath, host, rr, ncores):
     for i in prob:
         f.write("%0.2f"% i)
         f.write("\t")
-        do(f, rr, i, ncores, cpu_args, 0)
-        do(f, rr, i, ncores, cpu_args, 1)
+        do(f, rr, i, ncores, cpu_args, 0, atomic=False)
+        do(f, rr, i, ncores, cpu_args, 1, atomic=False)
         do(f, rr, i, ncores, cpu_args, 1, atomic=True)
         #do(f, rr, i, ncores, cpu_args, 2)
         f.write("\n")
