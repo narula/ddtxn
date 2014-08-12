@@ -179,10 +179,22 @@ func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 		// have to put the key into the read set and potentially abort
 		// accordingly.  Doing so here, but not using the value until
 		// commit time.
-		_, err := tx.Read(k)
+		br, err := tx.s.getKey(k)
 		if err != nil {
 			return err
 		}
+		ok, last := br.IsUnlocked()
+		// if locked and not by me, abort
+		// else note the last timestamp and save it
+		if !ok {
+			tx.Abort()
+			return EABORT
+		}
+		n := len(tx.read)
+		tx.read = tx.read[0 : n+1]
+		tx.read[n] = br
+		tx.lasts = tx.lasts[0 : n+1]
+		tx.lasts[n] = last
 		tx.addInt32(k, a, op, false)
 	}
 	return nil
