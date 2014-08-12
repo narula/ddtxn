@@ -131,9 +131,15 @@ func NewItemTxn(t Query, tx ETransaction) (*Result, error) {
 	tx.Write(ItemKey(xx), x, WRITE)
 	tx.WriteList(ItemsByCatKey(x.Categ), val, LIST)
 	tx.WriteList(ItemsByRegKey(region, x.Categ), val, LIST)
-	tx.WriteInt32(MaxBidKey(xx), int32(0), MAX)
+	err = tx.WriteInt32(MaxBidKey(xx), int32(0), MAX)
+	if err != nil {
+		return nil, err
+	}
 	tx.Write(MaxBidBidderKey(xx), uint64(0), WRITE)
-	tx.WriteInt32(NumBidsKey(xx), int32(0), SUM)
+	err = tx.WriteInt32(NumBidsKey(xx), int32(0), SUM)
+	if err != nil {
+		return nil, err
+	}
 
 	if tx.Commit() == 0 {
 		return r, EABORT
@@ -175,12 +181,18 @@ func StoreBidTxn(t Query, tx ETransaction) (*Result, error) {
 		return nil, err
 	}
 	if price > max.int_value {
-		tx.WriteInt32(high, price, MAX)
+		err = tx.WriteInt32(high, price, MAX)
+		if err != nil {
+			return nil, err
+		}
 		tx.Write(bidder, user, WRITE)
 	}
 
 	// update # bids per item
-	tx.WriteInt32(NumBidsKey(item), 1, SUM)
+	err = tx.WriteInt32(NumBidsKey(item), 1, SUM)
+	if err != nil {
+		return nil, err
+	}
 
 	// add to item's bid list
 	e := Entry{int(bid.Price), bid_key, 0}
@@ -217,7 +229,10 @@ func StoreCommentTxn(t Query, tx ETransaction) (*Result, error) {
 	tx.Write(com, comment, WRITE)
 
 	rkey := RatingKey(touser)
-	tx.WriteInt32(rkey, int32(rating), SUM)
+	err := tx.WriteInt32(rkey, int32(rating), SUM)
+	if err != nil {
+		return nil, err
+	}
 
 	if tx.Commit() == 0 {
 		dlog.Printf("Comment abort %v\n", t)
