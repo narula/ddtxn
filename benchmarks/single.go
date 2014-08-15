@@ -24,6 +24,7 @@ var readrate = flag.Int("rr", 0, "Read rate %.  Rest are writes")
 var dataFile = flag.String("out", "single-data.out", "Filename for output")
 var latency = flag.Bool("latency", false, "dummy")
 var Retry = flag.Bool("retry", false, "Whether to retry aborted transactions until they commit.  Changes the composition of reads/writes issued to the system (but maintains the read rate ratio specified for transactions *completed*. Default false.")
+var AtomicIncr = flag.Bool("atomic", false, "Use atomic increment function instead (no aborts)")
 
 func main() {
 	flag.Parse()
@@ -88,8 +89,11 @@ func main() {
 					}
 					t.K1 = ddtxn.ProductKey(k)
 				}
-				t.TXN = ddtxn.D_INCR_ONE
-				//x = int(ddtxn.RandN(&local_seed, 100))
+				if *AtomicIncr {
+					t.TXN = ddtxn.D_ATOMIC_INCR_ONE
+				} else {
+					t.TXN = ddtxn.D_INCR_ONE
+				}
 				x := r.Intn(100)
 				if x < *readrate {
 					t.TXN = ddtxn.D_READ_ONE
@@ -99,6 +103,9 @@ func main() {
 					for !committed {
 						_, err := w.One(t)
 						if err == ddtxn.EABORT {
+							if *AtomicIncr {
+								log.Fatalf("Should not be able to abort here")
+							}
 							committed = false
 						} else {
 							committed = true

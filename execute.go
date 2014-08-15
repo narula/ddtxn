@@ -32,12 +32,13 @@ type Write struct {
 type ETransaction interface {
 	Reset()
 	Read(k Key) (*BRecord, error)
-	WriteInt32(k Key, a int32, op KeyType)
+	WriteInt32(k Key, a int32, op KeyType) error
 	WriteList(k Key, l Entry, kt KeyType)
 	Write(k Key, v Value, kt KeyType)
 	Abort() TID
 	Commit() TID
 	SetPhase(int)
+	Store() *Store // For AtomicIncr benchmark transaction only
 }
 
 // Not threadsafe.  Tracks execution of transaction.
@@ -169,8 +170,41 @@ func (tx *OTransaction) addList(k Key, v Entry, op KeyType, create bool) {
 	tx.writes[n].locked = false
 }
 
-func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) {
-	tx.addInt32(k, a, op, false)
+func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
+	// RTM requests that during the normal phase, Doppel operates
+	// just like OCC, for ease of exposition.  That means it would
+	// have to put the key into the read set and potentially abort
+	// accordingly.  Doing so here, but not using the value until
+	// commit time.
+	br, err := tx.s.getKey(k)
+	if err != nil {
+		return err
+	}
+	if *SysType == DOPPEL && tx.phase == SPLIT && br.dd == true {
+		// Do not need to read-validate
+	} else {
+		ok, last := br.IsUnlocked()
+		// if locked and not by me, abort
+		// else note the last timestamp and save it
+		if !ok {
+			tx.Abort()
+			return EABORT
+		}
+		n := len(tx.read)
+		tx.read = tx.read[0 : n+1]
+		tx.read[n] = br
+		tx.lasts = tx.lasts[0 : n+1]
+		tx.lasts[n] = last
+	}
+	n := len(tx.writes)
+	tx.writes = tx.writes[0 : n+1]
+	tx.writes[n].key = k
+	tx.writes[n].br = br
+	tx.writes[n].vint32 = a
+	tx.writes[n].op = op
+	tx.writes[n].create = false
+	tx.writes[n].locked = false
+	return nil
 }
 
 func (tx *OTransaction) Write(k Key, v Value, kt KeyType) {
@@ -190,6 +224,10 @@ func (tx *OTransaction) WriteList(k Key, l Entry, kt KeyType) {
 
 func (tx *OTransaction) SetPhase(p int) {
 	tx.phase = p
+}
+
+func (tx *OTransaction) Store() *Store {
+	return tx.s
 }
 
 func (tx *OTransaction) Abort() TID {
@@ -269,13 +307,8 @@ func (tx *OTransaction) Commit() TID {
 					// successfully lock this earlier, but check to
 					// make sure the version didn't change after I
 					// read but before I locked
-					if !tx.read[i].Own(tx.lasts[i]) {
-						rd = false
-						break
-					} else {
-						rd = true
-						break
-					}
+					rd = tx.read[i].Own(tx.lasts[i])
+					break
 				}
 			}
 			if rd {
@@ -390,7 +423,7 @@ func (tx *LTransaction) upgrade(k Key) int {
 	return -1
 }
 
-func (tx *LTransaction) WriteInt32(k Key, a int32, op KeyType) {
+func (tx *LTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 	if len(tx.keys) == cap(tx.keys) {
 		// TODO: extend
 		log.Fatalf("Ran out of room\n")
@@ -407,6 +440,7 @@ func (tx *LTransaction) WriteInt32(k Key, a int32, op KeyType) {
 	}
 	br.mu.Lock()
 	tx.keys[n] = Rec{br: br, read: false, vint32: a, kt: op}
+	return nil
 }
 
 func (tx *LTransaction) Write(k Key, v Value, kt KeyType) {
@@ -457,6 +491,10 @@ func (tx *LTransaction) WriteList(k Key, l Entry, kt KeyType) {
 
 func (tx *LTransaction) SetPhase(p int) {
 	tx.phase = p
+}
+
+func (tx *LTransaction) Store() *Store {
+	return tx.s
 }
 
 func (tx *LTransaction) Abort() TID {
