@@ -1,7 +1,12 @@
 package spinlock
 
 import (
+	"runtime"
 	"sync/atomic"
+)
+
+const (
+	PREEMPT = 100
 )
 
 type Spinlock struct {
@@ -17,8 +22,14 @@ const (
 // spins until the mutex is available.
 func (s *Spinlock) Lock() {
 	done := false
+	i := PREEMPT
 	for !done {
+		if i == 0 {
+			runtime.Gosched()
+			i = PREEMPT
+		}
 		done = atomic.CompareAndSwapInt32(&s.state, 0, mutexLocked)
+		i--
 	}
 }
 
@@ -43,8 +54,13 @@ const spinlockMaxReaders = 1 << 30
 
 func (l *RWSpinlock) RLock() {
 	if atomic.AddInt32(&l.readerCount, 1) < 0 {
+		i := PREEMPT
 		for atomic.LoadInt32(&l.readerCount) < 0 {
-			// spin
+			if i == 0 {
+				runtime.Gosched()
+				i = PREEMPT
+			}
+			i--
 		}
 	}
 }
@@ -56,8 +72,14 @@ func (l *RWSpinlock) RUnlock() {
 func (l *RWSpinlock) Lock() {
 	l.w.Lock()
 	r := atomic.AddInt32(&l.readerCount, -spinlockMaxReaders) + spinlockMaxReaders
+	i := PREEMPT
 	for r != 0 {
+		if i == 0 {
+			runtime.Gosched()
+			i = PREEMPT
+		}
 		r = atomic.LoadInt32(&l.readerCount)
+		i--
 	}
 }
 
