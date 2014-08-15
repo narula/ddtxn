@@ -1,6 +1,7 @@
 package ddtxn
 
 import (
+	"ddtxn/spinlock"
 	"ddtxn/wfmutex"
 	"flag"
 	"log"
@@ -9,6 +10,8 @@ import (
 )
 
 var Conflicts = flag.Bool("conflicts", false, "Measure conflicts\n")
+
+var Spinlock = flag.Bool("spinlock", true, "Use spinlocks for 2PL\n")
 
 type KeyType int
 
@@ -26,6 +29,7 @@ type BRecord struct {
 	key_type  KeyType
 	dd        bool
 	last      wfmutex.WFMutex
+	lock      spinlock.RWSpinlock
 	value     Value
 	int_value int32
 	entries   []Entry
@@ -68,19 +72,35 @@ func MakeBR(k Key, val Value, kt KeyType) *BRecord {
 }
 
 func (br *BRecord) SLock() {
-	br.mu.Lock()
+	if *Spinlock {
+		br.lock.Lock()
+	} else {
+		br.mu.Lock()
+	}
 }
 
 func (br *BRecord) SUnlock() {
-	br.mu.Unlock()
+	if *Spinlock {
+		br.lock.Unlock()
+	} else {
+		br.mu.Unlock()
+	}
 }
 
 func (br *BRecord) SRLock() {
-	br.mu.RLock()
+	if *Spinlock {
+		br.lock.RLock()
+	} else {
+		br.mu.RLock()
+	}
 }
 
 func (br *BRecord) SRUnlock() {
-	br.mu.RUnlock()
+	if *Spinlock {
+		br.lock.RUnlock()
+	} else {
+		br.mu.RUnlock()
+	}
 }
 
 func (br *BRecord) Value() Value {
