@@ -67,6 +67,22 @@ func MakeBR(k Key, val Value, kt KeyType) *BRecord {
 	return b
 }
 
+func (br *BRecord) SLock() {
+	br.mu.Lock()
+}
+
+func (br *BRecord) SUnlock() {
+	br.mu.Unlock()
+}
+
+func (br *BRecord) SRLock() {
+	br.mu.RLock()
+}
+
+func (br *BRecord) SRUnlock() {
+	br.mu.RUnlock()
+}
+
 func (br *BRecord) Value() Value {
 	switch br.key_type {
 	case SUM:

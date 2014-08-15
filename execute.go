@@ -413,7 +413,7 @@ func (tx *LTransaction) Read(k Key) (*BRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	br.mu.RLock()
+	br.SRLock()
 	n := len(tx.keys)
 	tx.keys = tx.keys[0 : n+1]
 	tx.keys[n] = Rec{br: br, read: true}
@@ -424,7 +424,7 @@ func (tx *LTransaction) upgrade(k Key) int {
 	for i := 0; i < len(tx.keys); i++ {
 		if tx.keys[i].br.key == k && tx.keys[i].read == true {
 			tx.keys[i].read = false
-			tx.keys[i].br.mu.RUnlock()
+			tx.keys[i].br.SRUnlock()
 			return i
 		}
 	}
@@ -453,7 +453,7 @@ func (tx *LTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 			}
 		}
 	}
-	br.mu.Lock()
+	br.SLock()
 	tx.keys[n] = Rec{br: br, read: false, vint32: a, kt: op}
 	return nil
 }
@@ -478,7 +478,7 @@ func (tx *LTransaction) Write(k Key, v Value, kt KeyType) {
 		dlog.Printf("Creating %v %v %v\n", k, v, kt)
 		br = tx.s.CreateKey(k, v, kt)
 	}
-	br.mu.Lock()
+	br.SLock()
 	tx.keys[n] = Rec{br: br, read: false, v: v, kt: kt}
 }
 
@@ -500,7 +500,7 @@ func (tx *LTransaction) WriteList(k Key, l Entry, kt KeyType) {
 	if br == nil || err != nil {
 		br = tx.s.CreateKey(k, nil, LIST)
 	}
-	br.mu.Lock()
+	br.SLock()
 	tx.keys[n] = Rec{br: br, read: false, ve: l, kt: kt}
 }
 
@@ -515,9 +515,9 @@ func (tx *LTransaction) Store() *Store {
 func (tx *LTransaction) Abort(k Key) TID {
 	for i := len(tx.keys) - 1; i >= 0; i-- {
 		if tx.keys[i].read {
-			tx.keys[i].br.mu.RUnlock()
+			tx.keys[i].br.SRUnlock()
 		} else {
-			tx.keys[i].br.mu.Unlock()
+			tx.keys[i].br.SUnlock()
 		}
 	}
 	return 0
@@ -540,9 +540,9 @@ func (tx *LTransaction) Commit() TID {
 			default:
 				tx.s.Set(tx.keys[i].br, tx.keys[i].v, tx.keys[i].kt)
 			}
-			tx.keys[i].br.mu.Unlock()
+			tx.keys[i].br.SUnlock()
 		} else {
-			tx.keys[i].br.mu.RUnlock()
+			tx.keys[i].br.SRUnlock()
 		}
 	}
 	return tid

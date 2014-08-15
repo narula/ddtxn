@@ -113,7 +113,7 @@ func (s *Store) CreateLockedKey(k Key, kt KeyType) (*BRecord, error) {
 func (s *Store) CreateMuLockedKey(k Key, kt KeyType) (*BRecord, error) {
 	chunk := s.store[k[0]]
 	br := MakeBR(k, nil, kt)
-	br.mu.Lock()
+	br.SLock()
 	chunk.Lock()
 	_, ok := chunk.rows[k]
 	if ok {
