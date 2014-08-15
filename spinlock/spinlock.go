@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	PREEMPT = 100
+	PREEMPT = 5
 )
 
 type Spinlock struct {
