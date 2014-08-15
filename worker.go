@@ -69,7 +69,7 @@ type Worker struct {
 	local_store *LocalStore
 	next        TID
 	epoch       TID
-	done        chan Query
+	done        chan bool
 	waiters     *TStore
 	E           ETransaction
 	txns        []TransactionFunc
@@ -79,6 +79,7 @@ type Worker struct {
 	Nwait        time.Duration
 	Nwait2       time.Duration
 	NKeyAccesses []int64
+	tickle       chan TID
 }
 
 func (w *Worker) Register(fn int, transaction TransactionFunc) {
@@ -92,9 +93,10 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 		local_store: NewLocalStore(s),
 		coordinator: c,
 		Nstats:      make([]int64, LAST_STAT),
-		epoch:       c.epochTID,
-		done:        make(chan Query),
+		epoch:       TID(c.epochTID),
+		done:        make(chan bool),
 		txns:        make([]TransactionFunc, LAST_TXN),
+		tickle:      make(chan TID),
 	}
 	if *SysType == DOPPEL {
 		w.waiters = TSInit(START_SIZE)
@@ -145,6 +147,8 @@ func (w *Worker) doTxn(t Query) (*Result, error) {
 	x, err := w.txns[t.TXN](t, w.E)
 	if err == ESTASH {
 		w.Nstats[NSTASHED]++
+		p, _ := UndoCKey(t.K1)
+		dlog.Printf("[%v] Stashing txn %v; epoch %v\n", w.ID, p, w.epoch)
 		w.stashTxn(t)
 		return nil, err
 	} else if err == nil {
@@ -183,19 +187,25 @@ func (w *Worker) transition() {
 		w.Lock()
 		defer w.Unlock()
 		e := w.coordinator.GetEpoch()
-		if e == w.epoch {
+		if e <= w.epoch {
 			return
 		}
 		start := time.Now()
 		w.E.SetPhase(MERGE)
 		w.local_store.Merge()
 		dlog.Printf("[%v] Sending ack for epoch change %v\n", w.ID, e)
-		w.coordinator.wepoch[w.ID] <- true
+		w.coordinator.wepoch[w.ID] <- e
 		dlog.Printf("[%v] Waiting for safe for epoch change %v\n", w.ID, e)
-		<-w.coordinator.wsafe[w.ID]
+		x := <-w.coordinator.wsafe[w.ID]
+		if x != e {
+			log.Fatalf("Worker %v out of alignment; acked %v, got safe for %v\n", w.ID, e, x)
+		}
 		w.E.SetPhase(JOIN)
 		dlog.Printf("[%v] Entering join phase %v\n", w.ID, e)
 		for i := 0; i < len(w.waiters.t); i++ {
+			k1 := w.waiters.t[i].K1
+			p, _ := UndoCKey(k1)
+			dlog.Printf("[%v] Doing waiter %v\n", w.ID, p)
 			r, err := w.doTxn2(w.waiters.t[i])
 			if err == ESTASH {
 				log.Fatalf("Stashing when trying to execute stashed\n")
@@ -210,9 +220,12 @@ func (w *Worker) transition() {
 		w.waiters.clear()
 		w.E.SetPhase(SPLIT)
 		dlog.Printf("[%v] Sending done %v\n", w.ID, e)
-		w.coordinator.wdone[w.ID] <- true
+		w.coordinator.wdone[w.ID] <- e
 		dlog.Printf("[%v] Awaiting go %v\n", w.ID, e)
-		<-w.coordinator.wgo[w.ID]
+		x = <-w.coordinator.wgo[w.ID]
+		if x != e {
+			log.Fatalf("Worker %v out of alignment; said done for %v, got go for %v\n", w.ID, e, x)
+		}
 		dlog.Printf("[%v] Done transitioning %v\n", w.ID, e)
 		end := time.Since(start)
 		w.Nwait += end
@@ -223,47 +236,29 @@ func (w *Worker) transition() {
 // Periodically check if the epoch changed.  This is important because
 // I might not always be receiving calls to One()
 func (w *Worker) run() {
-	duration := time.Duration((*PhaseLength)*2) * time.Millisecond
+	duration := time.Duration(*PhaseLength) * time.Millisecond
 	tm := time.NewTicker(duration).C
 	_ = tm
 	for {
 		select {
-		case x := <-w.done:
-			if *SysType == DOPPEL {
-				dlog.Printf("%v Received done\n", w.ID)
-				w.Lock()
-				w.E.SetPhase(MERGE)
-				w.local_store.Merge()
-				dlog.Printf("%v Done last merge, doing %v waiters\n", w.ID, len(w.waiters.t))
-				w.E.SetPhase(JOIN)
-				for i := 0; i < len(w.waiters.t); i++ {
-					t := w.waiters.t[i]
-					r, err := w.doTxn2(t)
-					if t.W != nil {
-						t.W <- struct {
-							R *Result
-							E error
-						}{r, err}
-					}
-				}
-				w.waiters.clear()
-				w.Unlock()
-			}
-			x.W <- struct {
-				R *Result
-				E error
-			}{nil, nil}
+		case <-w.done:
 			return
 		case <-tm:
 			// This is necessary if all worker threads are blocked
-			// waiting for stashed reads, but there's a read race
-			// condition on w.epoch with a call to transition() from
-			// One().  I'm ok with that cause this is just a tickle.
+			// waiting for stashed reads.
 			if *SysType == DOPPEL {
+				w.RLock()
 				e := w.coordinator.GetEpoch()
 				if e > w.epoch {
+					w.RUnlock()
 					w.transition()
+				} else {
+					w.RUnlock()
 				}
+			}
+		case <-w.tickle:
+			if *SysType == DOPPEL {
+				w.transition()
 			}
 		}
 	}
@@ -275,7 +270,7 @@ func (w *Worker) One(t Query) (*Result, error) {
 		e := w.coordinator.GetEpoch()
 		if w.epoch != e {
 			w.RUnlock()
-			w.transition()
+			w.tickle <- e
 			w.RLock()
 		}
 	}

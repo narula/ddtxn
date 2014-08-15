@@ -22,9 +22,10 @@ type Chunk struct {
 var UseRLocks = flag.Bool("rlock", true, "Use Rlocks\n")
 
 var (
-	ENOKEY = errors.New("doppel: no key")
-	EABORT = errors.New("doppel: abort")
-	ESTASH = errors.New("doppel: stash")
+	ENOKEY  = errors.New("doppel: no key")
+	EABORT  = errors.New("doppel: abort")
+	ESTASH  = errors.New("doppel: stash")
+	EEXISTS = errors.New("doppel: trying to create key which already exists")
 )
 
 const (
@@ -92,13 +93,35 @@ func (s *Store) CreateKey(k Key, v Value, kt KeyType) *BRecord {
 	return br
 }
 
-func (s *Store) CreateInt32Key(k Key, v int32, kt KeyType) *BRecord {
+// The next two functions exist because we have to make sure the
+// record is locked and inserted while holding the lock on the chunk.
+
+func (s *Store) CreateLockedKey(k Key, kt KeyType) (*BRecord, error) {
 	chunk := s.store[k[0]]
-	br := MakeBR(k, v, kt)
+	br := MakeBR(k, nil, kt)
+	br.Lock()
 	chunk.Lock()
+	_, ok := chunk.rows[k]
+	if ok {
+		return nil, EEXISTS
+	}
 	chunk.rows[k] = br
 	chunk.Unlock()
-	return br
+	return br, nil
+}
+
+func (s *Store) CreateMuLockedKey(k Key, kt KeyType) (*BRecord, error) {
+	chunk := s.store[k[0]]
+	br := MakeBR(k, nil, kt)
+	br.mu.Lock()
+	chunk.Lock()
+	_, ok := chunk.rows[k]
+	if ok {
+		return nil, EEXISTS
+	}
+	chunk.rows[k] = br
+	chunk.Unlock()
+	return br, nil
 }
 
 func (s *Store) SetInt32(br *BRecord, v int32, op KeyType) {

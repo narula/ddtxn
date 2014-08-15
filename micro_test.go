@@ -2,7 +2,6 @@ package ddtxn
 
 import (
 	"ddtxn/dlog"
-	"fmt"
 	"math/rand"
 	"runtime"
 	"strconv"
@@ -99,62 +98,12 @@ func BenchmarkBuy(b *testing.B) {
 	//PrintLockCounts(s, nb, np, false)
 }
 
-func BenchmarkBuyNC(b *testing.B) {
-	runtime.GOMAXPROCS(8)
-	b.StopTimer()
-	nb := 10000
-	np := 100
-	n := 8
-	s := NewStore()
-	// Load
-	for i := 0; i < np; i++ {
-		s.CreateKey(ProductKey(i), int32(0), WRITE)
-	}
-	for i := 0; i < nb; i++ {
-		s.CreateKey(UserKey(i), "x", WRITE)
-	}
-
-	c := NewCoordinator(n, s)
-	val := make([]int32, np)
-
-	var wg sync.WaitGroup
-	b.StartTimer()
-	for p := 0; p < n; p++ {
-		wg.Add(1)
-		go func(id int) {
-			w := c.Workers[id]
-			for i := 0; i < b.N/3; i++ {
-				p := ProductKey(i % np)
-				u := UserKey(i % nb)
-				amt := int32(rand.Intn(100))
-				tx := Query{TXN: D_BUY_NC, K1: u, A: amt, K2: p, W: nil, T: 0}
-				_, err := w.One(tx)
-				if err == nil {
-					atomic.AddInt32(&val[i%np], amt)
-				} else if err == ESTASH {
-					fmt.Println("Stashing %v\n", p)
-					atomic.AddInt32(&val[i%np], amt)
-				}
-			}
-			wg.Done()
-		}(p)
-	}
-	wg.Wait()
-	dlog.Printf("done\n")
-	b.StopTimer()
-	c.Finish()
-	if !Validate(c, s, nb, np, val, b.N) {
-		b.Errorf("Validate failed\n")
-	}
-	//PrintLockCounts(s, nb, np, false)
-}
-
 func BenchmarkRead(b *testing.B) {
-	runtime.GOMAXPROCS(8)
+	runtime.GOMAXPROCS(4)
 	b.StopTimer()
 	nb := 10000
 	np := 100
-	n := 8
+	n := 4
 
 	s := NewStore()
 	// Load
@@ -194,6 +143,7 @@ func BenchmarkRead(b *testing.B) {
 					}), T: 0}
 					_, err := w.One(tx)
 					if err == ESTASH {
+						dlog.Printf("client [%v] waiting for %v; epoch %v\n", w.ID, i%np, w.epoch)
 						<-tx.W
 					}
 				}

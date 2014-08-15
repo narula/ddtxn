@@ -4,9 +4,9 @@ import (
 	"container/heap"
 	"ddtxn/dlog"
 	"flag"
+	"log"
 	"sync/atomic"
 	"time"
-	"unsafe"
 )
 
 const (
@@ -21,13 +21,13 @@ var PhaseLength = flag.Int("phase", 80, "Phase length in milliseconds, default 8
 type Coordinator struct {
 	n        int
 	Workers  []*Worker
-	epochTID TID // Global TID, atomically incremented and read
+	epochTID uint64 // Global TID, atomically incremented and read
 
 	// Notify workers
-	wsafe  []chan bool
-	wepoch []chan bool
-	wgo    []chan bool
-	wdone  []chan bool
+	wepoch []chan TID
+	wsafe  []chan TID
+	wgo    []chan TID
+	wdone  []chan TID
 
 	Done       chan chan bool
 	Accelerate chan bool
@@ -38,18 +38,18 @@ func NewCoordinator(n int, s *Store) *Coordinator {
 		n:          n,
 		Workers:    make([]*Worker, n),
 		epochTID:   EPOCH_INCR,
-		wepoch:     make([]chan bool, n),
-		wsafe:      make([]chan bool, n),
-		wgo:        make([]chan bool, n),
-		wdone:      make([]chan bool, n),
+		wepoch:     make([]chan TID, n),
+		wsafe:      make([]chan TID, n),
+		wgo:        make([]chan TID, n),
+		wdone:      make([]chan TID, n),
 		Done:       make(chan chan bool),
 		Accelerate: make(chan bool),
 	}
 	for i := 0; i < n; i++ {
-		c.wepoch[i] = make(chan bool)
-		c.wsafe[i] = make(chan bool)
-		c.wgo[i] = make(chan bool)
-		c.wdone[i] = make(chan bool)
+		c.wepoch[i] = make(chan TID)
+		c.wsafe[i] = make(chan TID)
+		c.wgo[i] = make(chan TID)
+		c.wdone[i] = make(chan TID)
 		c.Workers[i] = NewWorker(i, s, c)
 	}
 	dlog.Printf("[coordinator] %v workers\n", n)
@@ -60,13 +60,13 @@ func NewCoordinator(n int, s *Store) *Coordinator {
 var NextEpoch int64
 
 func (c *Coordinator) NextGlobalTID() TID {
-	NextEpoch++
-	x := atomic.AddUint64((*uint64)(unsafe.Pointer(&c.epochTID)), EPOCH_INCR)
+	atomic.AddInt64(&NextEpoch, 1)
+	x := atomic.AddUint64(&c.epochTID, EPOCH_INCR)
 	return TID(x)
 }
 
 func (c *Coordinator) GetEpoch() TID {
-	x := atomic.LoadUint64((*uint64)(unsafe.Pointer(&c.epochTID)))
+	x := atomic.LoadUint64(&c.epochTID)
 	return TID(x)
 }
 
@@ -78,20 +78,27 @@ var Time_in_IE1 time.Duration
 func (c *Coordinator) IncrementEpoch() {
 	dlog.Printf("Incrementing epoch %v\n", c.epochTID)
 	start := time.Now()
-	c.NextGlobalTID()
+	next_epoch := c.NextGlobalTID()
 
 	// Wait for everyone to merge the previous epoch
 	for i := 0; i < c.n; i++ {
-		<-c.wepoch[i]
+		e := <-c.wepoch[i]
+		if e != next_epoch {
+			log.Fatalf("Out of alignment in epoch ack; I expected %v, got %v\n", next_epoch, e)
+		}
 	}
 
 	// All merged.  The previous epoch is now safe; tell everyone to
 	// do their reads.
 	for i := 0; i < c.n; i++ {
-		c.wsafe[i] <- true
+		c.wsafe[i] <- next_epoch
 	}
 	for i := 0; i < c.n; i++ {
-		<-c.wdone[i]
+		e := <-c.wdone[i]
+		if e != next_epoch {
+			log.Fatalf("Out of alignment in done; I expected %v, got %v\n", next_epoch, e)
+		}
+
 	}
 
 	// Reads done!  Check stats
@@ -158,8 +165,7 @@ func (c *Coordinator) IncrementEpoch() {
 		Time_in_IE1 += end
 	}
 	for i := 0; i < c.n; i++ {
-		c.wgo[i] <- true
-		//dlog.Printf("Sent go to %v for %v\n", i, c.epochTID)
+		c.wgo[i] <- next_epoch
 	}
 	end := time.Since(start)
 	Time_in_IE += end
@@ -167,9 +173,9 @@ func (c *Coordinator) IncrementEpoch() {
 
 func (c *Coordinator) Finish() {
 	dlog.Printf("Coordinator finishing\n")
-	if *SysType == DOPPEL {
-		c.IncrementEpoch()
-	}
+	x := make(chan bool)
+	c.Done <- x
+	<-x
 }
 
 func (c *Coordinator) Process() {
@@ -177,13 +183,11 @@ func (c *Coordinator) Process() {
 	for {
 		select {
 		case x := <-c.Done:
+			if *SysType == DOPPEL {
+				c.IncrementEpoch()
+			}
 			for i := 0; i < c.n; i++ {
-				txn := Query{W: make(chan struct {
-					R *Result
-					E error
-				})}
-				c.Workers[i].done <- txn
-				<-txn.W
+				c.Workers[i].done <- true
 				dlog.Printf("Worker %v finished\n", i)
 			}
 			x <- true

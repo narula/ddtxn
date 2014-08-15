@@ -4,7 +4,6 @@ import (
 	"ddtxn/dlog"
 	"flag"
 	"log"
-	"runtime/debug"
 )
 
 var SampleRate = flag.Int64("sr", 10000, "Sample every sr nanoseconds\n")
@@ -21,12 +20,17 @@ type Write struct {
 	br     *BRecord
 	v      Value
 	op     KeyType
-	create bool
 	locked bool
 	vint32 int32
 
 	// TODO: Handle writing more than once to a list per txn
 	ve Entry
+}
+
+type ReadKey struct {
+	key  Key
+	br   *BRecord
+	last uint64
 }
 
 type ETransaction interface {
@@ -35,7 +39,7 @@ type ETransaction interface {
 	WriteInt32(k Key, a int32, op KeyType) error
 	WriteList(k Key, l Entry, kt KeyType)
 	Write(k Key, v Value, kt KeyType)
-	Abort() TID
+	Abort(k Key) TID
 	Commit() TID
 	SetPhase(int)
 	Store() *Store // For AtomicIncr benchmark transaction only
@@ -44,8 +48,7 @@ type ETransaction interface {
 // Not threadsafe.  Tracks execution of transaction.
 type OTransaction struct {
 	padding0 [128]byte
-	read     []*BRecord
-	lasts    []uint64
+	read     []ReadKey
 	w        *Worker
 	s        *Store
 	ls       *LocalStore
@@ -59,8 +62,7 @@ type OTransaction struct {
 
 func StartOTransaction(w *Worker) *OTransaction {
 	tx := &OTransaction{
-		read:   make([]*BRecord, 0, 100),
-		lasts:  make([]uint64, 0, 100),
+		read:   make([]ReadKey, 0, 100),
 		writes: make([]Write, 0, 100),
 		w:      w,
 		s:      w.store,
@@ -70,7 +72,6 @@ func StartOTransaction(w *Worker) *OTransaction {
 }
 
 func (tx *OTransaction) Reset() {
-	tx.lasts = tx.lasts[:0]
 	tx.read = tx.read[:0]
 	tx.writes = tx.writes[:0]
 	tx.count = (*SysType == DOPPEL && tx.sr_rate == 0)
@@ -104,7 +105,10 @@ func (tx *OTransaction) Read(k Key) (*BRecord, error) {
 			tx.w.NKeyAccesses[p]++
 		}
 	}
-	if err != nil {
+	if err == ENOKEY {
+		n := len(tx.read)
+		tx.read = tx.read[0 : n+1]
+		tx.read[n] = ReadKey{key: k, br: nil, last: 0}
 		return nil, err
 	}
 	ok, last := br.IsUnlocked()
@@ -114,18 +118,16 @@ func (tx *OTransaction) Read(k Key) (*BRecord, error) {
 		if tx.count {
 			tx.ls.candidates.Conflict(k)
 		}
-		tx.Abort()
+		tx.Abort(k)
 		return nil, EABORT
 	}
 	n := len(tx.read)
 	tx.read = tx.read[0 : n+1]
-	tx.read[n] = br
-	tx.lasts = tx.lasts[0 : n+1]
-	tx.lasts[n] = last
+	tx.read[n] = ReadKey{key: k, br: br, last: last}
 	return br, nil
 }
 
-func (tx *OTransaction) add(k Key, v Value, op KeyType, create bool) {
+func (tx *OTransaction) add(k Key, v Value, op KeyType) {
 	if len(tx.writes) == cap(tx.writes) {
 		// TODO: extend
 		log.Fatalf("Ran out of room\n")
@@ -136,11 +138,10 @@ func (tx *OTransaction) add(k Key, v Value, op KeyType, create bool) {
 	tx.writes[n].br = nil
 	tx.writes[n].v = v
 	tx.writes[n].op = op
-	tx.writes[n].create = create
 	tx.writes[n].locked = false
 }
 
-func (tx *OTransaction) addInt32(k Key, v int32, op KeyType, create bool) {
+func (tx *OTransaction) addInt32(k Key, v int32, op KeyType) {
 	if len(tx.writes) == cap(tx.writes) {
 		// TODO: extend
 		log.Fatalf("Ran out of room\n")
@@ -151,11 +152,10 @@ func (tx *OTransaction) addInt32(k Key, v int32, op KeyType, create bool) {
 	tx.writes[n].br = nil
 	tx.writes[n].vint32 = v
 	tx.writes[n].op = op
-	tx.writes[n].create = create
 	tx.writes[n].locked = false
 }
 
-func (tx *OTransaction) addList(k Key, v Entry, op KeyType, create bool) {
+func (tx *OTransaction) addList(k Key, v Entry, op KeyType) {
 	if len(tx.writes) == cap(tx.writes) {
 		// TODO: extend
 		log.Fatalf("Ran out of room\n")
@@ -166,7 +166,6 @@ func (tx *OTransaction) addList(k Key, v Entry, op KeyType, create bool) {
 	tx.writes[n].br = nil
 	tx.writes[n].ve = v
 	tx.writes[n].op = op
-	tx.writes[n].create = create
 	tx.writes[n].locked = false
 }
 
@@ -177,24 +176,26 @@ func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 	// accordingly.  Doing so here, but not using the value until
 	// commit time.
 	br, err := tx.s.getKey(k)
-	if err != nil {
-		return err
-	}
-	if *SysType == DOPPEL && tx.phase == SPLIT && br.dd == true {
+	if *SysType == DOPPEL && tx.phase == SPLIT && br != nil && br.dd == true {
 		// Do not need to read-validate
 	} else {
-		ok, last := br.IsUnlocked()
-		// if locked and not by me, abort
-		// else note the last timestamp and save it
-		if !ok {
-			tx.Abort()
-			return EABORT
+		var last uint64
+		if br == nil || err == ENOKEY {
+			// Key does not exist.
+			last = 0
+		} else {
+			var ok bool
+			ok, last = br.IsUnlocked()
+			// if locked and not by me, abort
+			// else note the last timestamp and save it
+			if !ok {
+				tx.Abort(k)
+				return EABORT
+			}
 		}
 		n := len(tx.read)
 		tx.read = tx.read[0 : n+1]
-		tx.read[n] = br
-		tx.lasts = tx.lasts[0 : n+1]
-		tx.lasts[n] = last
+		tx.read[n] = ReadKey{key: k, br: br, last: last}
 	}
 	n := len(tx.writes)
 	tx.writes = tx.writes[0 : n+1]
@@ -202,24 +203,23 @@ func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 	tx.writes[n].br = br
 	tx.writes[n].vint32 = a
 	tx.writes[n].op = op
-	tx.writes[n].create = false
 	tx.writes[n].locked = false
 	return nil
 }
 
 func (tx *OTransaction) Write(k Key, v Value, kt KeyType) {
 	if kt == SUM || kt == MAX {
-		tx.addInt32(k, v.(int32), kt, true)
+		tx.addInt32(k, v.(int32), kt)
 		return
 	}
-	tx.add(k, v, kt, true)
+	tx.add(k, v, kt)
 }
 
 func (tx *OTransaction) WriteList(k Key, l Entry, kt KeyType) {
 	if kt != LIST {
 		log.Fatalf("Not a list\n")
 	}
-	tx.addList(k, l, kt, true)
+	tx.addList(k, l, kt)
 }
 
 func (tx *OTransaction) SetPhase(p int) {
@@ -230,7 +230,10 @@ func (tx *OTransaction) Store() *Store {
 	return tx.s
 }
 
-func (tx *OTransaction) Abort() TID {
+func (tx *OTransaction) Abort(k Key) TID {
+	if tx.count {
+		tx.ls.candidates.Conflict(k)
+	}
 	for i, _ := range tx.writes {
 		if tx.writes[i].locked {
 			tx.writes[i].br.Unlock(0)
@@ -239,48 +242,51 @@ func (tx *OTransaction) Abort() TID {
 	return 0
 }
 
+func (tx *OTransaction) checkOwnership(br *BRecord, last uint64) bool {
+	for j, _ := range tx.writes {
+		if tx.writes[j].key == br.key && tx.writes[j].locked {
+			if br.Own(last) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (tx *OTransaction) Commit() TID {
 	// for each write key
 	//  if global get from global store and lock
 	for i, _ := range tx.writes {
 		w := &tx.writes[i]
 		if w.br == nil {
-			br, err := tx.s.getKey(w.key)
+			var err error
+			w.br, err = tx.s.getKey(w.key)
 			if *CountKeys {
 				p, r := UndoCKey(w.key)
 				if r == 112 {
 					tx.w.NKeyAccesses[p]++
 				}
 			}
-			if br == nil || err != nil {
-				switch w.op {
-				case SUM:
-					br = tx.s.CreateInt32Key(w.key, 0, w.op)
-				case MAX:
-					br = tx.s.CreateInt32Key(w.key, 0, w.op)
-				case LIST:
-					br = tx.s.CreateKey(w.key, nil, LIST)
-				default:
-					if w.v == nil {
-						br = tx.s.CreateKey(w.key, "", WRITE)
-					} else {
-						br = tx.s.CreateKey(w.key, w.v, WRITE)
-					}
+			if *SysType == DOPPEL && tx.phase == SPLIT && w.br != nil {
+				if w.br.dd {
+					continue
 				}
 			}
-			w.br = br
-		}
-		if *SysType == DOPPEL && tx.phase == SPLIT {
-			if w.br.dd {
+			// Data doesn't exist, create it
+			if w.br == nil || err == ENOKEY {
+				var err2 error
+				w.br, err2 = tx.s.CreateLockedKey(w.key, w.op)
+				if err2 != nil {
+					// Someone snuck in and created the key
+					return tx.Abort(w.key)
+				}
+				w.locked = true
 				continue
 			}
 		}
 		if !w.br.Lock() {
-			if tx.count {
-				tx.ls.candidates.Conflict(w.key)
-			}
 			tx.w.Nstats[NO_LOCK]++
-			return tx.Abort()
+			return tx.Abort(w.key)
 		}
 		w.locked = true
 	}
@@ -290,36 +296,31 @@ func (tx *OTransaction) Commit() TID {
 
 	// for each read key
 	//  verify
-	if len(tx.read) != len(tx.lasts) {
-		debug.PrintStack()
-		log.Fatalf("Mismatch in lengths reads: %v, lasts: %v\n", tx.read, tx.lasts)
-	}
 	for i, _ := range tx.read {
-		// Would have checked for dd earlier
+		rk := &tx.read[i]
+		var err error
 		if tx.count {
-			tx.ls.candidates.Read(tx.read[i].key)
+			tx.ls.candidates.Read(rk.key)
 		}
-		rd := false
-		if !tx.read[i].Verify(tx.lasts[i]) {
-			for j, _ := range tx.writes {
-				if tx.writes[j].key == tx.read[i].key {
-					// We would have aborted if we did not
-					// successfully lock this earlier, but check to
-					// make sure the version didn't change after I
-					// read but before I locked
-					rd = tx.read[i].Own(tx.lasts[i])
-					break
-				}
-			}
-			if rd {
+		if rk.br == nil {
+			rk.br, err = tx.s.getKey(rk.key)
+			// Verify it still doesn't exist or I'm the one who
+			// created and locked it to write
+			if err == ENOKEY || tx.checkOwnership(rk.br, rk.last) {
 				continue
 			}
-			if tx.count {
-				tx.ls.candidates.Conflict(tx.read[i].key)
-			}
-			return tx.Abort()
 			tx.w.Nstats[NFAIL_VERIFY]++
+			return tx.Abort(rk.key)
 		}
+		if rk.br.Verify(rk.last) {
+			continue
+		}
+		// It didn't verify, but I might own it because I wrote it
+		if tx.checkOwnership(rk.br, rk.last) {
+			continue
+		}
+		tx.w.Nstats[NFAIL_VERIFY]++
+		return tx.Abort(rk.key)
 	}
 	// for each write key
 	//  if dd and split phase, apply locally
@@ -436,7 +437,14 @@ func (tx *LTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 	}
 	br, err := tx.s.getKey(k)
 	if br == nil || err != nil {
-		br = tx.s.CreateInt32Key(k, a, op)
+		var err2 error
+		br, err2 = tx.s.CreateMuLockedKey(k, op)
+		if err2 != nil {
+			br, err = tx.s.getKey(k)
+			if err != nil {
+				log.Fatalf("Should exist\n")
+			}
+		}
 	}
 	br.mu.Lock()
 	tx.keys[n] = Rec{br: br, read: false, vint32: a, kt: op}
@@ -497,7 +505,7 @@ func (tx *LTransaction) Store() *Store {
 	return tx.s
 }
 
-func (tx *LTransaction) Abort() TID {
+func (tx *LTransaction) Abort(k Key) TID {
 	for i := len(tx.keys) - 1; i >= 0; i-- {
 		if tx.keys[i].read {
 			tx.keys[i].br.mu.RUnlock()

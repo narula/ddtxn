@@ -43,11 +43,17 @@ func MakeBR(k Key, val Value, kt KeyType) *BRecord {
 	}
 	switch kt {
 	case SUM:
-		b.int_value = val.(int32)
+		if val != nil {
+			b.int_value = val.(int32)
+		}
 	case MAX:
-		b.int_value = val.(int32)
+		if val != nil {
+			b.int_value = val.(int32)
+		}
 	case WRITE:
-		b.value = val
+		if val != nil {
+			b.value = val
+		}
 	case LIST:
 		if val == nil {
 			b.entries = make([]Entry, 0)

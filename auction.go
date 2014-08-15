@@ -123,7 +123,7 @@ func NewItemTxn(t Query, tx ETransaction) (*Result, error) {
 			return nil, ESTASH
 		}
 		dlog.Printf("User doesn't exist %v\n", t.U1)
-		tx.Abort()
+		tx.Abort(UserKey(int(t.U1)))
 		return nil, EABORT
 	}
 	region := urec.value.(*User).Region

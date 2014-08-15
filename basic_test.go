@@ -164,7 +164,7 @@ func TestAuction(t *testing.T) {
 		W:  nil}
 	r, err = w.One(tx)
 	if err != nil {
-		t.Errorf("New item\n")
+		t.Fatalf("New item %v\n", err)
 	}
 	burrito := r.V.(uint64)
 
