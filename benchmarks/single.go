@@ -64,24 +64,21 @@ func main() {
 		wg.Add(1)
 		go func(n int) {
 			duration := time.Now().Add(time.Duration(*nsec) * time.Second)
-			//var local_seed uint32 = uint32(rand.Intn(10000000))
+			var local_seed uint32 = uint32(rand.Intn(10000000))
 			wi := n % (*nworkers)
 			w := coord.Workers[wi]
 			top := (wi + 1) * int(sp)
 			bottom := wi * int(sp)
 			dlog.Printf("%v: Noncontended section: %v to %v\n", n, bottom, top)
-			r := rand.New(rand.NewSource(int64(top))) // + time.Now().UnixNano()))
 			for duration.After(time.Now()) {
 				var t ddtxn.Query
-				flt := r.Float64() * 100
-				//x := int(ddtxn.RandN(&local_seed, 100))
-				if flt < *prob {
+				x := float64(ddtxn.RandN(&local_seed, 100))
+				if x < *prob {
 					// contended txn
 					t.K1 = ddtxn.ProductKey(pkey)
 				} else {
 					// uncontended
-					rnd := r.Intn(int(sp / 2))
-					//rnd := ddtxn.RandN(&local_seed, sp/2)
+					rnd := ddtxn.RandN(&local_seed, sp/2)
 					lb := int(rnd)
 					k := lb + wi*int(sp) + 1
 					if k < bottom || k >= top+1 {
@@ -94,13 +91,13 @@ func main() {
 				} else {
 					t.TXN = ddtxn.D_INCR_ONE
 				}
-				x := r.Intn(100)
-				if x < *readrate {
+				y := int(ddtxn.RandN(&local_seed, 100))
+				if y < *readrate {
 					t.TXN = ddtxn.D_READ_ONE
 				}
 				if *Retry {
 					committed := false
-					for !committed {
+					for !committed && duration.After(time.Now()) {
 						_, err := w.One(t)
 						if err == ddtxn.EABORT {
 							if *AtomicIncr {
@@ -129,7 +126,7 @@ func main() {
 	// nitr + NABORTS + ENOKEY is how many requests were issued.  A
 	// stashed transaction eventually executes and contributes to
 	// nitr.
-	out := fmt.Sprintf(" nworkers: %v, nwmoved: %v, nrmoved: %v, sys: %v, total/sec: %v, abortrate: %.2f, stashrate: %.2f, rr: %v, nkeys: %v, done: %v, actual time: %v, nreads: %v, nincrs: %v, epoch changes: %v, throughput ns/txn: %v, naborts: %v, coord time: %v, coord stats time: %v, total worker time transitioning: %v, nstashed: %v, rlock: %v, wrratio: %v, nsamples: %v, getkeys: %v, ddwrites: %v, nolock: %v, failv: %v ", *nworkers, ddtxn.WMoved, ddtxn.RMoved, *ddtxn.SysType, float64(nitr)/end.Seconds(), 100*float64(stats[ddtxn.NABORTS])/float64(nitr+stats[ddtxn.NABORTS]), 100*float64(stats[ddtxn.NSTASHED])/float64(nitr+stats[ddtxn.NABORTS]), *readrate, *nbidders, nitr, end, stats[ddtxn.D_READ_ONE], stats[ddtxn.D_INCR_ONE], ddtxn.NextEpoch, end.Nanoseconds()/nitr, stats[ddtxn.NABORTS], ddtxn.Time_in_IE, ddtxn.Time_in_IE1, nwait, stats[ddtxn.NSTASHED], *ddtxn.UseRLocks, *ddtxn.WRRatio, stats[ddtxn.NSAMPLES], stats[ddtxn.NGETKEYCALLS], stats[ddtxn.NDDWRITES], stats[ddtxn.NO_LOCK], stats[ddtxn.NFAIL_VERIFY])
+	out := fmt.Sprintf(" nworkers: %v, nwmoved: %v, nrmoved: %v, sys: %v, total/sec: %v, abortrate: %.2f, stashrate: %.2f, rr: %v, nkeys: %v, done: %v, actual time: %v, nreads: %v, nincrs: %v, epoch changes: %v, throughput ns/txn: %v, naborts: %v, coord time: %v, coord stats time: %v, total worker time transitioning: %v, nstashed: %v, rlock: %v, wrratio: %v, nsamples: %v, getkeys: %v, ddwrites: %v, nolock: %v, failv: %v, nlocked: %v ", *nworkers, ddtxn.WMoved, ddtxn.RMoved, *ddtxn.SysType, float64(nitr)/end.Seconds(), 100*float64(stats[ddtxn.NABORTS])/float64(nitr+stats[ddtxn.NABORTS]), 100*float64(stats[ddtxn.NSTASHED])/float64(nitr+stats[ddtxn.NABORTS]), *readrate, *nbidders, nitr, end, stats[ddtxn.D_READ_ONE], stats[ddtxn.D_INCR_ONE], ddtxn.NextEpoch, end.Nanoseconds()/nitr, stats[ddtxn.NABORTS], ddtxn.Time_in_IE, ddtxn.Time_in_IE1, nwait, stats[ddtxn.NSTASHED], *ddtxn.UseRLocks, *ddtxn.WRRatio, stats[ddtxn.NSAMPLES], stats[ddtxn.NGETKEYCALLS], stats[ddtxn.NDDWRITES], stats[ddtxn.NO_LOCK], stats[ddtxn.NFAIL_VERIFY], stats[ddtxn.NLOCKED])
 	fmt.Printf(out)
 	fmt.Printf("\n")
 

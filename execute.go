@@ -108,7 +108,9 @@ func (tx *OTransaction) Read(k Key) (*BRecord, error) {
 	if err == ENOKEY {
 		n := len(tx.read)
 		tx.read = tx.read[0 : n+1]
-		tx.read[n] = ReadKey{key: k, br: nil, last: 0}
+		tx.read[n].key = k
+		tx.read[n].br = nil
+		tx.read[n].last = 0
 		return nil, err
 	}
 	ok, last := br.IsUnlocked()
@@ -118,12 +120,15 @@ func (tx *OTransaction) Read(k Key) (*BRecord, error) {
 		if tx.count {
 			tx.ls.candidates.Conflict(k)
 		}
+		tx.w.Nstats[NLOCKED]++
 		tx.Abort(k)
 		return nil, EABORT
 	}
 	n := len(tx.read)
 	tx.read = tx.read[0 : n+1]
-	tx.read[n] = ReadKey{key: k, br: br, last: last}
+	tx.read[n].key = k
+	tx.read[n].br = br
+	tx.read[n].last = last
 	return br, nil
 }
 
@@ -189,13 +194,16 @@ func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 			// if locked and not by me, abort
 			// else note the last timestamp and save it
 			if !ok {
+				tx.w.Nstats[NLOCKED]++
 				tx.Abort(k)
 				return EABORT
 			}
 		}
 		n := len(tx.read)
 		tx.read = tx.read[0 : n+1]
-		tx.read[n] = ReadKey{key: k, br: br, last: last}
+		tx.read[n].key = k
+		tx.read[n].br = br
+		tx.read[n].last = last
 	}
 	n := len(tx.writes)
 	tx.writes = tx.writes[0 : n+1]
@@ -267,22 +275,21 @@ func (tx *OTransaction) Commit() TID {
 					tx.w.NKeyAccesses[p]++
 				}
 			}
-			if *SysType == DOPPEL && tx.phase == SPLIT && w.br != nil {
-				if w.br.dd {
-					continue
-				}
-			}
 			// Data doesn't exist, create it
 			if w.br == nil || err == ENOKEY {
 				var err2 error
 				w.br, err2 = tx.s.CreateLockedKey(w.key, w.op)
 				if err2 != nil {
 					// Someone snuck in and created the key
+					tx.w.Nstats[NFAIL_VERIFY]++
 					return tx.Abort(w.key)
 				}
 				w.locked = true
 				continue
 			}
+		}
+		if *SysType == DOPPEL && tx.phase == SPLIT && w.br.dd {
+			continue
 		}
 		if !w.br.Lock() {
 			tx.w.Nstats[NO_LOCK]++
