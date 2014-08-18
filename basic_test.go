@@ -29,20 +29,6 @@ func TestBasic(t *testing.T) {
 	if r.V.(int32) != 5 {
 		t.Errorf("Wrong answer %v\n", r)
 	}
-
-	tx = Query{TXN: D_BUY_NC, K1: UserKey(1), A: int32(7), K2: ProductKey(5), W: nil, T: 0}
-	_, err = w.One(tx)
-	if err != nil {
-		t.Errorf("Non nil result returned\n")
-	}
-	tx = Query{TXN: D_READ_ONE, K1: ProductKey(5), W: make(chan struct {
-		R *Result
-		E error
-	}), T: 0}
-	r, err = w.One(tx)
-	if r.V.(int32) != 7 {
-		t.Errorf("Wrong answer %v\n", r)
-	}
 }
 
 func TestRandN(t *testing.T) {

@@ -1,7 +1,6 @@
 package ddtxn
 
 import (
-	"ddtxn/dlog"
 	"flag"
 	"log"
 	"sync/atomic"
@@ -55,33 +54,6 @@ func BuyTxn(t Query, tx ETransaction) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	if tx.Commit() == 0 {
-		return r, EABORT
-	}
-	return r, nil
-}
-
-// Verison of BUY that always puts keys in the read set
-func BuyNCTxn(t Query, tx ETransaction) (*Result, error) {
-	var r *Result = nil
-	var err error
-	err = tx.WriteInt32(t.K1, 1, SUM)
-	if err != nil {
-		return nil, err
-	}
-	br, err := tx.Read(t.K2)
-	if err == ESTASH {
-		return nil, ESTASH
-	}
-	if err == EABORT {
-		dlog.Println("Abort", err, t.K2)
-		return r, EABORT
-	}
-	if err != nil {
-		dlog.Fatalf("???")
-	}
-	var sum int32 = br.value.(int32)
-	tx.Write(t.K2, t.A+sum, WRITE)
 	if tx.Commit() == 0 {
 		return r, EABORT
 	}
@@ -143,6 +115,7 @@ func BigIncrTxn(t Query, tx ETransaction) (*Result, error) {
 
 	for z := 0; z < 10; z++ {
 		for i := 0; i < 6; i++ {
+			tx.AcquireWriteLock(key[i])
 			k, err := tx.Read(key[i])
 			if err == ESTASH {
 				return nil, ESTASH
@@ -184,6 +157,7 @@ func BigRWTxn(t Query, tx ETransaction) (*Result, error) {
 
 	for z := 0; z < 10; z++ {
 		for i := 0; i < 6; i++ {
+			tx.AcquireWriteLock(key[i])
 			k, err := tx.Read(key[i])
 			if err == ESTASH {
 				return nil, ESTASH
@@ -200,6 +174,7 @@ func BigRWTxn(t Query, tx ETransaction) (*Result, error) {
 		}
 	}
 
+	tx.AcquireWriteLock(key[6])
 	k, err := tx.Read(key[6])
 	if err == ESTASH {
 		return nil, ESTASH

@@ -34,6 +34,7 @@ type ReadKey struct {
 }
 
 type ETransaction interface {
+	AcquireWriteLock(k Key)
 	Reset()
 	Read(k Key) (*BRecord, error)
 	WriteInt32(k Key, a int32, op KeyType) error
@@ -69,6 +70,10 @@ func StartOTransaction(w *Worker) *OTransaction {
 		ls:     w.local_store,
 	}
 	return tx
+}
+
+func (tx *OTransaction) AcquireWriteLock(k Key) {
+	// no op
 }
 
 func (tx *OTransaction) Reset() {
@@ -132,54 +137,11 @@ func (tx *OTransaction) Read(k Key) (*BRecord, error) {
 	return br, nil
 }
 
-func (tx *OTransaction) add(k Key, v Value, op KeyType) {
-	if len(tx.writes) == cap(tx.writes) {
-		// TODO: extend
-		log.Fatalf("Ran out of room\n")
-	}
-	n := len(tx.writes)
-	tx.writes = tx.writes[0 : n+1]
-	tx.writes[n].key = k
-	tx.writes[n].br = nil
-	tx.writes[n].v = v
-	tx.writes[n].op = op
-	tx.writes[n].locked = false
-}
-
-func (tx *OTransaction) addInt32(k Key, v int32, op KeyType) {
-	if len(tx.writes) == cap(tx.writes) {
-		// TODO: extend
-		log.Fatalf("Ran out of room\n")
-	}
-	n := len(tx.writes)
-	tx.writes = tx.writes[0 : n+1]
-	tx.writes[n].key = k
-	tx.writes[n].br = nil
-	tx.writes[n].vint32 = v
-	tx.writes[n].op = op
-	tx.writes[n].locked = false
-}
-
-func (tx *OTransaction) addList(k Key, v Entry, op KeyType) {
-	if len(tx.writes) == cap(tx.writes) {
-		// TODO: extend
-		log.Fatalf("Ran out of room\n")
-	}
-	n := len(tx.writes)
-	tx.writes = tx.writes[0 : n+1]
-	tx.writes[n].key = k
-	tx.writes[n].br = nil
-	tx.writes[n].ve = v
-	tx.writes[n].op = op
-	tx.writes[n].locked = false
-}
-
 func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
-	// RTM requests that during the normal phase, Doppel operates
-	// just like OCC, for ease of exposition.  That means it would
-	// have to put the key into the read set and potentially abort
-	// accordingly.  Doing so here, but not using the value until
-	// commit time.
+	// During the normal phase, Doppel operates just like OCC, for
+	// ease of exposition.  That means it would have to put the key
+	// into the read set and potentially abort accordingly.  Doing so
+	// here, but not using the value until commit time.
 	br, err := tx.s.getKey(k)
 	if *SysType == DOPPEL && tx.phase == SPLIT && br != nil && br.dd == true {
 		// Do not need to read-validate
@@ -191,14 +153,14 @@ func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 		} else {
 			var ok bool
 			ok, last = br.IsUnlocked()
-			// if locked and not by me, abort
-			// else note the last timestamp and save it
+			// if locked, abort.
 			if !ok {
 				tx.w.Nstats[NLOCKED]++
 				tx.Abort(k)
 				return EABORT
 			}
 		}
+		// Note the last timestamp and save it
 		n := len(tx.read)
 		tx.read = tx.read[0 : n+1]
 		tx.read[n].key = k
@@ -216,18 +178,35 @@ func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 }
 
 func (tx *OTransaction) Write(k Key, v Value, kt KeyType) {
-	if kt == SUM || kt == MAX {
-		tx.addInt32(k, v.(int32), kt)
-		return
+	if len(tx.writes) == cap(tx.writes) {
+		// TODO: extend
+		log.Fatalf("Ran out of room\n")
 	}
-	tx.add(k, v, kt)
+	n := len(tx.writes)
+	tx.writes = tx.writes[0 : n+1]
+	tx.writes[n].key = k
+	tx.writes[n].br = nil
+	tx.writes[n].v = v
+	tx.writes[n].op = kt
+	tx.writes[n].locked = false
 }
 
+// TODO: Read-then-write like WriteInt32
 func (tx *OTransaction) WriteList(k Key, l Entry, kt KeyType) {
 	if kt != LIST {
 		log.Fatalf("Not a list\n")
 	}
-	tx.addList(k, l, kt)
+	if len(tx.writes) == cap(tx.writes) {
+		// TODO: extend
+		log.Fatalf("Ran out of room\n")
+	}
+	n := len(tx.writes)
+	tx.writes = tx.writes[0 : n+1]
+	tx.writes[n].key = k
+	tx.writes[n].br = nil
+	tx.writes[n].ve = l
+	tx.writes[n].op = kt
+	tx.writes[n].locked = false
 }
 
 func (tx *OTransaction) SetPhase(p int) {
@@ -372,6 +351,7 @@ type Rec struct {
 	vint32 int32
 	ve     Entry
 	kt     KeyType
+	noset  bool
 }
 
 // Not threadsafe.  Tracks execution of transaction.
@@ -403,6 +383,9 @@ func (tx *LTransaction) Reset() {
 
 func (tx *LTransaction) Read(k Key) (*BRecord, error) {
 	// TODO: If I wrote the key, return that value instead
+	if exists, n := tx.already_exists(k); exists {
+		return tx.keys[n].br, nil
+	}
 	br, err := tx.s.getKey(k)
 	if *CountKeys {
 		p, r := UndoCKey(k)
@@ -411,8 +394,10 @@ func (tx *LTransaction) Read(k Key) (*BRecord, error) {
 		}
 	}
 	if err != nil {
+		// TODO: Create and read lock for an empty key?
 		return nil, err
 	}
+	//dlog.Printf("%v RLocking %v\n", tx.w.ID, k)
 	br.SRLock()
 	n := len(tx.keys)
 	tx.keys = tx.keys[0 : n+1]
@@ -420,28 +405,38 @@ func (tx *LTransaction) Read(k Key) (*BRecord, error) {
 	return br, nil
 }
 
-func (tx *LTransaction) upgrade(k Key) int {
-	for i := 0; i < len(tx.keys); i++ {
-		if tx.keys[i].br.key == k && tx.keys[i].read == true {
-			tx.keys[i].read = false
-			tx.keys[i].br.SRUnlock()
-			return i
-		}
+// This is when I am reading a key and I might write it later; acquire
+// the write lock *before* the read.
+func (tx *LTransaction) AcquireWriteLock(k Key) {
+	if exists, _ := tx.already_exists(k); exists {
+		log.Fatalf("Shouldn't already have a lock on this\n")
 	}
-	return -1
+	br, err := tx.s.getKey(k)
+	if br == nil || err != nil {
+		// Will acquire lock when I do the write and create the key.
+		return
+	}
+	br.SLock()
+	n := len(tx.keys)
+	tx.keys = tx.keys[0 : n+1]
+	tx.keys[n] = Rec{br: br, read: false, noset: true}
 }
 
-func (tx *LTransaction) WriteInt32(k Key, a int32, op KeyType) error {
+func (tx *LTransaction) already_exists(k Key) (bool, int) {
+	n := len(tx.keys)
+	for i := 0; i < len(tx.keys); i++ {
+		if tx.keys[i].br.key == k {
+			return true, i
+		}
+	}
 	if len(tx.keys) == cap(tx.keys) {
 		// TODO: extend
 		log.Fatalf("Ran out of room\n")
 	}
-	n := len(tx.keys)
-	if x := tx.upgrade(k); x >= 0 {
-		n = x
-	} else {
-		tx.keys = tx.keys[0 : n+1]
-	}
+	return false, n
+}
+
+func (tx *LTransaction) make_or_get_key(k Key, op KeyType) *BRecord {
 	br, err := tx.s.getKey(k)
 	if br == nil || err != nil {
 		var err2 error
@@ -453,55 +448,64 @@ func (tx *LTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 			}
 		}
 	}
+	return br
+}
+
+func (tx *LTransaction) WriteInt32(k Key, a int32, op KeyType) error {
+	br := tx.make_or_get_key(k, op)
+	exists, n := tx.already_exists(k)
+	if exists {
+		if tx.keys[n].read == true {
+			log.Fatalf("Already have read lock on this key; cannot upgrade %v\n", k)
+		}
+		// Already locked.  TODO: aggregate
+		tx.keys[n].vint32 = a
+		tx.keys[n].kt = op
+		dlog.Printf("%v Double write?\n", tx.w.ID)
+		return nil
+	}
+	//dlog.Printf("%v Locking %v\n", k, tx.w.ID)
 	br.SLock()
-	tx.keys[n] = Rec{br: br, read: false, vint32: a, kt: op}
+	tx.keys = tx.keys[0 : n+1]
+	tx.keys[n] = Rec{br: br, read: false, vint32: a, kt: op, noset: false}
 	return nil
 }
 
-func (tx *LTransaction) Write(k Key, v Value, kt KeyType) {
-	if kt == SUM || kt == MAX {
-		tx.WriteInt32(k, v.(int32), kt)
+func (tx *LTransaction) Write(k Key, v Value, op KeyType) {
+	if op == SUM || op == MAX {
+		tx.WriteInt32(k, v.(int32), op)
 		return
 	}
-	if len(tx.keys) == cap(tx.keys) {
-		// TODO: extend
-		log.Fatalf("Ran out of room\n")
-	}
-	n := len(tx.keys)
-	if x := tx.upgrade(k); x >= 0 {
-		n = x
-	} else {
-		tx.keys = tx.keys[0 : n+1]
-	}
-	br, err := tx.s.getKey(k)
-	if br == nil || err != nil {
-		dlog.Printf("Creating %v %v %v\n", k, v, kt)
-		br = tx.s.CreateKey(k, v, kt)
+	br := tx.make_or_get_key(k, op)
+	exists, n := tx.already_exists(k)
+	if exists {
+		if tx.keys[n].read == true {
+			log.Fatalf("Already have read lock on this key; cannot upgrade %v\n", k)
+		}
+		// Already locked.
+		tx.keys[n].v = v
+		tx.keys[n].kt = op
 	}
 	br.SLock()
-	tx.keys[n] = Rec{br: br, read: false, v: v, kt: kt}
+	tx.keys[n] = Rec{br: br, read: false, v: v, kt: op, noset: false}
 }
 
-func (tx *LTransaction) WriteList(k Key, l Entry, kt KeyType) {
-	if kt != LIST {
+func (tx *LTransaction) WriteList(k Key, l Entry, op KeyType) {
+	if op != LIST {
 		log.Fatalf("Not a list\n")
 	}
-	if len(tx.keys) == cap(tx.keys) {
-		// TODO: extend
-		log.Fatalf("Ran out of room\n")
-	}
-	n := len(tx.keys)
-	if x := tx.upgrade(k); x >= 0 {
-		n = x
-	} else {
-		tx.keys = tx.keys[0 : n+1]
-	}
-	br, err := tx.s.getKey(k)
-	if br == nil || err != nil {
-		br = tx.s.CreateKey(k, nil, LIST)
+	br := tx.make_or_get_key(k, op)
+	exists, n := tx.already_exists(k)
+	if exists {
+		if tx.keys[n].read == true {
+			log.Fatalf("Already have read lock on this key; cannot upgrade %v\n", k)
+		}
+		// Already locked.  TODO: append
+		tx.keys[n].ve = l
+		tx.keys[n].kt = op
 	}
 	br.SLock()
-	tx.keys[n] = Rec{br: br, read: false, ve: l, kt: kt}
+	tx.keys[n] = Rec{br: br, read: false, ve: l, kt: op, noset: false}
 }
 
 func (tx *LTransaction) SetPhase(p int) {
@@ -526,10 +530,17 @@ func (tx *LTransaction) Abort(k Key) TID {
 func (tx *LTransaction) Commit() TID {
 	tid := tx.w.commitTID()
 	for i := len(tx.keys) - 1; i >= 0; i-- {
-		//x, y := UndoCKey(tx.keys[i].br.key)
-		//dlog.Printf("Dealing with key %v %v", x, y)
 		// Apply and unlock
+		//
+		// TODO: Phantom reads!!  Right now if I read ENOKEY, it is
+		// not read locked.
 		if tx.keys[i].read == false {
+			if tx.keys[i].noset {
+				// No changes, we write-locked it because we thought
+				// we *might* write
+				tx.keys[i].br.SUnlock()
+				continue
+			}
 			switch tx.keys[i].kt {
 			case SUM:
 				tx.s.SetInt32(tx.keys[i].br, tx.keys[i].vint32, tx.keys[i].kt)
@@ -540,8 +551,10 @@ func (tx *LTransaction) Commit() TID {
 			default:
 				tx.s.Set(tx.keys[i].br, tx.keys[i].v, tx.keys[i].kt)
 			}
+			//dlog.Printf("%v Unlocking %v\n", tx.keys[i].br.key, tx.w.ID)
 			tx.keys[i].br.SUnlock()
 		} else {
+			//dlog.Printf("%v RUnlocking %v\n", tx.keys[i].br.key, tx.w.ID)
 			tx.keys[i].br.SRUnlock()
 		}
 	}

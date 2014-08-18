@@ -19,8 +19,7 @@ parser.add_option("--noscp", action="store_false", dest="scp")
 parser.add_option("--wratio", action="store", type="float", dest="wratio", default=4)
 parser.add_option("--sr", action="store", type="int", dest="sr", default=10000)
 parser.add_option("--phase", action="store", type="int", dest="phase", default=80)
-parser.add_option("--retry", action="store_true", dest="retry", default=False)
-parser.add_option("--atomic", action="store_true", dest="atomic", default=False)
+parser.add_option("--retry", action="store_true", dest="retry", default=True)
 
 
 (options, args) = parser.parse_args()
@@ -29,7 +28,7 @@ ben_list_cpus = "socket@0,1,2,7,3-6"
 
 LATENCY_PART = " -latency=%s" % options.latency
 
-BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -nprocs %d -ngo %d -nw %d -nsec %d -contention %s -rr %d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -retry=%s -atomic=%s" + LATENCY_PART
+BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -nprocs %d -ngo %d -nw %d -nsec %d -contention %s -rr %d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -retry=%s" + LATENCY_PART
 
 def run_one(fn, cmd):
     if options.dprint:
@@ -62,7 +61,7 @@ def get_cpus(host):
         ncpus=[2, 4]
     return ncpus
 
-def fill_cmd(rr, contention, ncpus, systype, cpus_arg="", wratio=options.wratio, phase=options.phase, retry=options.retry, atomic=options.atomic):
+def fill_cmd(rr, contention, ncpus, systype, cpus_arg="", wratio=options.wratio, phase=options.phase, retry=options.retry):
     nsec = 10
     if options.short:
         nsec = 1
@@ -74,11 +73,11 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg="", wratio=options.wratio,
     xncpus = ncpus
     if xncpus < 80:
         xncpus += 1
-    cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr, retry, atomic)
+    cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr, retry)
     return cmd
 
-def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=options.phase, atomic=options.atomic):
-    cmd = fill_cmd(rr, contention, ncpu, sys, list_cpus, wratio, phase, atomic=atomic)
+def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=options.phase):
+    cmd = fill_cmd(rr, contention, ncpu, sys, list_cpus, wratio, phase)
     run_one(f, cmd)
     f.write("\t")
 
@@ -181,19 +180,19 @@ def single_exp(fnpath, host, rr, ncores):
     fnn = '%s-single-%d-%s.data' % (host, ncores, options.retry)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
-    prob = [0, 0.1, 0.5, 1, 2, 3, 5, 10, 20, 50]
+    prob = [0, .1, .5, 1, 5, 10, 20, 30, 40, 50, 100]
     if options.short:
         prob = [1, 5]
     cpu_args = ""
     if host == "ben":
         cpu_args = ben_list_cpus
 
-    f.write("#Doppel\tOCC\tOCC-Atomic\n")
+    f.write("#Doppel\tOCC\t2PL\n")
     for i in prob:
         f.write("%0.2f"% i)
         f.write("\t")
-        do(f, rr, i, ncores, cpu_args, 0, atomic=False)
-        do(f, rr, i, ncores, cpu_args, 1, atomic=False)
+        do(f, rr, i, ncores, cpu_args, 0)
+        do(f, rr, i, ncores, cpu_args, 1)
         do(f, rr, i, ncores, cpu_args, 2)
         f.write("\n")
     f.close()
