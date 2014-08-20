@@ -28,10 +28,6 @@ var notcontended_readrate = flag.Float64("ncrr", .8, "Uncontended read rate %.  
 var dataFile = flag.String("out", "buy-data.out", "Filename for output")
 var Retry = flag.Bool("retry", false, "Whether to retry aborted transactions until they commit.  Changes the composition of reads/writes issued to the system (but maintains the read rate ratio specified for transactions *completed*. Default false.")
 
-var (
-	QUEUE_LENGTH = 1000000
-)
-
 func main() {
 	flag.Parse()
 	runtime.GOMAXPROCS(*nprocs)
@@ -73,8 +69,6 @@ func main() {
 	for i := 0; i < *clientGoRoutines; i++ {
 		wg.Add(1)
 		go func(n int) {
-			retry_queue := make([]ddtxn.Query, 0, QUEUE_LENGTH)
-			qi := 0
 			duration := time.Now().Add(time.Duration(*nsec) * time.Second)
 			var local_seed uint32 = uint32(rand.Intn(10000000))
 			wi := n % (*nworkers)
@@ -113,10 +107,14 @@ func main() {
 					}
 				} else {
 					if *Retry {
-						_, err := w.One(t)
-						if err == ddtxn.EABORT {
-							retry_queue = retry_queue[0 : qi+1]
-							retry_queue[qi] = t
+						committed := false
+						for !committed {
+							_, err := w.One(t)
+							if err == ddtxn.EABORT {
+								committed = false
+							} else {
+								committed = true
+							}
 						}
 					} else {
 						w.One(t)
