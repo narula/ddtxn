@@ -27,11 +27,11 @@ type BRecord struct {
 	padding   [128]byte
 	key       Key
 	key_type  KeyType
+	int_value int32
 	dd        bool
 	last      wfmutex.WFMutex
 	lock      spinlock.RWSpinlock
 	value     Value
-	int_value int32
 	entries   []Entry
 	mu        sync.RWMutex
 	conflict  int32 // how many times was the lock already held when someone wanted it

@@ -78,7 +78,7 @@ func RegisterUserTxn(t Query, tx ETransaction) (*Result, error) {
 		Region:   region,
 	}
 	u := UserKey(int(n))
-	tx.AcquireWriteLock(nick)
+	tx.MaybeWrite(nick)
 	_, err := tx.Read(nick)
 
 	if err != ENOKEY {
@@ -124,7 +124,7 @@ func NewItemTxn(t Query, tx ETransaction) (*Result, error) {
 			return nil, ESTASH
 		}
 		dlog.Printf("User doesn't exist %v\n", t.U1)
-		tx.Abort(UserKey(int(t.U1)))
+		tx.Abort()
 		return nil, EABORT
 	}
 	region := urec.value.(*User).Region
@@ -172,7 +172,7 @@ func StoreBidTxn(t Query, tx ETransaction) (*Result, error) {
 	// update max bid?
 	high := MaxBidKey(item)
 	bidder := MaxBidBidderKey(item)
-	tx.AcquireWriteLock(high)
+	tx.MaybeWrite(high)
 	max, err := tx.Read(high)
 	if err != nil {
 		if err == ESTASH {
@@ -270,7 +270,7 @@ func StoreBuyNowTxn(t Query, tx ETransaction) (*Result, error) {
 		return nil, err
 	}
 	ik := ItemKey(item)
-	tx.AcquireWriteLock(ik)
+	tx.MaybeWrite(ik)
 	irec, err := tx.Read(ik)
 	if err != nil {
 		if err == ESTASH {

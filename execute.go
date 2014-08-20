@@ -15,6 +15,7 @@ const (
 	JOIN
 )
 
+// TODO: Handle writing more than once to a key in one transaction
 type Write struct {
 	key    Key
 	br     *BRecord
@@ -22,9 +23,7 @@ type Write struct {
 	op     KeyType
 	locked bool
 	vint32 int32
-
-	// TODO: Handle writing more than once to a list per txn
-	ve Entry
+	ve     Entry
 }
 
 type ReadKey struct {
@@ -34,16 +33,23 @@ type ReadKey struct {
 }
 
 type ETransaction interface {
-	AcquireWriteLock(k Key)
 	Reset()
 	Read(k Key) (*BRecord, error)
 	WriteInt32(k Key, a int32, op KeyType) error
 	WriteList(k Key, l Entry, kt KeyType)
 	Write(k Key, v Value, kt KeyType)
-	Abort(k Key) TID
+	Abort() TID
 	Commit() TID
 	SetPhase(int)
-	Store() *Store // For AtomicIncr benchmark transaction only
+	GetPhase() int
+	Store() *Store
+
+	// Tell 2PL I am going to read and potentially write this key.
+	// This is because I don't know how to upgrade locks.
+	MaybeWrite(k Key)
+
+	// Tell Doppel not to count this transaction's reads and writes.
+	NoCount()
 }
 
 // Not threadsafe.  Tracks execution of transaction.
@@ -61,6 +67,10 @@ type OTransaction struct {
 	padding  [128]byte
 }
 
+func (tx *OTransaction) NoCount() {
+	tx.count = false
+}
+
 func StartOTransaction(w *Worker) *OTransaction {
 	tx := &OTransaction{
 		read:   make([]ReadKey, 0, 100),
@@ -70,10 +80,6 @@ func StartOTransaction(w *Worker) *OTransaction {
 		ls:     w.local_store,
 	}
 	return tx
-}
-
-func (tx *OTransaction) AcquireWriteLock(k Key) {
-	// no op
 }
 
 func (tx *OTransaction) Reset() {
@@ -89,20 +95,35 @@ func (tx *OTransaction) Reset() {
 	tx.t++
 }
 
+func (tx *OTransaction) isSplit(br *BRecord) bool {
+	return *SysType == DOPPEL && tx.phase == SPLIT && br != nil && br.dd
+}
+
 func (tx *OTransaction) Read(k Key) (*BRecord, error) {
 	if len(tx.read) > 0 {
-		// TODO: If I wrote the key, return that value instead
-	}
-	br, err := tx.s.getKey(k)
-	if br != nil && *SysType == DOPPEL {
-		if tx.phase == SPLIT {
-			if br.dd {
+		for i := 0; i < len(tx.writes); i++ {
+			r := &tx.writes[i]
+			if r.key == k {
+				// I wrote and read the same piece of data in one
+				// transaction.  This is a strong signal this
+				// shouldn't be dd.
 				if tx.count {
-					tx.ls.candidates.Stash(k)
+					tx.ls.candidates.ReadWrite(k)
 				}
-				return nil, ESTASH
+				if tx.isSplit(r.br) {
+					return nil, ESTASH
+				}
+				// TODO: Return the value I wrote instead!
+				return r.br, nil
 			}
 		}
+	}
+	br, err := tx.s.getKey(k)
+	if tx.isSplit(br) {
+		if tx.count {
+			tx.ls.candidates.Stash(k)
+		}
+		return nil, ESTASH
 	}
 	if *CountKeys {
 		p, r := UndoCKey(k)
@@ -119,14 +140,10 @@ func (tx *OTransaction) Read(k Key) (*BRecord, error) {
 		return nil, err
 	}
 	ok, last := br.IsUnlocked()
-	// if locked and not by me, abort
+	// if locked abort
 	// else note the last timestamp, save it, return value
 	if !ok {
-		if tx.count {
-			tx.ls.candidates.Conflict(k)
-		}
 		tx.w.Nstats[NLOCKED]++
-		tx.Abort(k)
 		return nil, EABORT
 	}
 	n := len(tx.read)
@@ -143,20 +160,20 @@ func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 	// into the read set and potentially abort accordingly.  Doing so
 	// here, but not using the value until commit time.
 	br, err := tx.s.getKey(k)
-	if *SysType == DOPPEL && tx.phase == SPLIT && br != nil && br.dd == true {
+	if tx.isSplit(br) {
 		// Do not need to read-validate
 	} else {
 		var last uint64
 		if br == nil || err == ENOKEY {
-			// Key does not exist.
 			last = 0
 		} else {
 			var ok bool
 			ok, last = br.IsUnlocked()
-			// if locked, abort.
 			if !ok {
 				tx.w.Nstats[NLOCKED]++
-				tx.Abort(k)
+				if tx.count {
+					tx.ls.candidates.Conflict(k)
+				}
 				return EABORT
 			}
 		}
@@ -179,7 +196,6 @@ func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 
 func (tx *OTransaction) Write(k Key, v Value, kt KeyType) {
 	if len(tx.writes) == cap(tx.writes) {
-		// TODO: extend
 		log.Fatalf("Ran out of room\n")
 	}
 	n := len(tx.writes)
@@ -197,7 +213,6 @@ func (tx *OTransaction) WriteList(k Key, l Entry, kt KeyType) {
 		log.Fatalf("Not a list\n")
 	}
 	if len(tx.writes) == cap(tx.writes) {
-		// TODO: extend
 		log.Fatalf("Ran out of room\n")
 	}
 	n := len(tx.writes)
@@ -213,14 +228,15 @@ func (tx *OTransaction) SetPhase(p int) {
 	tx.phase = p
 }
 
+func (tx *OTransaction) GetPhase() int {
+	return tx.phase
+}
+
 func (tx *OTransaction) Store() *Store {
 	return tx.s
 }
 
-func (tx *OTransaction) Abort(k Key) TID {
-	if tx.count {
-		tx.ls.candidates.Conflict(k)
-	}
+func (tx *OTransaction) Abort() TID {
 	for i, _ := range tx.writes {
 		if tx.writes[i].locked {
 			tx.writes[i].br.Unlock(0)
@@ -260,19 +276,25 @@ func (tx *OTransaction) Commit() TID {
 				w.br, err2 = tx.s.CreateLockedKey(w.key, w.op)
 				if err2 != nil {
 					// Someone snuck in and created the key
+					if tx.count {
+						tx.ls.candidates.Conflict(w.key)
+					}
 					tx.w.Nstats[NFAIL_VERIFY]++
-					return tx.Abort(w.key)
+					return tx.Abort()
 				}
 				w.locked = true
 				continue
 			}
 		}
-		if *SysType == DOPPEL && tx.phase == SPLIT && w.br.dd {
+		if tx.isSplit(w.br) {
 			continue
 		}
 		if !w.br.Lock() {
 			tx.w.Nstats[NO_LOCK]++
-			return tx.Abort(w.key)
+			if tx.count {
+				tx.ls.candidates.Conflict(w.key)
+			}
+			return tx.Abort()
 		}
 		w.locked = true
 	}
@@ -296,7 +318,7 @@ func (tx *OTransaction) Commit() TID {
 				continue
 			}
 			tx.w.Nstats[NFAIL_VERIFY]++
-			return tx.Abort(rk.key)
+			return tx.Abort()
 		}
 		if rk.br.Verify(rk.last) {
 			continue
@@ -306,14 +328,14 @@ func (tx *OTransaction) Commit() TID {
 			continue
 		}
 		tx.w.Nstats[NFAIL_VERIFY]++
-		return tx.Abort(rk.key)
+		return tx.Abort()
 	}
 	// for each write key
 	//  if dd and split phase, apply locally
 	//  else apply globally and unlock
 	for i, _ := range tx.writes {
 		w := &tx.writes[i]
-		if *SysType == DOPPEL && tx.phase == SPLIT && w.br.dd {
+		if tx.isSplit(w.br) {
 			if tx.count {
 				tx.ls.candidates.Write(w.key)
 			}
@@ -342,6 +364,10 @@ func (tx *OTransaction) Commit() TID {
 		}
 	}
 	return tid
+}
+
+func (tx *OTransaction) MaybeWrite(k Key) {
+	// no op
 }
 
 type Rec struct {
@@ -397,7 +423,6 @@ func (tx *LTransaction) Read(k Key) (*BRecord, error) {
 		// TODO: Create and read lock for an empty key?
 		return nil, err
 	}
-	//dlog.Printf("%v RLocking %v\n", tx.w.ID, k)
 	br.SRLock()
 	n := len(tx.keys)
 	tx.keys = tx.keys[0 : n+1]
@@ -407,7 +432,7 @@ func (tx *LTransaction) Read(k Key) (*BRecord, error) {
 
 // This is when I am reading a key and I might write it later; acquire
 // the write lock *before* the read.
-func (tx *LTransaction) AcquireWriteLock(k Key) {
+func (tx *LTransaction) MaybeWrite(k Key) {
 	if exists, _ := tx.already_exists(k); exists {
 		log.Fatalf("Shouldn't already have a lock on this\n")
 	}
@@ -512,11 +537,15 @@ func (tx *LTransaction) SetPhase(p int) {
 	tx.phase = p
 }
 
+func (tx *LTransaction) GetPhase() int {
+	return tx.phase
+}
+
 func (tx *LTransaction) Store() *Store {
 	return tx.s
 }
 
-func (tx *LTransaction) Abort(k Key) TID {
+func (tx *LTransaction) Abort() TID {
 	for i := len(tx.keys) - 1; i >= 0; i-- {
 		if tx.keys[i].read {
 			tx.keys[i].br.SRUnlock()
@@ -559,4 +588,8 @@ func (tx *LTransaction) Commit() TID {
 		}
 	}
 	return tid
+}
+
+func (tx *LTransaction) NoCount() {
+	// noop
 }

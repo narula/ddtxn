@@ -10,8 +10,11 @@ var WRRatio = flag.Float64("wr", 3, "Ratio of sampled write conflicts and sample
 
 var ConflictWeight = flag.Float64("cw", 1, "Weight given to conflicts over writes\n")
 
+var TriggerCount = flag.Int("trigger", 10000, "How long the queue can get before triggering a phase change\n")
+
 type TStore struct {
 	t []Query
+	n int
 }
 
 func TSInit(n int) *TStore {
@@ -19,12 +22,18 @@ func TSInit(n int) *TStore {
 	return ts
 }
 
-func (ts *TStore) Add(t Query) {
+func (ts *TStore) Add(t Query) bool {
 	ts.t = append(ts.t, t)
+	ts.n += 1
+	if ts.n == *TriggerCount {
+		return true
+	}
+	return false
 }
 
 func (ts *TStore) clear() {
 	ts.t = ts.t[:0]
+	ts.n = 0
 }
 
 type OneStat struct {
@@ -116,7 +125,32 @@ func (c *Candidates) Print() {
 
 // TODO: separate count?
 func (c *Candidates) Stash(k Key) {
-	c.Read(k)
+	o, ok := c.m[k]
+	if !ok {
+		c.m[k] = &OneStat{k: k, reads: 5, writes: 1, conflicts: 1, index: -1}
+		o = c.m[k]
+	} else {
+		o.reads = o.reads + 5
+	}
+	if o.ratio() > *WRRatio {
+		//dlog.Printf("Read; updating %v %v\n", o.ratio(), o.k)
+		c.h.update(o)
+	}
+}
+
+func (c *Candidates) ReadWrite(k Key) {
+	o, ok := c.m[k]
+	if !ok {
+		c.m[k] = &OneStat{k: k, reads: 2, writes: 1, conflicts: 0, index: -1}
+		o = c.m[k]
+	} else {
+		o.reads = o.reads + 10
+		o.conflicts = o.conflicts - 1
+	}
+	if o.ratio() > *WRRatio {
+		//dlog.Printf("Read; updating %v %v\n", o.ratio(), o.k)
+		c.h.update(o)
+	}
 }
 
 type StatsHeap []*OneStat

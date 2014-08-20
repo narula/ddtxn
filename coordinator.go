@@ -31,6 +31,7 @@ type Coordinator struct {
 
 	Done       chan chan bool
 	Accelerate chan bool
+	trigger    int32
 }
 
 func NewCoordinator(n int, s *Store) *Coordinator {
@@ -90,6 +91,7 @@ func (c *Coordinator) IncrementEpoch() {
 
 	// All merged.  The previous epoch is now safe; tell everyone to
 	// do their reads.
+	atomic.StoreInt32(&c.trigger, 0)
 	for i := 0; i < c.n; i++ {
 		c.wsafe[i] <- next_epoch
 	}
@@ -115,10 +117,10 @@ func (c *Coordinator) IncrementEpoch() {
 			x, y := UndoCKey(o.k)
 			dlog.Printf("%v Considering key %v %v; ratio %v\n", i, x, y, o.ratio())
 			br, _ := s.getKey(o.k)
-			if !br.dd {
+			if !br.dd && o.ratio() > *WRRatio {
 				br.dd = true
 				WMoved += 1
-				dlog.Printf("Moved %v %v to split %v\n", x, y, o.ratio())
+				dlog.Printf("Moved %v %v to split r:%v w:%v c:%v ratio:%v\n", x, y, o.reads, o.writes, o.conflicts, o.ratio())
 				s.dd[o.k] = true
 				s.any_dd = true
 			} else {
@@ -178,8 +180,15 @@ func (c *Coordinator) Finish() {
 	<-x
 }
 
+var Nfast int64
+
 func (c *Coordinator) Process() {
 	tm := time.NewTicker(time.Duration(*PhaseLength) * time.Millisecond).C
+
+	// More frequently, check if the workers are demanding a phase
+	// change due to long stashed queue lengths.
+	check_trigger := time.NewTicker(time.Duration(*PhaseLength) * time.Microsecond * 10).C
+
 	for {
 		select {
 		case x := <-c.Done:
@@ -195,6 +204,16 @@ func (c *Coordinator) Process() {
 		case <-tm:
 			if *SysType == DOPPEL {
 				c.IncrementEpoch()
+			}
+		case <-check_trigger:
+			if *SysType == DOPPEL {
+				x := atomic.LoadInt32(&c.trigger)
+				if x == int32(c.n) {
+					//					fmt.Printf("Faster change %v for epoch %v\n", x, c.epochTID)
+					Nfast++
+					atomic.StoreInt32(&c.trigger, 0)
+					c.IncrementEpoch()
+				}
 			}
 		case <-c.Accelerate:
 			if *SysType == DOPPEL {

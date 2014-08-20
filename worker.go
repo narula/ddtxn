@@ -6,6 +6,7 @@ import (
 	"log"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -27,6 +28,7 @@ const (
 
 const (
 	D_BUY = iota
+	D_BUY_AND_READ
 	D_READ_ONE
 	D_INCR_ONE
 	D_ATOMIC_INCR_ONE
@@ -57,6 +59,7 @@ const (
 	NO_LOCK
 	NFAIL_VERIFY
 	NLOCKED
+	NDIDSTASHED
 	LAST_STAT
 )
 
@@ -110,6 +113,7 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 	}
 	w.E.SetPhase(SPLIT)
 	w.Register(D_BUY, BuyTxn)
+	w.Register(D_BUY_AND_READ, BuyAndReadTxn)
 	w.Register(D_READ_ONE, ReadTxn)
 	w.Register(D_INCR_ONE, IncrTxn)
 	w.Register(D_ATOMIC_INCR_ONE, AtomicIncr)
@@ -134,7 +138,9 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 }
 
 func (w *Worker) stashTxn(t Query) {
-	w.waiters.Add(t)
+	if w.waiters.Add(t) {
+		atomic.AddInt32(&w.coordinator.trigger, 1)
+	}
 }
 
 func (w *Worker) doTxn(t Query) (*Result, error) {
@@ -168,9 +174,7 @@ func (w *Worker) doTxn2(t Query) (*Result, error) {
 	w.E.Reset()
 	x, err := w.txns[t.TXN](t, w.E)
 	if err == ESTASH {
-		w.Nstats[NSTASHED]++
-		w.stashTxn(t)
-		return nil, err
+		log.Fatalf("Should not be in stashing stage right now\n")
 	} else if err == nil {
 		w.Nstats[t.TXN]++
 	} else if err == EABORT {
@@ -205,15 +209,24 @@ func (w *Worker) transition() {
 			k1 := w.waiters.t[i].K1
 			p, _ := UndoCKey(k1)
 			dlog.Printf("[%v] Doing waiter %v\n", w.ID, p)
-			r, err := w.doTxn2(w.waiters.t[i])
-			if err == ESTASH {
-				log.Fatalf("Stashing when trying to execute stashed\n")
-			}
-			if w.waiters.t[i].W != nil {
-				w.waiters.t[i].W <- struct {
-					R *Result
-					E error
-				}{r, err}
+			w.Nstats[NDIDSTASHED]++
+			committed := false
+			// TODO: On abort this transaction really should be
+			// reissued by the client, but in our benchmarks the
+			// client doesn't wait, so here we go.
+			for !committed {
+				r, err := w.doTxn2(w.waiters.t[i])
+				if err == EABORT {
+					committed = false
+				} else {
+					committed = true
+					if w.waiters.t[i].W != nil {
+						w.waiters.t[i].W <- struct {
+							R *Result
+							E error
+						}{r, err}
+					}
+				}
 			}
 		}
 		w.waiters.clear()

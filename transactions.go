@@ -60,6 +60,34 @@ func BuyTxn(t Query, tx ETransaction) (*Result, error) {
 	return r, nil
 }
 
+func BuyAndReadTxn(t Query, tx ETransaction) (*Result, error) {
+	tx.NoCount() // Hacky McHackyhack
+	var r *Result = nil
+	err := tx.WriteInt32(t.K1, 1, SUM)
+	if err != nil {
+		return nil, err
+	}
+	err = tx.WriteInt32(t.K2, t.A, SUM)
+	if err != nil {
+		return nil, err
+	}
+	br, err2 := tx.Read(t.K2)
+	if err2 != nil {
+		return r, err2
+	}
+	x := br.int_value
+	if br.dd == true && tx.GetPhase() == SPLIT {
+		log.Fatalf("should not happen %v\n", t.K2)
+	}
+	if tx.Commit() == 0 {
+		return r, EABORT
+	}
+	if *Allocate {
+		r = &Result{x}
+	}
+	return r, nil
+}
+
 func ReadTxn(t Query, tx ETransaction) (*Result, error) {
 	var r *Result = nil
 	v1, err := tx.Read(t.K1)
@@ -115,7 +143,7 @@ func BigIncrTxn(t Query, tx ETransaction) (*Result, error) {
 
 	for z := 0; z < 10; z++ {
 		for i := 0; i < 6; i++ {
-			tx.AcquireWriteLock(key[i])
+			tx.MaybeWrite(key[i])
 			k, err := tx.Read(key[i])
 			if err == ESTASH {
 				return nil, ESTASH
@@ -157,7 +185,7 @@ func BigRWTxn(t Query, tx ETransaction) (*Result, error) {
 
 	for z := 0; z < 10; z++ {
 		for i := 0; i < 6; i++ {
-			tx.AcquireWriteLock(key[i])
+			tx.MaybeWrite(key[i])
 			k, err := tx.Read(key[i])
 			if err == ESTASH {
 				return nil, ESTASH
@@ -174,7 +202,7 @@ func BigRWTxn(t Query, tx ETransaction) (*Result, error) {
 		}
 	}
 
-	tx.AcquireWriteLock(key[6])
+	tx.MaybeWrite(key[6])
 	k, err := tx.Read(key[6])
 	if err == ESTASH {
 		return nil, ESTASH
