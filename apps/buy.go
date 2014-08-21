@@ -68,10 +68,10 @@ func (b *Buy) SetupLatency(nincr int64, nbuckets int64, ngo int) {
 }
 
 // Calls rand 4 times
-func (b *Buy) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
-	rnd := ddtxn.RandN(local_seed, b.sp/8)
+func (b *Buy) MakeOne(w int, local_seed *uint32, sp uint32, txn *ddtxn.Query) {
+	rnd := ddtxn.RandN(local_seed, sp/8)
 	lb := int(rnd)
-	bidder := lb + w*int(b.sp)
+	bidder := lb + w*int(sp)
 	amt := int32(ddtxn.RandN(local_seed, 10))
 	product := int(ddtxn.RandN(local_seed, uint32(b.nproducts)))
 	x := int(ddtxn.RandN(local_seed, 100))

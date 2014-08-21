@@ -71,11 +71,12 @@ func main() {
 		go func(n int) {
 			duration := time.Now().Add(time.Duration(*nsec) * time.Second)
 			var local_seed uint32 = uint32(rand.Intn(10000000))
+			var sp uint32 = uint32(*nbidders / *clientGoRoutines)
 			wi := n % (*nworkers)
 			w := coord.Workers[wi]
 			for duration.After(time.Now()) {
 				var t ddtxn.Query
-				buy_app.MakeOne(w.ID, &local_seed, &t)
+				buy_app.MakeOne(w.ID, &local_seed, sp, &t)
 				if *apps.Latency || *doValidate {
 					t.W = make(chan struct {
 						R *ddtxn.Result
