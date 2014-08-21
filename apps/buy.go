@@ -21,6 +21,7 @@ type Buy struct {
 	validate        []int32
 	lhr             []*stats.LatencyHist
 	lhw             []*stats.LatencyHist
+	z               *ddtxn.Zipf
 	padding1        [128]byte
 }
 
@@ -35,16 +36,11 @@ func (b *Buy) Init(np, nb, nw, rr, ngo int, ncrr float64) {
 	b.lhr = make([]*stats.LatencyHist, ngo)
 	b.lhw = make([]*stats.LatencyHist, ngo)
 	b.sp = uint32(nb / nw)
+	b.z = ddtxn.NewZipf(int64(nb), .99)
 }
 
 func (b *Buy) Populate(s *ddtxn.Store, ex *ddtxn.ETransaction) {
-	var op ddtxn.KeyType = ddtxn.SUM
-	for i := 0; i < b.nproducts; i++ {
-		k := ddtxn.ProductKey(i)
-		s.CreateKey(k, int32(0), op)
-	}
-	// Uncontended keys
-	for i := b.nproducts; i < b.nbidders/10; i++ {
+	for i := 0; i < b.nbidders; i++ {
 		k := ddtxn.ProductKey(i)
 		s.CreateKey(k, int32(0), ddtxn.SUM)
 	}
@@ -73,7 +69,8 @@ func (b *Buy) MakeOne(w int, local_seed *uint32, sp uint32, txn *ddtxn.Query) {
 	lb := int(rnd)
 	bidder := lb + w*int(sp)
 	amt := int32(ddtxn.RandN(local_seed, 10))
-	product := int(ddtxn.RandN(local_seed, uint32(b.nproducts)))
+	//	product := int(ddtxn.RandN(local_seed, uint32(b.nproducts)))
+	product := int(b.z.Next(local_seed))
 	x := int(ddtxn.RandN(local_seed, 100))
 	if x < b.read_rate {
 		if x > b.ncontended_rate {
