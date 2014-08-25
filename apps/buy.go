@@ -26,7 +26,7 @@ type Buy struct {
 }
 
 func (b *Buy) Init(np, nb, nw, rr, ngo int, ncrr float64) {
-	b.nproducts = np
+	b.nproducts = nb
 	b.nbidders = nb
 	b.nworkers = nw
 	b.ngo = ngo
@@ -68,20 +68,23 @@ func (b *Buy) MakeOne(w int, local_seed *uint32, sp uint32, txn *ddtxn.Query) {
 	rnd := ddtxn.RandN(local_seed, sp/8)
 	lb := int(rnd)
 	bidder := lb + w*int(sp)
-	amt := int32(ddtxn.RandN(local_seed, 10))
-	//	product := int(ddtxn.RandN(local_seed, uint32(b.nproducts)))
-	product := int(b.z.Next(local_seed))
 	x := int(ddtxn.RandN(local_seed, 100))
 	if x < b.read_rate {
 		if x > b.ncontended_rate {
 			// Contended read
-			txn.K1 = ddtxn.ProductKey(product)
+			product := int(b.z.Next(local_seed))
+			txn.K1 = ddtxn.UserKey(bidder)
+			txn.K2 = ddtxn.ProductKey(product)
 		} else {
 			// Uncontended read
+			product := int(ddtxn.RandN(local_seed, uint32(b.nproducts)))
 			txn.K1 = ddtxn.UserKey(bidder)
+			txn.K2 = ddtxn.ProductKey(product)
 		}
 		txn.TXN = ddtxn.D_READ_ONE
 	} else {
+		product := int(b.z.Next(local_seed))
+		amt := int32(ddtxn.RandN(local_seed, 10))
 		txn.K1 = ddtxn.UserKey(bidder)
 		txn.K2 = ddtxn.ProductKey(product)
 		txn.A = amt

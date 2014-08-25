@@ -1,7 +1,7 @@
 package ddtxn
 
 import (
-	"fmt"
+	"ddtxn/dlog"
 	"math"
 	"math/rand"
 )
@@ -36,7 +36,7 @@ func NewZipf(n int64, theta float64) *Zipf {
 		pow_half:   math.Pow(0.5, theta),
 		local_seed: uint32(rand.Intn(1000000)),
 	}
-	fmt.Printf("n: %v, theta: %v, zetan: %v, alpha: %v, eta: %v, pow_half: %v, local_seed: %v\n", z.n, z.theta, z.zetan, z.alpha, z.eta, z.pow_half, z.local_seed)
+	dlog.Printf("n: %v, theta: %v, zetan: %v, alpha: %v, eta: %v, pow_half: %v, local_seed: %v\n", z.n, z.theta, z.zetan, z.alpha, z.eta, z.pow_half, z.local_seed)
 	return z
 }
 

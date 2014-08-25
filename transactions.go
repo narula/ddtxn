@@ -96,12 +96,22 @@ func ReadTxn(t Query, tx ETransaction) (*Result, error) {
 	}
 	x := v1.int_value
 	_ = x
-	var txid TID
-	if txid = tx.Commit(); txid == 0 {
+
+	v1, err = tx.Read(t.K2)
+	if err != nil {
+		return r, err
+	}
+	y := v1.int_value
+	_ = y
+
+	if txid := tx.Commit(); txid == 0 {
 		return r, EABORT
 	}
 	if *Allocate {
-		r = &Result{x}
+		r = &Result{&struct {
+			val1 int32
+			val2 int32
+		}{x, y}}
 	}
 	return r, nil
 }
