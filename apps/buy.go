@@ -4,10 +4,13 @@ import (
 	"ddtxn"
 	"ddtxn/dlog"
 	"ddtxn/stats"
+	"flag"
 	"fmt"
 	"sync/atomic"
 	"time"
 )
+
+var ZipfDist = flag.Float64("zipf", .99, "Zipfian distribution theta")
 
 type Buy struct {
 	padding         [128]byte
@@ -32,11 +35,11 @@ func (b *Buy) Init(np, nb, nw, rr, ngo int, ncrr float64) {
 	b.ngo = ngo
 	b.read_rate = rr
 	b.ncontended_rate = int(ncrr * float64(rr))
-	b.validate = make([]int32, np)
+	b.validate = make([]int32, nb)
 	b.lhr = make([]*stats.LatencyHist, ngo)
 	b.lhw = make([]*stats.LatencyHist, ngo)
 	b.sp = uint32(nb / nw)
-	b.z = ddtxn.NewZipf(int64(nb), .99)
+	b.z = ddtxn.NewZipf(int64(b.nproducts), *ZipfDist)
 }
 
 func (b *Buy) Populate(s *ddtxn.Store, ex *ddtxn.ETransaction) {
@@ -114,13 +117,11 @@ func (b *Buy) Validate(s *ddtxn.Store, nitr int) bool {
 			continue
 		}
 		x = v.Value().(int32)
-		dlog.Printf("Validate: %v %v\n", k, x)
 		if x != b.validate[j] {
 			fmt.Printf("Validating key %v failed; store: %v should have: %v\n", k, x, b.validate[j])
 			good = false
 		}
 		if x == 0 {
-			dlog.Printf("Saying x is zero %v %v\n", x, zero_cnt)
 			zero_cnt++
 		}
 	}

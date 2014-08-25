@@ -19,7 +19,6 @@ parser.add_option("--noscp", action="store_false", dest="scp")
 parser.add_option("--wratio", action="store", type="float", dest="wratio", default=4)
 parser.add_option("--sr", action="store", type="int", dest="sr", default=10000)
 parser.add_option("--phase", action="store", type="int", dest="phase", default=80)
-parser.add_option("--retry", action="store_true", dest="retry", default=True)
 
 
 (options, args) = parser.parse_args()
@@ -28,7 +27,7 @@ ben_list_cpus = "socket@0,1,2,7,3-6"
 
 LATENCY_PART = " -latency=%s" % options.latency
 
-BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -nprocs %d -ngo %d -nw %d -nsec %d -contention %s -rr %d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -retry=%s" + LATENCY_PART
+BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -nprocs %d -ngo %d -nw %d -nsec %d -contention %s -rr %d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d" + LATENCY_PART
 
 def run_one(fn, cmd):
     if options.dprint:
@@ -61,7 +60,7 @@ def get_cpus(host):
         ncpus=[2, 4]
     return ncpus
 
-def fill_cmd(rr, contention, ncpus, systype, cpus_arg="", wratio=options.wratio, phase=options.phase, retry=options.retry):
+def fill_cmd(rr, contention, ncpus, systype, cpus_arg="", wratio=options.wratio, phase=options.phase):
     nsec = 10
     if options.short:
         nsec = 1
@@ -73,7 +72,7 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg="", wratio=options.wratio,
     xncpus = ncpus
     if xncpus < 80:
         xncpus += 1
-    cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr, retry)
+    cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr)
     return cmd
 
 def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=options.phase):
@@ -82,7 +81,7 @@ def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=opt
     f.write("\t")
 
 def wratio_exp(fnpath, host, contention, rr):
-    fnn = '%s-wratio-%d-%d-%s.data' % (host, contention, rr, options.retry)
+    fnn = '%s-wratio-%d-%d-%s.data' % (host, contention, rr, True)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     cpus = get_cpus(host)
@@ -107,7 +106,7 @@ def wratio_exp(fnpath, host, contention, rr):
 
 # x-axis is # cores
 def contention_exp(fnpath, host, contention, rr):
-    fnn = '%s-scalability-%d-%d-%s.data' % (host, contention, rr, options.retry)
+    fnn = '%s-scalability-%d-%d-%s.data' % (host, contention, rr, True)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     cpus = get_cpus(host)
@@ -130,7 +129,7 @@ def contention_exp(fnpath, host, contention, rr):
 
 
 def rw_exp(fnpath, host, contention, ncores):
-    fnn = '%s-rw-%d-%d-%s.data' % (host, contention, ncores, options.retry)
+    fnn = '%s-rw-%d-%d-%s.data' % (host, contention, ncores, True)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     rr = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
@@ -153,7 +152,7 @@ def rw_exp(fnpath, host, contention, ncores):
         system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 def products_exp(fnpath, host, rr, ncores):
-    fnn = '%s-products-%d-%d-%s.data' % (host, rr, ncores, options.retry)
+    fnn = '%s-products-%d-%d-%s.data' % (host, rr, ncores, True)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     cont = [1, 10, 100, 1000, 10000, 50000, 100000, 200000, 1000000]
@@ -177,7 +176,7 @@ def products_exp(fnpath, host, rr, ncores):
         system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 def single_exp(fnpath, host, rr, ncores):
-    fnn = '%s-single-%d-%s.data' % (host, ncores, options.retry)
+    fnn = '%s-single-%d-%s.data' % (host, ncores, True)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     prob = [0, .1, .5, 1, 5, 10, 20, 30, 40, 50, 100]
@@ -201,7 +200,7 @@ def single_exp(fnpath, host, rr, ncores):
         system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 def phase_exp(fnpath, host, contention, rr, ncores):
-    fnn = '%s-phase-%d-%d-%d-%s.data' % (host, contention, rr, ncores, options.retry)
+    fnn = '%s-phase-%d-%d-%d-%s.data' % (host, contention, rr, ncores, True)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     phase_len = [5, 10, 20, 40, 80, 120, 160, 200]
@@ -256,7 +255,7 @@ def latency():
     pass
 
 def rubis_exp(fnpath, host, contention, rr):
-    fnn = '%s-rubis-%d-%d-%s.data' % (host, contention, rr, options.retry)
+    fnn = '%s-rubis-%d-%d-%s.data' % (host, contention, rr, True)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     cpus = get_cpus(host)

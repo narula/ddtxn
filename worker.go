@@ -1,7 +1,6 @@
 package ddtxn
 
 import (
-	"ddtxn/dlog"
 	"flag"
 	"log"
 	"runtime/debug"
@@ -194,15 +193,15 @@ func (w *Worker) transition() {
 		start := time.Now()
 		w.E.SetPhase(MERGE)
 		w.local_store.Merge()
-		dlog.Printf("[%v] Sending ack for epoch change %v\n", w.ID, e)
+		//dlog.Printf("[%v] Sending ack for epoch change %v\n", w.ID, e)
 		w.coordinator.wepoch[w.ID] <- e
-		dlog.Printf("[%v] Waiting for safe for epoch change %v\n", w.ID, e)
+		//dlog.Printf("[%v] Waiting for safe for epoch change %v\n", w.ID, e)
 		x := <-w.coordinator.wsafe[w.ID]
 		if x != e {
 			log.Fatalf("Worker %v out of alignment; acked %v, got safe for %v\n", w.ID, e, x)
 		}
 		w.E.SetPhase(JOIN)
-		dlog.Printf("[%v] Entering join phase %v\n", w.ID, e)
+		//dlog.Printf("[%v] Entering join phase %v\n", w.ID, e)
 		for i := 0; i < len(w.waiters.t); i++ {
 			committed := false
 			// TODO: On abort this transaction really should be
@@ -225,14 +224,14 @@ func (w *Worker) transition() {
 		}
 		w.waiters.clear()
 		w.E.SetPhase(SPLIT)
-		dlog.Printf("[%v] Sending done %v\n", w.ID, e)
+		//dlog.Printf("[%v] Sending done %v\n", w.ID, e)
 		w.coordinator.wdone[w.ID] <- e
-		dlog.Printf("[%v] Awaiting go %v\n", w.ID, e)
+		//dlog.Printf("[%v] Awaiting go %v\n", w.ID, e)
 		x = <-w.coordinator.wgo[w.ID]
 		if x != e {
 			log.Fatalf("Worker %v out of alignment; said done for %v, got go for %v\n", w.ID, e, x)
 		}
-		dlog.Printf("[%v] Done transitioning %v\n", w.ID, e)
+		//dlog.Printf("[%v] Done transitioning %v\n", w.ID, e)
 		end := time.Since(start)
 		w.Nwait += end
 		w.epoch = e

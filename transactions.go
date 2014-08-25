@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"sync/atomic"
+	"time"
 )
 
 // I tried keeping a slice of interfaces; the reflection was costly.
@@ -29,6 +30,7 @@ type Query struct {
 	S1 string
 	S2 string
 	I  int
+	TS time.Time
 }
 
 type Result struct {

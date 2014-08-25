@@ -187,3 +187,25 @@ func (h *StatsHeap) update(o *OneStat) {
 	}
 	heap.Push(h, o)
 }
+
+type RetryHeap []Query
+
+func (h RetryHeap) Len() int           { return len(h) }
+func (h RetryHeap) Less(i, j int) bool { return h[j].TS.After(h[i].TS) }
+func (h RetryHeap) Swap(i, j int) {
+	h[i], h[j] = h[j], h[i]
+}
+
+func (h *RetryHeap) Push(x interface{}) {
+	// Push and Pop use pointer receivers because they modify the slice's length,
+	// not just its contents.
+	*h = append(*h, x.(Query))
+}
+
+func (h *RetryHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[0 : n-1]
+	return x
+}
