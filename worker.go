@@ -152,8 +152,6 @@ func (w *Worker) doTxn(t Query) (*Result, error) {
 	x, err := w.txns[t.TXN](t, w.E)
 	if err == ESTASH {
 		w.Nstats[NSTASHED]++
-		p, _ := UndoCKey(t.K1)
-		dlog.Printf("[%v] Stashing txn %v; epoch %v\n", w.ID, p, w.epoch)
 		w.stashTxn(t)
 		return nil, err
 	} else if err == nil {
@@ -206,10 +204,6 @@ func (w *Worker) transition() {
 		w.E.SetPhase(JOIN)
 		dlog.Printf("[%v] Entering join phase %v\n", w.ID, e)
 		for i := 0; i < len(w.waiters.t); i++ {
-			k1 := w.waiters.t[i].K1
-			p, _ := UndoCKey(k1)
-			dlog.Printf("[%v] Doing waiter %v\n", w.ID, p)
-			w.Nstats[NDIDSTASHED]++
 			committed := false
 			// TODO: On abort this transaction really should be
 			// reissued by the client, but in our benchmarks the
