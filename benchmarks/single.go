@@ -24,8 +24,6 @@ var prob = flag.Float64("contention", 100.0, "Probability contended key is in tx
 var readrate = flag.Int("rr", 0, "Read rate %.  Rest are writes")
 var dataFile = flag.String("out", "single-data.out", "Filename for output")
 var latency = flag.Bool("latency", false, "dummy")
-var Retry = flag.Bool("retry", false, "Whether to retry aborted transactions until they commit.  Changes the composition of reads/writes issued to the system (but maintains the read rate ratio specified for transactions *completed*. Default false.")
-var AtomicIncr = flag.Bool("atomic", false, "Use atomic increment function instead (no aborts)")
 
 var retryCount = flag.Int("rc", 1, "Number of times to retry a transaction immediately")
 var retryCountTotal = flag.Int("rt", 0, "Number of times to save and try a transaction again")
