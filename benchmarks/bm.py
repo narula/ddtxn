@@ -11,7 +11,7 @@ parser.add_option("--short", action="store_true", dest="short", default=False)
 parser.add_option("--allocate", action="store_true", dest="allocate", default=False)
 parser.add_option("--ncores", action="store", type="int", dest="default_ncores", default=-1)
 parser.add_option("--contention", action="store", type="float", dest="default_contention", default=100000)
-parser.add_option("--rr", action="store", type="int", dest="read_rate", default=50)
+parser.add_option("--rr", action="store", type="int", dest="read_rate", default=0)
 parser.add_option("--latency", action="store_true", dest="latency", default=False)
 parser.add_option("--rlock", action="store_false", dest="rlock", default=True)
 parser.add_option("--scp", action="store_true", dest="scp", default=True)
@@ -75,7 +75,7 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg, wratio, phase, atomic, zi
     cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr, atomic, zipf)
     return cmd
 
-def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=options.phase, atomic=False, zipf=.99):
+def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=options.phase, atomic=False, zipf=-1):
     cmd = fill_cmd(rr, contention, ncpu, sys, list_cpus, wratio, phase, atomic, zipf)
     run_one(f, cmd)
     f.write("\t")
@@ -118,9 +118,9 @@ def contention_exp(fnpath, host, contention, rr):
     for i in cpus:
         f.write("%d"% i)
         f.write("\t")
-        do(f, rr, contention, i, cpu_args, 0)
-        do(f, rr, contention, i, cpu_args, 1)
-        do(f, rr, contention, i, cpu_args, 2)
+        do(f, rr, contention, i, cpu_args, 0, zipf=-1)
+        do(f, rr, contention, i, cpu_args, 1, zipf=-1)
+        do(f, rr, contention, i, cpu_args, 2, zipf=-1)
         f.write("\n")
     f.close()
     if options.scp:
@@ -142,9 +142,9 @@ def rw_exp(fnpath, host, contention, ncores):
     for i in rr:
         f.write("%d"% i)
         f.write("\t")
-        do(f, i, contention, ncores, cpu_args, 0)
-        do(f, i, contention, ncores, cpu_args, 1)
-        do(f, i, contention, ncores, cpu_args, 2)
+        do(f, i, contention, ncores, cpu_args, 0, zipf=-1)
+        do(f, i, contention, ncores, cpu_args, 1, zipf=-1)
+        do(f, i, contention, ncores, cpu_args, 2, zipf=-1)
         f.write("\n")
     f.close()
     if options.scp:
@@ -166,9 +166,9 @@ def products_exp(fnpath, host, rr, ncores):
     for i in cont:
         f.write("%d"% i)
         f.write("\t")
-        do(f, rr, i, ncores, cpu_args, 0)
-        do(f, rr, i, ncores, cpu_args, 1)
-        do(f, rr, i, ncores, cpu_args, 2)
+        do(f, rr, i, ncores, cpu_args, 0, zipf=-1)
+        do(f, rr, i, ncores, cpu_args, 1, zipf=-1)
+        do(f, rr, i, ncores, cpu_args, 2, zipf=-1)
         f.write("\n")
     f.close()
     if options.scp:
@@ -312,7 +312,7 @@ if __name__ == "__main__":
         
     if options.default_ncores == -1:
         if host == "ben":
-            options.default_ncores = 40
+            options.default_ncores = 20
         elif host == "mat":
             options.default_ncores = 24
         elif host == "tom":
