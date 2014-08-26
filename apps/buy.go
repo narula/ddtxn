@@ -84,7 +84,7 @@ func (b *Buy) MakeOne(w int, local_seed *uint32, sp uint32, txn *ddtxn.Query) {
 			txn.K1 = ddtxn.UserKey(bidder)
 			txn.K2 = ddtxn.ProductKey(product)
 		}
-		txn.TXN = ddtxn.D_READ_ONE
+		txn.TXN = ddtxn.D_READ_TWO
 	} else {
 		product := int(b.z.Next(local_seed))
 		amt := int32(ddtxn.RandN(local_seed, 10))
@@ -134,7 +134,7 @@ func (b *Buy) Validate(s *ddtxn.Store, nitr int) bool {
 }
 
 func (b *Buy) Time(t *ddtxn.Query, txn_end time.Duration, n int) {
-	if t.TXN == ddtxn.D_READ_ONE {
+	if t.TXN == ddtxn.D_READ_TWO {
 		b.lhr[n].AddOne(txn_end.Nanoseconds())
 	} else {
 		b.lhw[n].AddOne(txn_end.Nanoseconds())

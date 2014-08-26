@@ -40,7 +40,7 @@ type Result struct {
 var Allocate = flag.Bool("allocate", true, "Allocate results")
 
 func IsRead(t int) bool {
-	if t == D_READ_ONE {
+	if t == D_READ_ONE || t == D_READ_TWO {
 		return true
 	}
 	return false
@@ -82,6 +82,23 @@ func BuyAndReadTxn(t Query, tx ETransaction) (*Result, error) {
 		log.Fatalf("should not happen %v\n", t.K2)
 	}
 	if tx.Commit() == 0 {
+		return r, EABORT
+	}
+	if *Allocate {
+		r = &Result{x}
+	}
+	return r, nil
+}
+
+func ReadOneTxn(t Query, tx ETransaction) (*Result, error) {
+	var r *Result = nil
+	v1, err := tx.Read(t.K1)
+	if err != nil {
+		return r, err
+	}
+	x := v1.int_value
+	_ = x
+	if txid := tx.Commit(); txid == 0 {
 		return r, EABORT
 	}
 	if *Allocate {
