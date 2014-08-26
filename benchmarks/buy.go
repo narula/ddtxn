@@ -28,9 +28,6 @@ var readrate = flag.Int("rr", 0, "Read rate %.  Rest are buys")
 var notcontended_readrate = flag.Float64("ncrr", .8, "Uncontended read rate %.  Default to .8")
 var dataFile = flag.String("out", "buy-data.out", "Filename for output")
 
-var retryCount = flag.Int("rc", 3, "Number of times to retry a transaction immediately")
-var retryCountTotal = flag.Int("rt", 15, "Number of times to save and try a transaction again")
-
 func main() {
 	flag.Parse()
 	runtime.GOMAXPROCS(*nprocs)
@@ -74,6 +71,7 @@ func main() {
 	for i := 0; i < *clientGoRoutines; i++ {
 		wg.Add(1)
 		go func(n int) {
+			exp := ddtxn.MakeExp(30)
 			retries := make(ddtxn.RetryHeap, 0)
 			heap.Init(&retries)
 			end_time := time.Now().Add(time.Duration(*nsec) * time.Second)
@@ -101,34 +99,29 @@ func main() {
 					txn_start = time.Now()
 				}
 				committed := false
-				for i := 0; i < *retryCount; i++ {
-					_, err := w.One(t)
-					if err == ddtxn.ESTASH {
-						if *apps.Latency || *doValidate {
-							x := <-t.W
-							err = x.E
-							if err == ddtxn.EABORT {
-								log.Fatalf("Should be run until commitment!\n")
-							}
+				_, err := w.One(t)
+				if err == ddtxn.ESTASH {
+					if *apps.Latency || *doValidate {
+						x := <-t.W
+						err = x.E
+						if err == ddtxn.EABORT {
+							log.Fatalf("Should be run until commitment!\n")
 						}
-						committed = true // The worker stash code will retry
-						break
-					} else if err == ddtxn.EABORT {
-						committed = false
-					} else {
-						committed = true
-						break
 					}
-					t.I++
+					committed = true // The worker stash code will retry
+				} else if err == ddtxn.EABORT {
+					committed = false
+				} else {
+					committed = true
 				}
+				t.I++
 				if !committed {
-					if t.I > *retryCountTotal {
+					t.TS = tm.Add(time.Duration(ddtxn.RandN(&local_seed, exp.Exp(t.I))) * time.Microsecond)
+					if t.TS.Before(end_time) {
+						heap.Push(&retries, t)
+					} else {
 						gave_up[n]++
-						continue
 					}
-					t.TS = tm.Add(time.Duration(t.I*100) * time.Microsecond)
-					heap.Push(&retries, t)
-					continue
 				}
 				if committed && *apps.Latency {
 					buy_app.Time(&t, time.Since(txn_start), n)
@@ -139,6 +132,7 @@ func main() {
 			}
 			wg.Done()
 			dlog.Printf("[%v] Length of retry queue on exit: %v\n", n, len(retries))
+			gave_up[n] = gave_up[n] + int64(len(retries))
 		}(i)
 	}
 	wg.Wait()

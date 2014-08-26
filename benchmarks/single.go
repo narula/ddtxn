@@ -24,6 +24,7 @@ var prob = flag.Float64("contention", 100.0, "Probability contended key is in tx
 var readrate = flag.Int("rr", 0, "Read rate %.  Rest are writes")
 var dataFile = flag.String("out", "single-data.out", "Filename for output")
 var latency = flag.Bool("latency", false, "dummy")
+var atomicIncr = flag.Bool("atomic", false, "Workload of just atomic increments")
 
 func main() {
 	flag.Parse()
@@ -64,7 +65,7 @@ func main() {
 		wg.Add(1)
 		go func(n int) {
 			exp := ddtxn.MakeExp(30)
-			retries := make(ddtxn.RetryHeap, 100)
+			retries := make(ddtxn.RetryHeap, 0)
 			heap.Init(&retries)
 			end_time := time.Now().Add(time.Duration(*nsec) * time.Second)
 			var local_seed uint32 = uint32(rand.Intn(10000000))
@@ -97,6 +98,9 @@ func main() {
 						t.K1 = ddtxn.ProductKey(k)
 					}
 					t.TXN = ddtxn.D_INCR_ONE
+					if *atomicIncr {
+						t.TXN = ddtxn.D_ATOMIC_INCR_ONE
+					}
 					y := int(ddtxn.RandN(&local_seed, 100))
 					if y < *readrate {
 						t.TXN = ddtxn.D_READ_ONE

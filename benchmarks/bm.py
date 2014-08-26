@@ -27,7 +27,7 @@ ben_list_cpus = "socket@0,1,2,7,3-6"
 
 LATENCY_PART = " -latency=%s" % options.latency
 
-BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -nprocs %d -ngo %d -nw %d -nsec %d -contention %s -rr %d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d" + LATENCY_PART
+BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -nprocs %d -ngo %d -nw %d -nsec %d -contention %s -rr %d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -atomic=%s" + LATENCY_PART
 
 def run_one(fn, cmd):
     if options.dprint:
@@ -60,7 +60,7 @@ def get_cpus(host):
         ncpus=[2, 4]
     return ncpus
 
-def fill_cmd(rr, contention, ncpus, systype, cpus_arg="", wratio=options.wratio, phase=options.phase):
+def fill_cmd(rr, contention, ncpus, systype, cpus_arg="", wratio=options.wratio, phase=options.phase, atomic=False):
     nsec = 10
     if options.short:
         nsec = 1
@@ -72,11 +72,11 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg="", wratio=options.wratio,
     xncpus = ncpus
     if xncpus < 80:
         xncpus += 1
-    cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr)
+    cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr, atomic)
     return cmd
 
-def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=options.phase):
-    cmd = fill_cmd(rr, contention, ncpu, sys, list_cpus, wratio, phase)
+def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=options.phase, atomic=False):
+    cmd = fill_cmd(rr, contention, ncpu, sys, list_cpus, wratio, phase, atomic)
     run_one(f, cmd)
     f.write("\t")
 
@@ -186,13 +186,14 @@ def single_exp(fnpath, host, rr, ncores):
     if host == "ben":
         cpu_args = ben_list_cpus
 
-    f.write("#Doppel\tOCC\t2PL\n")
+    f.write("#Doppel\tOCC\t2PL\tAtomic\n")
     for i in prob:
         f.write("%0.2f"% i)
         f.write("\t")
         do(f, rr, i, ncores, cpu_args, 0)
         do(f, rr, i, ncores, cpu_args, 1)
         do(f, rr, i, ncores, cpu_args, 2)
+        do(f, rr, i, ncores, cpu_args, 2, atomic=True)
         f.write("\n")
     f.close()
     if options.scp:
