@@ -69,38 +69,43 @@ func main() {
 	for i := 0; i < *clientGoRoutines; i++ {
 		wg.Add(1)
 		go func(n int) {
-			duration := time.Now().Add(time.Duration(*nsec) * time.Second)
+			end_time := time.Now().Add(time.Duration(*nsec) * time.Second)
 			var local_seed uint32 = uint32(rand.Intn(1000000))
 			wi := n % (*nworkers)
 			w := coord.Workers[wi]
-			// It's ok to reuse t because it gets copied in
-			// w.One(), and if we're actually reading from t later
-			// we pause and don't re-write it until it's done.
 			var t ddtxn.Query
-			for duration.After(time.Now()) {
+			for {
+				tm := time.Now()
+				if !end_time.After(tm) {
+					break
+				}
 				rubis.MakeOne(w.ID, &local_seed, &t)
+				var txn_start time.Time
 				if *apps.Latency || *doValidate {
 					t.W = make(chan struct {
 						R *ddtxn.Result
 						E error
 					})
-					txn_start := time.Now()
-					_, err := w.One(t)
-					if err == ddtxn.ESTASH {
+					txn_start = time.Now()
+				}
+				committed := false
+				_, err := w.One(t)
+				if err == ddtxn.ESTASH {
+					if *apps.Latency || *doValidate {
 						x := <-t.W
 						err = x.E
 					}
-					txn_end := time.Since(txn_start)
-					if *apps.Latency {
-						rubis.Time(&t, txn_end, n)
-					}
-					if *doValidate {
-						if err == nil {
-							rubis.Add(t)
-						}
-					}
+					committed = true
+				} else if err == ddtxn.EABORT {
+					committed = false
 				} else {
-					w.One(t)
+					committed = true
+				}
+				if committed && *apps.Latency {
+					rubis.Time(&t, time.Since(txn_start), n)
+				}
+				if committed && *doValidate {
+					rubis.Add(t)
 				}
 			}
 			wg.Done()
