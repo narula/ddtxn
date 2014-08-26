@@ -209,9 +209,11 @@ func (w *Worker) transition() {
 			// TODO: On abort this transaction really should be
 			// reissued by the client, but in our benchmarks the
 			// client doesn't wait, so here we go.
-			for !committed {
+			n := 0
+			for !committed && n < 20 {
 				r, err := w.doTxn2(w.waiters.t[i])
 				if err == EABORT {
+					n++
 					committed = false
 				} else {
 					committed = true

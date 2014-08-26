@@ -96,7 +96,7 @@ func (tx *OTransaction) Reset() {
 }
 
 func (tx *OTransaction) isSplit(br *BRecord) bool {
-	return *SysType == DOPPEL && tx.phase == SPLIT && br != nil && br.dd
+	return *SysType == DOPPEL && tx.phase == SPLIT && tx.s.any_dd && br != nil && br.dd
 }
 
 func (tx *OTransaction) Read(k Key) (*BRecord, error) {

@@ -20,11 +20,13 @@ var nsec = flag.Int("nsec", 2, "Time to run in seconds")
 var clientGoRoutines = flag.Int("ngo", 0, "Number of goroutines/workers generating client requests.")
 var nworkers = flag.Int("nw", 0, "Number of workers")
 var nbidders = flag.Int("nb", 1000000, "Keys in store, default is 1M")
-var prob = flag.Float64("contention", 100.0, "Probability contended key is in txn")
+var prob = flag.Float64("contention", 100.0, "Probability contended key is in txn. -1 means zipfian distribution and we use ZipfDist")
 var readrate = flag.Int("rr", 0, "Read rate %.  Rest are writes")
 var dataFile = flag.String("out", "single-data.out", "Filename for output")
 var latency = flag.Bool("latency", false, "dummy")
 var atomicIncr = flag.Bool("atomic", false, "Workload of just atomic increments")
+
+var ZipfDist = flag.Float64("zipf", 1, "Zipfian distribution theta.  1 means only 1 hot key and we'll vary the percentage (single exp)")
 
 func main() {
 	flag.Parse()
@@ -61,6 +63,16 @@ func main() {
 	pkey := int(sp - 1)
 	dlog.Printf("Partition size: %v; Contended key %v\n", sp/2, pkey)
 	gave_up := make([]int64, *clientGoRoutines)
+	var zipf *ddtxn.Zipf
+	if *prob == -1 && *ZipfDist >= 1 {
+		log.Fatalf("Zipf distribution must be less than 1")
+	}
+	if *ZipfDist < 1 && *prob > -1 {
+		log.Fatalf("Set contention to -1 to use Zipf distribution of keys")
+	}
+	if *prob == -1 && *ZipfDist < 1 {
+		zipf = ddtxn.NewZipf(int64(*nbidders), *ZipfDist)
+	}
 	for i := 0; i < *clientGoRoutines; i++ {
 		wg.Add(1)
 		go func(n int) {
@@ -84,7 +96,9 @@ func main() {
 					t = heap.Pop(&retries).(ddtxn.Query)
 				} else {
 					x := float64(ddtxn.RandN(&local_seed, 100))
-					if x < *prob {
+					if *prob == -1 {
+						t.K1 = ddtxn.ProductKey(int(zipf.Next(&local_seed)))
+					} else if x < *prob {
 						// contended txn
 						t.K1 = ddtxn.ProductKey(pkey)
 					} else {
@@ -143,7 +157,7 @@ func main() {
 	// nitr + NABORTS + ENOKEY is how many requests were issued.  A
 	// stashed transaction eventually executes and contributes to
 	// nitr.
-	out := fmt.Sprintf(" nworkers: %v, nwmoved: %v, nrmoved: %v, sys: %v, total/sec: %v, abortrate: %.2f, stashrate: %.2f, rr: %v, nkeys: %v, done: %v, actual time: %v, nreads: %v, nincrs: %v, epoch changes: %v, throughput ns/txn: %v, naborts: %v, coord time: %v, coord stats time: %v, total worker time transitioning: %v, nstashed: %v, rlock: %v, wrratio: %v, nsamples: %v, getkeys: %v, ddwrites: %v, nolock: %v, failv: %v, nlocked: %v, stashdone: %v, nfast: %v, gaveup: %v ", *nworkers, ddtxn.WMoved, ddtxn.RMoved, *ddtxn.SysType, float64(nitr)/end.Seconds(), 100*float64(stats[ddtxn.NABORTS])/float64(nitr+stats[ddtxn.NABORTS]), 100*float64(stats[ddtxn.NSTASHED])/float64(nitr+stats[ddtxn.NABORTS]), *readrate, *nbidders, nitr, end, stats[ddtxn.D_READ_ONE], stats[ddtxn.D_INCR_ONE], ddtxn.NextEpoch, end.Nanoseconds()/nitr, stats[ddtxn.NABORTS], ddtxn.Time_in_IE, ddtxn.Time_in_IE1, nwait, stats[ddtxn.NSTASHED], *ddtxn.UseRLocks, *ddtxn.WRRatio, stats[ddtxn.NSAMPLES], stats[ddtxn.NGETKEYCALLS], stats[ddtxn.NDDWRITES], stats[ddtxn.NO_LOCK], stats[ddtxn.NFAIL_VERIFY], stats[ddtxn.NLOCKED], stats[ddtxn.NDIDSTASHED], ddtxn.Nfast, gave_up[0])
+	out := fmt.Sprintf(" nworkers: %v, nwmoved: %v, nrmoved: %v, sys: %v, total/sec: %v, abortrate: %.2f, stashrate: %.2f, rr: %v, nkeys: %v, contention: %v, zipf: %v, done: %v, actual time: %v, nreads: %v, nincrs: %v, epoch changes: %v, throughput ns/txn: %v, naborts: %v, coord time: %v, coord stats time: %v, total worker time transitioning: %v, nstashed: %v, rlock: %v, wrratio: %v, nsamples: %v, getkeys: %v, ddwrites: %v, nolock: %v, failv: %v, nlocked: %v, stashdone: %v, nfast: %v, gaveup: %v ", *nworkers, ddtxn.WMoved, ddtxn.RMoved, *ddtxn.SysType, float64(nitr)/end.Seconds(), 100*float64(stats[ddtxn.NABORTS])/float64(nitr+stats[ddtxn.NABORTS]), 100*float64(stats[ddtxn.NSTASHED])/float64(nitr+stats[ddtxn.NABORTS]), *readrate, *nbidders, *prob, *ZipfDist, nitr, end, stats[ddtxn.D_READ_ONE], stats[ddtxn.D_INCR_ONE], ddtxn.NextEpoch, end.Nanoseconds()/nitr, stats[ddtxn.NABORTS], ddtxn.Time_in_IE, ddtxn.Time_in_IE1, nwait, stats[ddtxn.NSTASHED], *ddtxn.UseRLocks, *ddtxn.WRRatio, stats[ddtxn.NSAMPLES], stats[ddtxn.NGETKEYCALLS], stats[ddtxn.NDDWRITES], stats[ddtxn.NO_LOCK], stats[ddtxn.NFAIL_VERIFY], stats[ddtxn.NLOCKED], stats[ddtxn.NDIDSTASHED], ddtxn.Nfast, gave_up[0])
 	fmt.Printf(out)
 	fmt.Printf("\n")
 

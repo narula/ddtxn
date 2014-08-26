@@ -27,7 +27,7 @@ ben_list_cpus = "socket@0,1,2,7,3-6"
 
 LATENCY_PART = " -latency=%s" % options.latency
 
-BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -nprocs %d -ngo %d -nw %d -nsec %d -contention %s -rr %d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -atomic=%s" + LATENCY_PART
+BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -nprocs %d -ngo %d -nw %d -nsec %d -contention %s -rr %d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -atomic=%s -zipf=%s" + LATENCY_PART
 
 def run_one(fn, cmd):
     if options.dprint:
@@ -60,23 +60,23 @@ def get_cpus(host):
         ncpus=[2, 4]
     return ncpus
 
-def fill_cmd(rr, contention, ncpus, systype, cpus_arg="", wratio=options.wratio, phase=options.phase, atomic=False):
+def fill_cmd(rr, contention, ncpus, systype, cpus_arg, wratio, phase, atomic, zipf):
     nsec = 10
     if options.short:
         nsec = 1
     bn = "buy"
     if options.exp == "rubis":
         bn = "rubis"
-    if options.exp == "single":
+    if options.exp == "single" or options.exp == "zipf":
         bn = "single"
     xncpus = ncpus
     if xncpus < 80:
         xncpus += 1
-    cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr, atomic)
+    cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr, atomic, zipf)
     return cmd
 
-def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=options.phase, atomic=False):
-    cmd = fill_cmd(rr, contention, ncpu, sys, list_cpus, wratio, phase, atomic)
+def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=options.phase, atomic=False, zipf=.99):
+    cmd = fill_cmd(rr, contention, ncpu, sys, list_cpus, wratio, phase, atomic, zipf)
     run_one(f, cmd)
     f.write("\t")
 
@@ -190,10 +190,36 @@ def single_exp(fnpath, host, rr, ncores):
     for i in prob:
         f.write("%0.2f"% i)
         f.write("\t")
-        do(f, rr, i, ncores, cpu_args, 0)
-        do(f, rr, i, ncores, cpu_args, 1)
-        do(f, rr, i, ncores, cpu_args, 2)
+        do(f, rr, i, ncores, cpu_args, 0, zipf=1)
+        do(f, rr, i, ncores, cpu_args, 1, zipf=1)
+        do(f, rr, i, ncores, cpu_args, 2, zipf=1)
         do(f, rr, i, ncores, cpu_args, 2, atomic=True)
+        f.write("\n")
+    f.close()
+    if options.scp:
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
+
+def zipf_exp(fnpath, host, rr, ncores):
+    fnn = '%s-zipf.data' % (host)
+    filename=os.path.join(fnpath, fnn)
+    f = open(filename, 'w')
+    theta = [.1, .3, .5, .6, .7, .8, .9]
+    cpus = [20, 40, 80]
+    sys = [0, 1, 2]
+    cpu_args = ""
+    if host == "ben":
+        cpu_args = ben_list_cpus
+
+    f.write("#Doppel\tOCC\t2PL\tDoppel-40\tOCC-40\t2PL-40\n")
+    for i in theta:
+        f.write("%0.2f"% i)
+        for j in cpus:
+            for s in sys:
+                f.write("\t")
+                do(f, rr, -1, j, cpu_args, s, zipf=i)
+            f.write("\t")
+            do(f, rr, -1, j, cpu_args, 2, atomic=True, zipf=i)
         f.write("\n")
     f.close()
     if options.scp:
@@ -309,6 +335,8 @@ if __name__ == "__main__":
         products_exp(fnpath, host, options.read_rate, options.default_ncores)
     elif options.exp == "single":
         single_exp(fnpath, host, 0, options.default_ncores)
+    elif options.exp == "zipf":
+        zipf_exp(fnpath, host, 0, options.default_ncores)
     elif options.exp == "rubis":
         if options.read_rate == -1:
             rubis_exp(fnpath, host, 30, 90)
