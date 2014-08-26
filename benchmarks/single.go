@@ -25,9 +25,6 @@ var readrate = flag.Int("rr", 0, "Read rate %.  Rest are writes")
 var dataFile = flag.String("out", "single-data.out", "Filename for output")
 var latency = flag.Bool("latency", false, "dummy")
 
-var retryCount = flag.Int("rc", 1, "Number of times to retry a transaction immediately")
-var retryCountTotal = flag.Int("rt", 0, "Number of times to save and try a transaction again")
-
 func main() {
 	flag.Parse()
 	runtime.GOMAXPROCS(*nprocs)
@@ -66,6 +63,7 @@ func main() {
 	for i := 0; i < *clientGoRoutines; i++ {
 		wg.Add(1)
 		go func(n int) {
+			exp := ddtxn.MakeExp(30)
 			retries := make(ddtxn.RetryHeap, 100)
 			heap.Init(&retries)
 			end_time := time.Now().Add(time.Duration(*nsec) * time.Second)
@@ -113,13 +111,17 @@ func main() {
 				}
 				t.I++
 				if !committed {
-					t.TS = tm.Add(time.Duration((2 ^ t.I)) * time.Microsecond)
-					heap.Push(&retries, t)
-					continue
+					t.TS = tm.Add(time.Duration(ddtxn.RandN(&local_seed, exp.Exp(t.I))) * time.Microsecond)
+					if t.TS.Before(end_time) {
+						heap.Push(&retries, t)
+					} else {
+						gave_up[n]++
+					}
 				}
 			}
 			wg.Done()
 			dlog.Printf("[%v] Length of retry queue on exit: %v\n", n, len(retries))
+			gave_up[n] = gave_up[n] + int64(len(retries))
 		}(i)
 	}
 	wg.Wait()

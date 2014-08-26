@@ -4,12 +4,34 @@ import (
 	crand "crypto/rand"
 	"ddtxn/dlog"
 	"fmt"
+	"log"
 	"math"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
 )
+
+type Exp2 struct {
+	values []uint32
+}
+
+func MakeExp(n int) *Exp2 {
+	e := &Exp2{
+		values: make([]uint32, n),
+	}
+	for i := 0; i < n; i++ {
+		e.values[i] = uint32(math.Exp2(float64(i)))
+	}
+	return e
+}
+
+func (e *Exp2) Exp(n int) uint32 {
+	if n >= len(e.values) {
+		log.Fatalf("Too big")
+	}
+	return e.values[n]
+}
 
 func RandN(seed *uint32, n uint32) uint32 {
 	*seed = *seed*1103515245 + 12345
