@@ -66,7 +66,7 @@ func main() {
 	for i := 0; i < *clientGoRoutines; i++ {
 		wg.Add(1)
 		go func(n int) {
-			retries := make(ddtxn.RetryHeap, 0)
+			retries := make(ddtxn.RetryHeap, 100)
 			heap.Init(&retries)
 			end_time := time.Now().Add(time.Duration(*nsec) * time.Second)
 			var local_seed uint32 = uint32(rand.Intn(10000000))
@@ -105,22 +105,15 @@ func main() {
 					}
 				}
 				committed := false
-				for i := 0; i < *retryCount; i++ {
-					_, err := w.One(t)
-					if err == ddtxn.EABORT {
-						committed = false
-					} else {
-						committed = true
-						break
-					}
-					t.I++
+				_, err := w.One(t)
+				if err == ddtxn.EABORT {
+					committed = false
+				} else {
+					committed = true
 				}
+				t.I++
 				if !committed {
-					if t.I > *retryCountTotal {
-						gave_up[n]++
-						continue
-					}
-					t.TS = tm.Add(time.Duration(t.I*100) * time.Microsecond)
+					t.TS = tm.Add(time.Duration((2 ^ t.I)) * time.Microsecond)
 					heap.Push(&retries, t)
 					continue
 				}
