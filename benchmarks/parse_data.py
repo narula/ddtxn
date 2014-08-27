@@ -96,6 +96,8 @@ def wrangle_file(f):
             continue
         if line.find("# ") == 0:
             continue
+        if line.find("BKey") == 0:
+            continue
         pair = line.split(": ")
         name = pair[0].strip()
         val = pair[1].strip()
@@ -122,7 +124,7 @@ def make_graph(points, binary="buy", xaxis="nw", yaxis="total/sec", *args, **kwa
     for p in new_points:
         xpointval = ""
         try:
-            xpointval = p[xaxis]
+            xpointval = int(p[xaxis])
         except:
             print "no", xaxis
             continue
@@ -130,16 +132,16 @@ def make_graph(points, binary="buy", xaxis="nw", yaxis="total/sec", *args, **kwa
     return graph_points
 
 def output_gnuplot(points, yaxis):
-    for x, p in points.items():
-        print x, "\t", p[yaxis]
+    for key in sorted(points):
+        print key, "\t", points[key][yaxis]
 
 if __name__ == "__main__":
     f = open('single-data.out', 'r')
     points = wrangle_file(f)
     print "OCC:"
-    graph_points = make_graph(points, binary="single", xaxis="contention", yaxis="gaveup", nworkers="20", sys="1")
+    graph_points = make_graph(points, binary="single", xaxis="contention", yaxis="gaveup", nworkers="20", sys="1", rr="0")
     output_gnuplot(graph_points, "gaveup")
 
     print "Doppel:"
-    graph_points = make_graph(points, binary="single", xaxis="contention", yaxis="gaveup", nworkers="20", sys="0")
+    graph_points = make_graph(points, binary="single", xaxis="contention", yaxis="gaveup", nworkers="20", sys="0", rr="0")
     output_gnuplot(graph_points, "gaveup")
