@@ -29,22 +29,26 @@ type Coordinator struct {
 	wgo    []chan TID
 	wdone  []chan TID
 
-	Done       chan chan bool
-	Accelerate chan bool
-	trigger    int32
+	Coordinate            bool
+	PotentialPhaseChanges int64
+	Done                  chan chan bool
+	Accelerate            chan bool
+	trigger               int32
 }
 
 func NewCoordinator(n int, s *Store) *Coordinator {
 	c := &Coordinator{
-		n:          n,
-		Workers:    make([]*Worker, n),
-		epochTID:   EPOCH_INCR,
-		wepoch:     make([]chan TID, n),
-		wsafe:      make([]chan TID, n),
-		wgo:        make([]chan TID, n),
-		wdone:      make([]chan TID, n),
-		Done:       make(chan chan bool),
-		Accelerate: make(chan bool),
+		n:                     n,
+		Workers:               make([]*Worker, n),
+		epochTID:              EPOCH_INCR,
+		wepoch:                make([]chan TID, n),
+		wsafe:                 make([]chan TID, n),
+		wgo:                   make([]chan TID, n),
+		wdone:                 make([]chan TID, n),
+		Done:                  make(chan chan bool),
+		Accelerate:            make(chan bool),
+		Coordinate:            false,
+		PotentialPhaseChanges: 0,
 	}
 	for i := 0; i < n; i++ {
 		c.wepoch[i] = make(chan TID)
@@ -76,7 +80,82 @@ var WMoved int64
 var Time_in_IE time.Duration
 var Time_in_IE1 time.Duration
 
-func (c *Coordinator) IncrementEpoch() {
+func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
+	if c.PotentialPhaseChanges%(10) != 0 {
+		return nil, nil
+	}
+	start2 := time.Now()
+	s := c.Workers[0].store
+	for i := 0; i < c.n; i++ {
+		w := c.Workers[i]
+		c.Workers[i].Lock()
+		s.cand.Merge(w.local_store.candidates)
+	}
+	potential_dd_keys := make(map[Key]bool)
+	to_remove := make(map[Key]bool)
+	xx := len(*s.cand.h)
+	for i := 0; i < xx; i++ {
+		o := heap.Pop(s.cand.h).(*OneStat)
+		x, y := UndoCKey(o.k)
+		dlog.Printf("%v Considering key %v %v; ratio %v\n", i, x, y, o.ratio())
+		br, _ := s.getKey(o.k)
+		if !br.dd && o.ratio() > *WRRatio && o.writes > 3 {
+			potential_dd_keys[o.k] = true
+			dlog.Printf("Moving %v %v to split r:%v w:%v c:%v ratio:%v\n", x, y, o.reads, o.writes, o.conflicts, o.ratio())
+		} else if br.dd {
+			dlog.Printf("No need to Move %v %v to split; already dd\n", x, y)
+		} else {
+			dlog.Printf("Not enough writes yet: %v %v %v; ratio %v\n", x, y, o.writes, o.ratio())
+		}
+	}
+	// Check to see if we need to remove anything from dd
+	for k, v := range s.dd {
+		if !v {
+			continue
+		}
+		o, ok := s.cand.m[k]
+		if !ok {
+			x, y := UndoCKey(k)
+			dlog.Printf("Key %v %v was split but now is not in store candidates\n", x, y)
+			continue
+		}
+		if o.ratio() < (*WRRatio)/2 {
+			to_remove[k] = true
+			x, y := UndoCKey(o.k)
+			dlog.Printf("Moved %v %v from split ratio %v\n", x, y, o.ratio())
+		}
+	}
+	if len(s.dd) == 0 && len(potential_dd_keys) == 0 {
+		s.any_dd = false
+		c.Coordinate = false
+	} else {
+		c.Coordinate = true
+		s.any_dd = true
+	}
+	// Reset global store
+	x := make([]*OneStat, 0)
+	sh := StatsHeap(x)
+	s.cand = &Candidates{make(map[Key]*OneStat), &sh}
+
+	for i := 0; i < c.n; i++ {
+		// Reset local stores and unlock
+		w := c.Workers[i]
+		x := make([]*OneStat, 0)
+		sh := StatsHeap(x)
+		w.local_store.candidates = &Candidates{make(map[Key]*OneStat), &sh}
+		w.Unlock()
+	}
+	end := time.Since(start2)
+	Time_in_IE1 += end
+	return potential_dd_keys, to_remove
+}
+
+func (c *Coordinator) IncrementEpoch(force bool) {
+	c.PotentialPhaseChanges++
+	move_dd, remove_dd := c.Stats()
+	if !c.Coordinate && !force {
+		return
+	}
 	dlog.Printf("Incrementing epoch %v\n", c.epochTID)
 	start := time.Now()
 	next_epoch := c.NextGlobalTID()
@@ -103,71 +182,25 @@ func (c *Coordinator) IncrementEpoch() {
 
 	}
 
-	// Reads done!  Check stats
 	s := c.Workers[0].store
-	if c.epochTID%(10*EPOCH_INCR) == 0 {
-		start2 := time.Now()
-		for i := 0; i < c.n; i++ {
-			w := c.Workers[i]
-			s.cand.Merge(w.local_store.candidates)
+	// Merge dd
+	if move_dd != nil {
+		for k, _ := range move_dd {
+			br, _ := s.getKey(k)
+			br.dd = true
+			s.dd[k] = true
+			WMoved += 1
 		}
-		xx := len(*s.cand.h)
-		for i := 0; i < xx; i++ {
-			o := heap.Pop(s.cand.h).(*OneStat)
-			x, y := UndoCKey(o.k)
-			dlog.Printf("%v Considering key %v %v; ratio %v\n", i, x, y, o.ratio())
-			br, _ := s.getKey(o.k)
-			if !br.dd && o.ratio() > *WRRatio && o.writes > 3 {
-				br.dd = true
-				WMoved += 1
-				dlog.Printf("Moved %v %v to split r:%v w:%v c:%v ratio:%v\n", x, y, o.reads, o.writes, o.conflicts, o.ratio())
-				s.dd[o.k] = true
-				s.any_dd = true
-			} else if br.dd {
-				dlog.Printf("No need to Move %v %v to split; already dd\n", x, y)
-			} else {
-				dlog.Printf("Not enough writes yet: %v %v %v; ratio %v\n", x, y, o.writes, o.ratio())
-			}
-		}
-		// Check to see if we need to remove anything from dd
-		for k, v := range s.dd {
-			if !v {
-				continue
-			}
-			o, ok := s.cand.m[k]
-			if !ok {
-				br, _ := s.getKey(k)
-				x, y := UndoCKey(br.key)
-				dlog.Printf("Key %v %v was split but now is not in store candidates\n", x, y)
-				continue
-			}
-			if o.ratio() < (*WRRatio)/2 {
-				br, _ := s.getKey(k)
-				br.dd = false
-				RMoved += 1
-				x, y := UndoCKey(o.k)
-				dlog.Printf("Moved %v %v from split ratio %v\n", x, y, o.ratio())
-				s.dd[k] = false
-				//s.dd[i], s.dd = s.dd[len(s.dd)-1], s.dd[:len(s.dd)-1]
-			}
-		}
-		if len(s.dd) == 0 {
-			s.any_dd = false
-		}
-		for i := 0; i < c.n; i++ {
-			// Reset local stores
-			w := c.Workers[i]
-			x := make([]*OneStat, 0)
-			sh := StatsHeap(x)
-			w.local_store.candidates = &Candidates{make(map[Key]*OneStat), &sh}
-		}
-		// Reset global store
-		x := make([]*OneStat, 0)
-		sh := StatsHeap(x)
-		s.cand = &Candidates{make(map[Key]*OneStat), &sh}
-		end := time.Since(start2)
-		Time_in_IE1 += end
 	}
+	if remove_dd != nil {
+		for k, _ := range remove_dd {
+			br, _ := s.getKey(k)
+			br.dd = false
+			s.dd[k] = false
+			RMoved += 1
+		}
+	}
+
 	for i := 0; i < c.n; i++ {
 		c.wgo[i] <- next_epoch
 	}
@@ -195,7 +228,7 @@ func (c *Coordinator) Process() {
 		select {
 		case x := <-c.Done:
 			if *SysType == DOPPEL {
-				c.IncrementEpoch()
+				c.IncrementEpoch(true)
 			}
 			for i := 0; i < c.n; i++ {
 				c.Workers[i].done <- true
@@ -205,22 +238,21 @@ func (c *Coordinator) Process() {
 			return
 		case <-tm:
 			if *SysType == DOPPEL {
-				c.IncrementEpoch()
+				c.IncrementEpoch(false)
 			}
 		case <-check_trigger:
 			if *SysType == DOPPEL {
 				x := atomic.LoadInt32(&c.trigger)
 				if x == int32(c.n) {
-					//					fmt.Printf("Faster change %v for epoch %v\n", x, c.epochTID)
 					Nfast++
 					atomic.StoreInt32(&c.trigger, 0)
-					c.IncrementEpoch()
+					c.IncrementEpoch(true)
 				}
 			}
 		case <-c.Accelerate:
 			if *SysType == DOPPEL {
 				dlog.Printf("Accelerating\n")
-				c.IncrementEpoch()
+				c.IncrementEpoch(true)
 			}
 		}
 	}
