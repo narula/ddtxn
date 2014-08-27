@@ -74,7 +74,7 @@ func (b *Buy) MakeOne(w int, local_seed *uint32, sp uint32, txn *ddtxn.Query) {
 	x := int(ddtxn.RandN(local_seed, 100))
 	var product int
 	if *ZipfDist > -0 {
-		product = int(b.z.Next(local_seed))
+		product = int(b.z.Next(local_seed) - 1)
 	} else {
 		product = int(ddtxn.RandN(local_seed, uint32(b.nproducts)))
 	}

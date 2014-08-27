@@ -119,17 +119,17 @@ func (tx *OTransaction) Read(k Key) (*BRecord, error) {
 		}
 	}
 	br, err := tx.s.getKey(k)
-	if tx.isSplit(br) {
-		if tx.count {
-			tx.ls.candidates.Stash(k)
-		}
-		return nil, ESTASH
-	}
 	if *CountKeys {
 		p, r := UndoCKey(k)
 		if r == 112 {
 			tx.w.NKeyAccesses[p]++
 		}
+	}
+	if tx.isSplit(br) {
+		if tx.count {
+			tx.ls.candidates.Stash(k)
+		}
+		return nil, ESTASH
 	}
 	if err == ENOKEY {
 		n := len(tx.read)
@@ -160,6 +160,12 @@ func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 	// into the read set and potentially abort accordingly.  Doing so
 	// here, but not using the value until commit time.
 	br, err := tx.s.getKey(k)
+	if *CountKeys {
+		p, r := UndoCKey(k)
+		if r == 112 {
+			tx.w.NKeyAccesses[p]++
+		}
+	}
 	if tx.isSplit(br) {
 		// Do not need to read-validate
 	} else {
@@ -312,6 +318,12 @@ func (tx *OTransaction) Commit() TID {
 		}
 		if rk.br == nil {
 			rk.br, err = tx.s.getKey(rk.key)
+			if *CountKeys {
+				p, r := UndoCKey(rk.key)
+				if r == 112 {
+					tx.w.NKeyAccesses[p]++
+				}
+			}
 			// Verify it still doesn't exist or I'm the one who
 			// created and locked it to write
 			if err == ENOKEY || tx.checkOwnership(rk.br, rk.last) {
@@ -415,7 +427,7 @@ func (tx *LTransaction) Read(k Key) (*BRecord, error) {
 	br, err := tx.s.getKey(k)
 	if *CountKeys {
 		p, r := UndoCKey(k)
-		if r == 117 {
+		if r == 112 {
 			tx.w.NKeyAccesses[p]++
 		}
 	}
@@ -437,6 +449,12 @@ func (tx *LTransaction) MaybeWrite(k Key) {
 		log.Fatalf("Shouldn't already have a lock on this\n")
 	}
 	br, err := tx.s.getKey(k)
+	if *CountKeys {
+		p, r := UndoCKey(k)
+		if r == 112 {
+			tx.w.NKeyAccesses[p]++
+		}
+	}
 	if br == nil || err != nil {
 		// Will acquire lock when I do the write and create the key.
 		return

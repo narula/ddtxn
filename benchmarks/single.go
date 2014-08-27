@@ -99,7 +99,7 @@ func main() {
 				} else {
 					x := float64(ddtxn.RandN(&local_seed, 100))
 					if *prob == -1 {
-						t.K1 = ddtxn.ProductKey(int(zipf.Next(&local_seed)))
+						t.K1 = ddtxn.ProductKey(int(zipf.Next(&local_seed) - 1))
 					} else if x < *prob {
 						// contended txn
 						t.K1 = ddtxn.ProductKey(pkey)

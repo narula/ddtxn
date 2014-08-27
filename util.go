@@ -229,10 +229,13 @@ func WriteCountKeyStats(coord *Coordinator, nb int, f *os.File) {
 		} else {
 			ok[3]++
 		}
-		if x > 2*stddev && bk[i] != 0 {
-			f.WriteString(fmt.Sprintf("BKey %v: %v\n", i, bk[i]))
-		}
-		if x > stddev && bk[i] != 0 && x < 2*stddev {
+		// if x > 2*stddev && bk[i] != 0 {
+		// 	f.WriteString(fmt.Sprintf("BKey %v: %v\n", i, bk[i]))
+		// }
+		// if x > stddev && bk[i] != 0 && x < 2*stddev {
+		// 	f.WriteString(fmt.Sprintf("BKey %v: %v\n", i, bk[i]))
+		// }
+		if i < 1000 {
 			f.WriteString(fmt.Sprintf("BKey %v: %v\n", i, bk[i]))
 		}
 	}
