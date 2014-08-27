@@ -190,10 +190,10 @@ def single_exp(fnpath, host, rr, ncores):
     for i in prob:
         f.write("%0.2f"% i)
         f.write("\t")
-        do(f, rr, i, ncores, cpu_args, 0, zipf=1)
-        do(f, rr, i, ncores, cpu_args, 1, zipf=1)
-        do(f, rr, i, ncores, cpu_args, 2, zipf=1)
-        do(f, rr, i, ncores, cpu_args, 2, atomic=True)
+        do(f, rr, i, ncores, cpu_args, 0, zipf=-1)
+        do(f, rr, i, ncores, cpu_args, 1, zipf=-1)
+        do(f, rr, i, ncores, cpu_args, 2, zipf=-1)
+        do(f, rr, i, ncores, cpu_args, 2, zipf=-1, atomic=True)
         f.write("\n")
     f.close()
     if options.scp:
