@@ -27,7 +27,7 @@ ben_list_cpus = "socket@0,1,2,7,3-6"
 
 LATENCY_PART = " -latency=%s" % options.latency
 
-BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -nprocs %d -ngo %d -nw %d -nsec %d -contention %s -rr %d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -atomic=%s -zipf=%s" + LATENCY_PART
+BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -nprocs=%d -ngo=%d -nw=%d -nsec=%d -contention=%s -rr=%d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -atomic=%s -zipf=%s" + LATENCY_PART
 
 def run_one(fn, cmd):
     if options.dprint:
@@ -110,7 +110,7 @@ def contention_exp(fnpath, host, contention, rr):
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     cpus = get_cpus(host)
-    f.write("#Doppel\tOCC\n")
+    f.write("#Doppel\tOCC\t2PL\n")
     cpu_args = ""
     if host == "ben":
         cpu_args = ben_list_cpus
@@ -138,7 +138,7 @@ def rw_exp(fnpath, host, contention, ncores):
     cpu_args = ""
     if host == "ben":
         cpu_args = ben_list_cpus
-    f.write("#Doppel\tOCC\n")
+    f.write("#Doppel\tOCC\t2PL\n")
     for i in rr:
         f.write("%d"% i)
         f.write("\t")
@@ -162,7 +162,7 @@ def products_exp(fnpath, host, rr, ncores):
     if host == "ben":
         cpu_args = ben_list_cpus
 
-    f.write("#Doppel\tOCC\n")
+    f.write("#Doppel\tOCC\t2PL\n")
     for i in cont:
         f.write("%d"% i)
         f.write("\t")
@@ -204,14 +204,14 @@ def zipf_exp(fnpath, host, rr, ncores):
     fnn = '%s-zipf.data' % (host)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
-    theta = [.1, .3, .5, .6, .7, .8, .9]
+    theta = [0, .1, .3, .5, .6, .7, .8, .9]
     cpus = [20, 40, 80]
     sys = [0, 1, 2]
     cpu_args = ""
     if host == "ben":
         cpu_args = ben_list_cpus
 
-    f.write("#Doppel\tOCC\t2PL\tDoppel-40\tOCC-40\t2PL-40\n")
+    f.write("#Doppel\tOCC\t2PL\tDoppel-40\tOCC-40\t2PL-40\tDoppel-80\tOCC-80\t2PL-80\n")
     for i in theta:
         f.write("%0.2f"% i)
         for j in cpus:

@@ -67,11 +67,67 @@ parser.add_option("-f", "--file", action="store", type="string", dest="fn", defa
 (options, args) = parser.parse_args()
 
 
-def wrangle_file():
-    pass
+def wrangle_file(f):
+    points = []
+    i = 0
+    one_point = {}
+    for line in f.readlines():
+        if line.find("# ./") == 0:
+            if i > 0:
+                points.append(one_point)
+                one_point = {}
+            i+=1
+            # binary and args
+            blah = line.split(" ")
+            one_point["binary"] = blah[1][2:].strip()
+            #print "binary: ", one_point["binary"]
+            for j, pair in enumerate(blah):
+                if pair.find("-") is not 0:
+                    continue
+                else:
+                    if pair.find("=") < 0:
+                        pair = pair.strip()
+                        if pair == "-d" or pair=="-ck" or pair=="-conflicts":
+                            continue
+                        one_point[pair.lstrip("-").strip()] = blah[j+1].strip()
+                        continue
+                    pairlist = pair.split("=")
+                    one_point[pairlist[0][1:]] = pairlist[1]
+            continue
+        if line.find("# ") == 0:
+            continue
+        pair = line.split(": ")
+        name = pair[0].strip()
+        val = pair[1].strip()
+        one_point[name] = val
+    return points
+        
+def make_graph(points, binary="buy", xaxis="nw", yaxis="total/sec", *args, **kwargs):
+    new_points = []
 
-def make_graph(graph):
-    pass
+    # restrict points to ones that match kwargs
+    for p in points:
+        for name, val in kwargs.items():
+            if p[name] != val:
+                continue
+            else:
+                new_points.append(p)
+
+    # collect appropriate data points, 1 each.  Latest should overwrite oldest.
+    graph_points = {}
+    for p in new_points:
+        xpointval = ""
+        try:
+            xpointval = p[xaxis]
+        except:
+            print "no", xaxis
+            continue
+        graph_points[xpointval] = p
+    for x, p in graph_points.items():
+        print x, ":", p[yaxis]
+    
 
 if __name__ == "__main__":
-    pass
+    f = open('single-data.out', 'r')
+    points = wrangle_file(f)
+    make_graph(points, binary="single", xaxis="contention", yaxis="gaveup", nworkers="20")

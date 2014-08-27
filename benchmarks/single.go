@@ -38,6 +38,18 @@ func main() {
 	if *nworkers == 0 {
 		*nworkers = *nprocs
 	}
+
+	var zipf *ddtxn.Zipf
+	if *prob == -1 && *ZipfDist < 0 {
+		log.Fatalf("Zipf distribution must be positive")
+	}
+	if *ZipfDist >= 0 && *prob > -1 {
+		log.Fatalf("Set contention to -1 to use Zipf distribution of keys")
+	}
+	if *prob == -1 && *ZipfDist >= 0 {
+		zipf = ddtxn.NewZipf(int64(*nbidders), *ZipfDist)
+	}
+
 	s := ddtxn.NewStore()
 	for i := 0; i < *nbidders; i++ {
 		k := ddtxn.ProductKey(i)
@@ -63,16 +75,6 @@ func main() {
 	pkey := int(sp - 1)
 	dlog.Printf("Partition size: %v; Contended key %v\n", sp/2, pkey)
 	gave_up := make([]int64, *clientGoRoutines)
-	var zipf *ddtxn.Zipf
-	if *prob == -1 && *ZipfDist >= 1 {
-		log.Fatalf("Zipf distribution must be less than 1")
-	}
-	if *ZipfDist < 1 && *prob > -1 {
-		log.Fatalf("Set contention to -1 to use Zipf distribution of keys")
-	}
-	if *prob == -1 && *ZipfDist < 1 {
-		zipf = ddtxn.NewZipf(int64(*nbidders), *ZipfDist)
-	}
 	for i := 0; i < *clientGoRoutines; i++ {
 		wg.Add(1)
 		go func(n int) {

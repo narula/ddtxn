@@ -117,14 +117,16 @@ func (c *Coordinator) IncrementEpoch() {
 			x, y := UndoCKey(o.k)
 			dlog.Printf("%v Considering key %v %v; ratio %v\n", i, x, y, o.ratio())
 			br, _ := s.getKey(o.k)
-			if !br.dd && o.ratio() > *WRRatio {
+			if !br.dd && o.ratio() > *WRRatio && o.writes > 3 {
 				br.dd = true
 				WMoved += 1
 				dlog.Printf("Moved %v %v to split r:%v w:%v c:%v ratio:%v\n", x, y, o.reads, o.writes, o.conflicts, o.ratio())
 				s.dd[o.k] = true
 				s.any_dd = true
-			} else {
+			} else if br.dd {
 				dlog.Printf("No need to Move %v %v to split; already dd\n", x, y)
+			} else {
+				dlog.Printf("Not enough writes yet: %v %v %v; ratio %v\n", x, y, o.writes, o.ratio())
 			}
 		}
 		// Check to see if we need to remove anything from dd
