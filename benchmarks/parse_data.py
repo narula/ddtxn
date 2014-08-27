@@ -107,11 +107,15 @@ def make_graph(points, binary="buy", xaxis="nw", yaxis="total/sec", *args, **kwa
 
     # restrict points to ones that match kwargs
     for p in points:
+        if p["binary"] != binary:
+            continue
+        matches = True
         for name, val in kwargs.items():
             if p[name] != val:
+                matches = False
                 continue
-            else:
-                new_points.append(p)
+        if matches:
+            new_points.append(p)
 
     # collect appropriate data points, 1 each.  Latest should overwrite oldest.
     graph_points = {}
@@ -123,11 +127,19 @@ def make_graph(points, binary="buy", xaxis="nw", yaxis="total/sec", *args, **kwa
             print "no", xaxis
             continue
         graph_points[xpointval] = p
-    for x, p in graph_points.items():
-        print x, ":", p[yaxis]
-    
+    return graph_points
+
+def output_gnuplot(points, yaxis):
+    for x, p in points.items():
+        print x, "\t", p[yaxis]
 
 if __name__ == "__main__":
     f = open('single-data.out', 'r')
     points = wrangle_file(f)
-    make_graph(points, binary="single", xaxis="contention", yaxis="gaveup", nworkers="20")
+    print "OCC:"
+    graph_points = make_graph(points, binary="single", xaxis="contention", yaxis="gaveup", nworkers="20", sys="1")
+    output_gnuplot(graph_points, "gaveup")
+
+    print "Doppel:"
+    graph_points = make_graph(points, binary="single", xaxis="contention", yaxis="gaveup", nworkers="20", sys="0")
+    output_gnuplot(graph_points, "gaveup")
