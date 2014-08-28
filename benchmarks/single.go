@@ -140,7 +140,9 @@ func main() {
 				}
 			}
 			wg.Done()
-			dlog.Printf("[%v] Length of retry queue on exit: %v\n", n, len(retries))
+			if len(retries) > 0 {
+				dlog.Printf("[%v] Length of retry queue on exit: %v\n", n, len(retries))
+			}
 			gave_up[n] = gave_up[n] + int64(len(retries))
 		}(i)
 	}

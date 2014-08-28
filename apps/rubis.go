@@ -28,6 +28,7 @@ type Rubis struct {
 	lhw        []*stats.LatencyHist
 	sp         uint32
 	rates      []float64
+	padding1   [128]byte
 }
 
 func (b *Rubis) Init(np, nb, nw, ngo int) {
@@ -139,7 +140,6 @@ func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 		txn.U4 = amt
 		txn.U5 = 1
 		txn.U6 = 1
-		txn.I = 1
 		txn.U7 = uint64(ddtxn.RandN(local_seed, uint32(ddtxn.NUM_CATEGORIES)))
 	} else if x < b.rates[5] {
 		txn.TXN = ddtxn.RUBIS_PUTBID
@@ -153,8 +153,8 @@ func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 		txn.U2 = uint64(product)
 	} else if x < b.rates[7] {
 		txn.TXN = ddtxn.RUBIS_REGISTER
-		txn.S1 = "aaaaaaa"
 		txn.U1 = uint64(ddtxn.RandN(local_seed, uint32(ddtxn.NUM_REGIONS)))
+		txn.S1 = fmt.Sprintf("xxx%d", ddtxn.RandN(local_seed, 100000000))
 	} else if x < b.rates[8] {
 		txn.TXN = ddtxn.RUBIS_SEARCHCAT
 		txn.U1 = uint64(ddtxn.RandN(local_seed, uint32(ddtxn.NUM_CATEGORIES)))
