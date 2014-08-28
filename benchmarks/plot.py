@@ -1,4 +1,6 @@
+from __future__ import print_function
 import subprocess
+import sys
 
 # Some of this is stolen from Austin.
 #
@@ -36,12 +38,30 @@ import subprocess
 # A line also has info about those kwargs (restrictions) and which key
 # is x and which key is y.  And a title.
 
+class Point(object):
+    def __init__(self, x, y, dct):
+        self.dct = dct
+        self.xl = x
+        self.yl = y
+
+    def x(self):
+        return self.dct[self.xl]
+
+    def y(self):
+        return self.dct[self.yl]
+
 class Line(object):
-    def __init__(self, points, x, y, title):
+    def __init__(self, points, title):
         self.points = points
-        self.x = x
-        self.y = y
         self.title = title
+
+    def __getitem__(self, idx):
+        if idx >= len(self):
+            raise IndexError(idx)
+        return self.points[idx]
+
+    def __len__(self):
+        return len(self.points)
 
 
 class Gnuplot(object):
@@ -57,21 +77,19 @@ class Gnuplot(object):
         data = []
         for i, curve in enumerate(self.lines):
             title = curve.title
-            plots.append("'-' title %s with lp ls %d pt %d" %
+            plots.append("'-' title \"%s\" with lp ls %d pt %d" %
                          (title, i+1, i+1))
-            plots.append("'-' title '' with errorbars ls %d pt %d" % (i+1, i+1))
-            for point in curve.rows():
-                data.append("%s %s" % (point.x, point.y))
-            for point in curve.rows():
-                data.append("%s %s %s %s" % (point.x, point.y, point.min, point.max))
+            for point in curve:
+                data.append("%s %s" % (point.x(), point.y()))
             data.append("e")
-        return ["set xlabel %s" % self.xlabel,
-                "set ylabel %s" % self.ylabel,
+        return ["set xlabel \"%s\"" % self.xlabel,
+                "set ylabel \"%s\"" % self.ylabel,
+                "set yrange [0:]",
                 "plot %s" % ",".join(plots)] + data
 
-    def pdf(self, file=sys.stdout):
+    def eps(self, file=sys.stdout):
         p = subprocess.Popen("gnuplot", stdout=file, stdin=subprocess.PIPE)
-        print("set terminal pngcairo\n"
+        print("set terminal postscript color eps enhanced\n"
               "set style line 11 lc rgb '#808080' lt 1\n"
               "set border 3 back ls 11\n"
               "set tics nomirror\n"
@@ -84,3 +102,17 @@ class Gnuplot(object):
 
             
         
+if __name__ == "__main__":
+    points = []
+    for i in range(0, 10):
+        points.append(Point("row", "val", {"row":i, "val":i*100}))
+    line = Line(points, "test1")
+
+    points = []
+    for i in range(0, 10):
+        points.append(Point("row", "val", {"row":i, "val":i*200}))
+    line2 = Line(points, "test2")
+
+    G = Gnuplot("test", "x", "y", [line, line2])
+    G.eps()
+
