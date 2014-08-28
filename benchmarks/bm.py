@@ -17,8 +17,9 @@ parser.add_option("--rlock", action="store_false", dest="rlock", default=True)
 parser.add_option("--scp", action="store_true", dest="scp", default=True)
 parser.add_option("--noscp", action="store_false", dest="scp")
 parser.add_option("--wratio", action="store", type="float", dest="wratio", default=4)
-parser.add_option("--sr", action="store", type="int", dest="sr", default=5000)
+parser.add_option("--sr", action="store", type="int", dest="sr", default=1000)
 parser.add_option("--phase", action="store", type="int", dest="phase", default=20)
+parser.add_option("--zipf", action="store", type="float", dest="zipf", default=0.5)
 
 
 (options, args) = parser.parse_args()
@@ -121,6 +122,29 @@ def contention_exp(fnpath, host, contention, rr):
         do(f, rr, contention, i, cpu_args, 0, zipf=-1)
         do(f, rr, contention, i, cpu_args, 1, zipf=-1)
         do(f, rr, contention, i, cpu_args, 2, zipf=-1)
+        f.write("\n")
+    f.close()
+    if options.scp:
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
+
+def zipf_scale_exp(fnpath, host, zipf, rr):
+    fnn = '%s-zipf-scale-%.02f-%d-%s.data' % (host, zipf, rr, True)
+    print fnn
+    filename=os.path.join(fnpath, fnn)
+    f = open(filename, 'w')
+    cpus = get_cpus(host)
+    f.write("#Doppel\tOCC\t2PL\n")
+    cpu_args = ""
+    if host == "ben":
+        cpu_args = ben_list_cpus
+
+    for i in cpus:
+        f.write("%d"% i)
+        f.write("\t")
+        do(f, rr, -1, i, cpu_args, 0, zipf=zipf)
+        do(f, rr, -1, i, cpu_args, 1, zipf=zipf)
+        do(f, rr, -1, i, cpu_args, 2, zipf=zipf)
         f.write("\n")
     f.close()
     if options.scp:
@@ -320,6 +344,8 @@ if __name__ == "__main__":
         elif host == "tbilisi":
             options.default_ncores = 12
 
+    if options.exp == "zipfscale":
+        zipf_scale_exp(fnpath, host, options.zipf, 50)
     if options.exp == "contention":
         if options.read_rate == -1:
             contention_exp(fnpath, host, options.default_contention, 90)
