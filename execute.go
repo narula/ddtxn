@@ -4,9 +4,10 @@ import (
 	"ddtxn/dlog"
 	"flag"
 	"log"
+	"math/rand"
 )
 
-var SampleRate = flag.Int64("sr", 10000, "Sample every sr nanoseconds\n")
+var SampleRate = flag.Int64("sr", 1000, "Sample every sr transactions\n")
 
 // Phases
 const (
@@ -73,11 +74,12 @@ func (tx *OTransaction) NoCount() {
 
 func StartOTransaction(w *Worker) *OTransaction {
 	tx := &OTransaction{
-		read:   make([]ReadKey, 0, 100),
-		writes: make([]Write, 0, 100),
-		w:      w,
-		s:      w.store,
-		ls:     w.local_store,
+		read:    make([]ReadKey, 0, 100),
+		writes:  make([]Write, 0, 100),
+		w:       w,
+		s:       w.store,
+		ls:      w.local_store,
+		sr_rate: int64(w.ID),
 	}
 	return tx
 }
@@ -88,7 +90,7 @@ func (tx *OTransaction) Reset() {
 	tx.count = (*SysType == DOPPEL && tx.sr_rate == 0)
 	if tx.count {
 		tx.w.Nstats[NSAMPLES]++
-		tx.sr_rate = *SampleRate
+		tx.sr_rate = *SampleRate + int64(rand.Intn(100)) - int64(tx.w.ID)
 	} else {
 		tx.sr_rate--
 	}
@@ -108,7 +110,7 @@ func (tx *OTransaction) Read(k Key) (*BRecord, error) {
 				// transaction.  This is a strong signal this
 				// shouldn't be dd.
 				if tx.count {
-					tx.ls.candidates.ReadWrite(k)
+					tx.ls.candidates.ReadWrite(k, r.br)
 				}
 				if tx.isSplit(r.br) {
 					return nil, ESTASH
@@ -130,6 +132,9 @@ func (tx *OTransaction) Read(k Key) (*BRecord, error) {
 			tx.ls.candidates.Stash(k)
 		}
 		return nil, ESTASH
+	}
+	if tx.count {
+		tx.ls.candidates.Read(k, br)
 	}
 	if err == ENOKEY {
 		n := len(tx.read)
@@ -167,6 +172,9 @@ func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 		}
 	}
 	if tx.isSplit(br) {
+		if tx.count {
+			tx.ls.candidates.Write(k, br)
+		}
 		// Do not need to read-validate
 	} else {
 		var last uint64
@@ -178,7 +186,7 @@ func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 			if !ok {
 				tx.w.Nstats[NLOCKED]++
 				if tx.count {
-					tx.ls.candidates.Conflict(k)
+					tx.ls.candidates.Conflict(k, br)
 				}
 				return EABORT
 			}
@@ -283,7 +291,7 @@ func (tx *OTransaction) Commit() TID {
 				if err2 != nil {
 					// Someone snuck in and created the key
 					if tx.count {
-						tx.ls.candidates.Conflict(w.key)
+						tx.ls.candidates.Conflict(w.key, w.br)
 					}
 					tx.w.Nstats[NFAIL_VERIFY]++
 					return tx.Abort()
@@ -298,7 +306,7 @@ func (tx *OTransaction) Commit() TID {
 		if !w.br.Lock() {
 			tx.w.Nstats[NO_LOCK]++
 			if tx.count {
-				tx.ls.candidates.Conflict(w.key)
+				tx.ls.candidates.Conflict(w.key, w.br)
 			}
 			return tx.Abort()
 		}
@@ -313,9 +321,6 @@ func (tx *OTransaction) Commit() TID {
 	for i, _ := range tx.read {
 		rk := &tx.read[i]
 		var err error
-		if tx.count {
-			tx.ls.candidates.Read(rk.key)
-		}
 		if rk.br == nil {
 			rk.br, err = tx.s.getKey(rk.key)
 			if *CountKeys {
@@ -348,9 +353,6 @@ func (tx *OTransaction) Commit() TID {
 	for i, _ := range tx.writes {
 		w := &tx.writes[i]
 		if tx.isSplit(w.br) {
-			if tx.count {
-				tx.ls.candidates.Write(w.key)
-			}
 			switch w.op {
 			case SUM:
 				tx.ls.Apply(w.key, w.op, w.vint32, w.op)

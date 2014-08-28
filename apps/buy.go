@@ -40,6 +40,7 @@ func (b *Buy) Init(np, nb, nw, rr, ngo int, ncrr float64) {
 	b.lhw = make([]*stats.LatencyHist, ngo)
 	b.sp = uint32(nb / nw)
 	b.z = ddtxn.NewZipf(int64(b.nbidders), *ZipfDist)
+	dlog.Printf("Read rate %v, not contended: %v\n", b.read_rate, b.ncontended_rate)
 }
 
 func (b *Buy) Populate(s *ddtxn.Store, ex *ddtxn.ETransaction) {

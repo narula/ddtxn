@@ -215,15 +215,16 @@ func TestCandidates(t *testing.T) {
 	sh := StatsHeap(h)
 	c := Candidates{make(map[Key]*OneStat), &sh}
 	k := ProductKey(1)
+	br := &BRecord{}
 	for i := 0; i < 10; i++ {
-		c.Write(k)
+		c.Write(k, br)
 	}
-	c.Read(k)
+	c.Read(k, br)
 	h2 := make([]*OneStat, 0)
 	sh2 := StatsHeap(h2)
 	c2 := Candidates{make(map[Key]*OneStat), &sh2}
 	for i := 0; i < 9; i++ {
-		c2.Write(k)
+		c2.Write(k, br)
 	}
 	c.Merge(&c2)
 }

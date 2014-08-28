@@ -97,15 +97,16 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 	for i := 0; i < xx; i++ {
 		o := heap.Pop(s.cand.h).(*OneStat)
 		x, y := UndoCKey(o.k)
-		dlog.Printf("%v Considering key %v %v; ratio %v\n", i, x, y, o.ratio())
 		br, _ := s.getKey(o.k)
-		if !br.dd && o.ratio() > *WRRatio && o.writes > 3 {
-			potential_dd_keys[o.k] = true
-			dlog.Printf("Moving %v %v to split r:%v w:%v c:%v ratio:%v\n", x, y, o.reads, o.writes, o.conflicts, o.ratio())
+		if !br.dd {
+			if o.ratio() > *WRRatio && (o.writes > 1 || o.conflicts > 1) {
+				potential_dd_keys[o.k] = true
+				dlog.Printf("Moving %v %v to split r:%v w:%v c:%v s:%v ratio:%v\n", x, y, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
+			} else {
+				dlog.Printf("Not enough writes or conflicts or high enough ratio yet for key : %v %v; r:%v w:%v c:%v s:%v ratio:%v; wr: %v\n", x, y, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), *WRRatio)
+			}
 		} else if br.dd {
-			dlog.Printf("No need to Move %v %v to split; already dd\n", x, y)
-		} else {
-			dlog.Printf("Not enough writes yet: %v %v %v; ratio %v\n", x, y, o.writes, o.ratio())
+			// Key is split; might potentially move back
 		}
 	}
 	// Check to see if we need to remove anything from dd
@@ -122,7 +123,7 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 		if o.ratio() < (*WRRatio)/2 {
 			to_remove[k] = true
 			x, y := UndoCKey(o.k)
-			dlog.Printf("Moved %v %v from split ratio %v\n", x, y, o.ratio())
+			dlog.Printf("Moved %v %v from split r:%v w:%v c:%v s:%v ratio:%v\n", x, y, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
 		}
 	}
 	if len(s.dd) == 0 && len(potential_dd_keys) == 0 {
@@ -156,7 +157,6 @@ func (c *Coordinator) IncrementEpoch(force bool) {
 	if !c.Coordinate && !force {
 		return
 	}
-	dlog.Printf("Incrementing epoch %v\n", c.epochTID)
 	start := time.Now()
 	next_epoch := c.NextGlobalTID()
 
@@ -232,7 +232,6 @@ func (c *Coordinator) Process() {
 			}
 			for i := 0; i < c.n; i++ {
 				c.Workers[i].done <- true
-				dlog.Printf("Worker %v finished\n", i)
 			}
 			x <- true
 			return
