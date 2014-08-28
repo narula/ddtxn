@@ -3,6 +3,7 @@ import commands
 import os
 from os import system
 import socket
+import subprocess
 
 # # 8b5d20e
 # # ./buy -nprocs 80 -ngo 80 -nw 80 -nsec 10 -contention 100000 -rr 90 -allocate=False -sys=1 -rlock=False -wr=3.0 -phase=80 -sr=10000 -retry=False -atomic=False -latency=False
@@ -104,7 +105,7 @@ def wrangle_file(f):
         one_point[name] = val
     return points
         
-def make_graph(points, binary="buy", xaxis="nw", yaxis="total/sec", *args, **kwargs):
+def reduce_points(points, binary="buy", xaxis="nw", yaxis="total/sec", *args, **kwargs):
     new_points = []
 
     # restrict points to ones that match kwargs
@@ -131,6 +132,7 @@ def make_graph(points, binary="buy", xaxis="nw", yaxis="total/sec", *args, **kwa
         graph_points[xpointval] = p
     return graph_points
 
+
 def output_gnuplot(points, yaxis):
     for key in sorted(points):
         print key, "\t", points[key][yaxis]
@@ -139,9 +141,9 @@ if __name__ == "__main__":
     f = open('single-data.out', 'r')
     points = wrangle_file(f)
     print "OCC:"
-    graph_points = make_graph(points, binary="single", xaxis="contention", yaxis="gaveup", nworkers="20", sys="1", rr="0")
+    graph_points = reduce_points(points, binary="single", xaxis="contention", yaxis="gaveup", nworkers="20", sys="1", rr="0")
     output_gnuplot(graph_points, "gaveup")
 
     print "Doppel:"
-    graph_points = make_graph(points, binary="single", xaxis="contention", yaxis="gaveup", nworkers="20", sys="0", rr="0")
+    graph_points = reduce_points(points, binary="single", xaxis="contention", yaxis="gaveup", nworkers="20", sys="0", rr="0")
     output_gnuplot(graph_points, "gaveup")
