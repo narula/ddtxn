@@ -1,6 +1,7 @@
 package main
 
 import (
+	"container/heap"
 	"ddtxn"
 	"ddtxn/apps"
 	"ddtxn/dlog"
@@ -25,8 +26,8 @@ var contention = flag.Int("contention", 30, "Amount of contention, higher is mor
 var nbidders = flag.Int("nb", 1000000, "Bidders in store, default is 1M")
 var readrate = flag.Int("rr", 0, "Read rate %.  Rest are bids")
 var notcontended_readrate = flag.Float64("ncrr", .8, "Uncontended read rate %.  Default to .8")
-
 var dataFile = flag.String("out", "rubis-data.out", "Filename for output")
+var atomicIncr = flag.Bool("atomic", false, "NOT USED")
 
 func main() {
 	flag.Parse()
@@ -64,22 +65,29 @@ func main() {
 
 	p := prof.StartProfile()
 	start := time.Now()
-
+	gave_up := make([]int64, *clientGoRoutines)
 	var wg sync.WaitGroup
 	for i := 0; i < *clientGoRoutines; i++ {
+		exp := ddtxn.MakeExp(30)
 		wg.Add(1)
 		go func(n int) {
+			retries := make(ddtxn.RetryHeap, 0)
+			heap.Init(&retries)
 			end_time := time.Now().Add(time.Duration(*nsec) * time.Second)
 			var local_seed uint32 = uint32(rand.Intn(1000000))
 			wi := n % (*nworkers)
 			w := coord.Workers[wi]
-			var t ddtxn.Query
 			for {
 				tm := time.Now()
 				if !end_time.After(tm) {
 					break
 				}
-				rubis.MakeOne(w.ID, &local_seed, &t)
+				var t ddtxn.Query
+				if len(retries) > 0 && retries[0].TS.Before(tm) {
+					t = heap.Pop(&retries).(ddtxn.Query)
+				} else {
+					rubis.MakeOne(w.ID, &local_seed, &t)
+				}
 				var txn_start time.Time
 				if *apps.Latency || *doValidate {
 					t.W = make(chan struct {
@@ -101,6 +109,16 @@ func main() {
 				} else {
 					committed = true
 				}
+				t.I++
+				if !committed {
+					t.TS = tm.Add(time.Duration(ddtxn.RandN(&local_seed, exp.Exp(t.I))) * time.Microsecond)
+					if t.TS.Before(end_time) {
+						heap.Push(&retries, t)
+					} else {
+						gave_up[n]++
+					}
+				}
+
 				if committed && *apps.Latency {
 					rubis.Time(&t, time.Since(txn_start), n)
 				}
@@ -109,6 +127,10 @@ func main() {
 				}
 			}
 			wg.Done()
+			if len(retries) > 0 {
+				dlog.Printf("[%v] Length of retry queue on exit: %v\n", n, len(retries))
+			}
+			gave_up[n] = gave_up[n] + int64(len(retries))
 		}(i)
 	}
 	wg.Wait()
@@ -117,14 +139,17 @@ func main() {
 	p.Stop()
 	stats := make([]int64, ddtxn.LAST_STAT)
 	nitr, nwait, nwait2 := ddtxn.CollectCounts(coord, stats)
-	_ = nwait
 	_ = nwait2
 
 	if *doValidate {
 		rubis.Validate(s, int(nitr))
 	}
 
-	out := fmt.Sprintf("  nworkers: %v, nwmoved: %v, nrmoved: %v, sys: %v, total/sec: %v, abortrate: %.2f, stashrate: %.2f, nbidders: %v, nitems: %v, contention: %v, done: %v, actual time: %v, epoch changes: %v, throughput: ns/txn: %v, naborts: %v", *nworkers, ddtxn.WMoved, ddtxn.RMoved, *ddtxn.SysType, float64(nitr)/end.Seconds(), 100*float64(stats[ddtxn.NABORTS])/float64(nitr+stats[ddtxn.NABORTS]), 100*float64(stats[ddtxn.NSTASHED])/float64(nitr+stats[ddtxn.NABORTS]), *nbidders, nproducts, *contention, nitr, end, ddtxn.NextEpoch, end.Nanoseconds()/nitr, stats[ddtxn.NABORTS])
+	for i := 1; i < *clientGoRoutines; i++ {
+		gave_up[0] = gave_up[0] + gave_up[i]
+	}
+
+	out := fmt.Sprintf("  nworkers: %v, nwmoved: %v, nrmoved: %v, sys: %v, total/sec: %v, abortrate: %.2f, stashrate: %.2f, nbidders: %v, nitems: %v, contention: %v, done: %v, actual time: %v, epoch changes: %v, throughput: ns/txn: %v, naborts: %v, coord time: %v, coord stats time: %v, total worker time transitioning: %v, nstashed: %v, rlock: %v, wrratio: %v, nsamples: %v, getkeys: %v, ddwrites: %v, nolock: %v, failv: %v, stashdone: %v, nfast: %v, gaveup: %v, potential: %v  ", *nworkers, ddtxn.WMoved, ddtxn.RMoved, *ddtxn.SysType, float64(nitr)/end.Seconds(), 100*float64(stats[ddtxn.NABORTS])/float64(nitr+stats[ddtxn.NABORTS]), 100*float64(stats[ddtxn.NSTASHED])/float64(nitr+stats[ddtxn.NABORTS]), *nbidders, nproducts, *contention, nitr, end, ddtxn.NextEpoch, end.Nanoseconds()/nitr, stats[ddtxn.NABORTS], ddtxn.Time_in_IE, ddtxn.Time_in_IE1, nwait, stats[ddtxn.NSTASHED], *ddtxn.UseRLocks, *ddtxn.WRRatio, stats[ddtxn.NSAMPLES], stats[ddtxn.NGETKEYCALLS], stats[ddtxn.NDDWRITES], stats[ddtxn.NO_LOCK], stats[ddtxn.NFAIL_VERIFY], stats[ddtxn.NDIDSTASHED], ddtxn.Nfast, gave_up[0], coord.PotentialPhaseChanges)
 	fmt.Printf(out)
 	fmt.Printf("\n")
 	f, err := os.OpenFile(*dataFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
