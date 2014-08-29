@@ -4,6 +4,7 @@ import os
 from os import system
 import socket
 import subprocess
+from plot import Point, Line, Gnuplot
 
 # # 8b5d20e
 # # ./buy -nprocs 80 -ngo 80 -nw 80 -nsec 10 -contention 100000 -rr 90 -allocate=False -sys=1 -rlock=False -wr=3.0 -phase=80 -sr=10000 -retry=False -atomic=False -latency=False
@@ -90,6 +91,9 @@ def wrangle_file(f):
                         pair = pair.strip()
                         if pair == "-d" or pair=="-ck" or pair=="-conflicts":
                             continue
+                        if j+1 >= len(blah):
+                            #print "off the end", blah[j]
+                            continue
                         one_point[pair.lstrip("-").strip()] = blah[j+1].strip()
                         continue
                     pairlist = pair.split("=")
@@ -100,20 +104,23 @@ def wrangle_file(f):
         if line.find("BKey") == 0:
             continue
         pair = line.split(": ")
+        if len(pair) != 2:
+            #print "Pair unsplittable: ", pair
+            continue
         name = pair[0].strip()
         val = pair[1].strip()
         one_point[name] = val
     return points
         
-def reduce_points(points, binary="buy", xaxis="nw", yaxis="total/sec", *args, **kwargs):
+def reduce_points(points, xaxis="nw", yaxis="total/sec", *args, **kwargs):
     new_points = []
 
     # restrict points to ones that match kwargs
     for p in points:
-        if p["binary"] != binary:
-            continue
         matches = True
         for name, val in kwargs.items():
+            if  not p.has_key(name):
+                continue
             if p[name] != val:
                 matches = False
                 continue
@@ -133,17 +140,30 @@ def reduce_points(points, binary="buy", xaxis="nw", yaxis="total/sec", *args, **
     return graph_points
 
 
-def output_gnuplot(points, yaxis):
+def output_data(points, yaxis):
     for key in sorted(points):
         print key, "\t", points[key][yaxis]
 
-if __name__ == "__main__":
-    f = open('single-data.out', 'r')
-    points = wrangle_file(f)
-    print "OCC:"
-    graph_points = reduce_points(points, binary="single", xaxis="contention", yaxis="gaveup", nworkers="20", sys="1", rr="0")
-    output_gnuplot(graph_points, "gaveup")
+def make_line(gp, xl, yl, title):
+    pp = []
+    for i in sorted(gp):
+        pp.append(Point(xl, yl, gp[i]))
+    line = Line(pp, title)
+    return line
 
-    print "Doppel:"
-    graph_points = reduce_points(points, binary="single", xaxis="contention", yaxis="gaveup", nworkers="20", sys="0", rr="0")
-    output_gnuplot(graph_points, "gaveup")
+if __name__ == "__main__":
+    f = open('buy-data.out', 'r')
+    points = wrangle_file(f)
+
+    gp = reduce_points(points, xaxis="rr", yaxis="total/sec", nworkers="20", sys="0", phase="20", binary="buy")
+    line0 = make_line(gp, "rr", "total/sec", "doppel")
+
+    gp = reduce_points(points, xaxis="rr", yaxis="total/sec", nworkers="20", sys="2", phase="20", binary="buy")
+    line2 = make_line(gp, "rr", "total/sec", "2PL")
+
+    gp = reduce_points(points, xaxis="rr", yaxis="total/sec", nworkers="20", sys="1", phase="20", binary="buy")
+    line1 = make_line(gp, "rr", "total/sec", "OCC")
+
+    G = Gnuplot("test", "% read transactions", "Throughput (txns/sec)", [line0, line2, line1])
+    G.eps()
+    
