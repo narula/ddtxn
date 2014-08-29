@@ -51,6 +51,9 @@ type ETransaction interface {
 
 	// Tell Doppel not to count this transaction's reads and writes.
 	NoCount()
+
+	// Get a unique ID
+	UID() uint64
 }
 
 // Not threadsafe.  Tracks execution of transaction.
@@ -66,6 +69,10 @@ type OTransaction struct {
 	count    bool
 	sr_rate  int64
 	padding  [128]byte
+}
+
+func (tx *OTransaction) UID() uint64 {
+	return uint64(tx.w.commitTID())
 }
 
 func (tx *OTransaction) NoCount() {
@@ -421,6 +428,10 @@ func (tx *LTransaction) Reset() {
 	tx.t++
 }
 
+func (tx *LTransaction) UID() uint64 {
+	return uint64(tx.w.commitTID())
+}
+
 func (tx *LTransaction) Read(k Key) (*BRecord, error) {
 	// TODO: If I wrote the key, return that value instead
 	if exists, n := tx.already_exists(k); exists {
@@ -440,7 +451,7 @@ func (tx *LTransaction) Read(k Key) (*BRecord, error) {
 	br.SRLock()
 	n := len(tx.keys)
 	tx.keys = tx.keys[0 : n+1]
-	tx.keys[n] = Rec{br: br, read: true}
+	tx.keys[n] = Rec{br: br, read: true, noset: false}
 	return br, nil
 }
 
@@ -459,8 +470,10 @@ func (tx *LTransaction) MaybeWrite(k Key) {
 	}
 	if br == nil || err != nil {
 		// Will acquire lock when I do the write and create the key.
+		//dlog.Printf("Key doesn't exist? %v %v\n", k, err)
 		return
 	}
+	dlog.Printf("Locking %v in MaybeWrite\n", br.key)
 	br.SLock()
 	n := len(tx.keys)
 	tx.keys = tx.keys[0 : n+1]
@@ -483,34 +496,40 @@ func (tx *LTransaction) already_exists(k Key) (bool, int) {
 
 func (tx *LTransaction) make_or_get_key(k Key, op KeyType) *BRecord {
 	br, err := tx.s.getKey(k)
-	if br == nil || err != nil {
-		var err2 error
-		br, err2 = tx.s.CreateMuLockedKey(k, op)
-		if err2 != nil {
-			br, err = tx.s.getKey(k)
-			if err != nil {
-				log.Fatalf("Should exist\n")
-			}
+	if br != nil && err == nil {
+		//dlog.Printf("Locking %v in make_or_get_key\n", k)
+		br.SLock()
+		return br
+	}
+	//dlog.Printf("Error %v %v %v\n", k, err)
+	var err2 error
+	//dlog.Printf("Perhaps locking in %v in make_or_get_key, Create\n", k)
+	br, err2 = tx.s.CreateMuLockedKey(k, op)
+	if br == nil || err2 != nil {
+		dlog.Printf("Error creating key: %v %v\n", k, err2)
+		br, err = tx.s.getKey(k)
+		if err != nil {
+			log.Fatalf("Should exist\n")
 		}
+		br.SLock()
 	}
 	return br
 }
 
 func (tx *LTransaction) WriteInt32(k Key, a int32, op KeyType) error {
-	br := tx.make_or_get_key(k, op)
 	exists, n := tx.already_exists(k)
 	if exists {
 		if tx.keys[n].read == true {
 			log.Fatalf("Already have read lock on this key; cannot upgrade %v\n", k)
 		}
 		// Already locked.  TODO: aggregate
+		//dlog.Printf("%v Double write?\n", tx.w.ID, tx.keys[n].vint32)
 		tx.keys[n].vint32 = a
 		tx.keys[n].kt = op
-		dlog.Printf("%v Double write?\n", tx.w.ID)
+		tx.keys[n].noset = false
 		return nil
 	}
-	//dlog.Printf("%v Locking %v\n", k, tx.w.ID)
-	br.SLock()
+	br := tx.make_or_get_key(k, op)
 	tx.keys = tx.keys[0 : n+1]
 	tx.keys[n] = Rec{br: br, read: false, vint32: a, kt: op, noset: false}
 	return nil
@@ -521,7 +540,6 @@ func (tx *LTransaction) Write(k Key, v Value, op KeyType) {
 		tx.WriteInt32(k, v.(int32), op)
 		return
 	}
-	br := tx.make_or_get_key(k, op)
 	exists, n := tx.already_exists(k)
 	if exists {
 		if tx.keys[n].read == true {
@@ -530,8 +548,10 @@ func (tx *LTransaction) Write(k Key, v Value, op KeyType) {
 		// Already locked.
 		tx.keys[n].v = v
 		tx.keys[n].kt = op
+		return
 	}
-	br.SLock()
+	br := tx.make_or_get_key(k, op)
+	tx.keys = tx.keys[0 : n+1]
 	tx.keys[n] = Rec{br: br, read: false, v: v, kt: op, noset: false}
 }
 
@@ -539,7 +559,6 @@ func (tx *LTransaction) WriteList(k Key, l Entry, op KeyType) {
 	if op != LIST {
 		log.Fatalf("Not a list\n")
 	}
-	br := tx.make_or_get_key(k, op)
 	exists, n := tx.already_exists(k)
 	if exists {
 		if tx.keys[n].read == true {
@@ -548,8 +567,10 @@ func (tx *LTransaction) WriteList(k Key, l Entry, op KeyType) {
 		// Already locked.  TODO: append
 		tx.keys[n].ve = l
 		tx.keys[n].kt = op
+		return
 	}
-	br.SLock()
+	br := tx.make_or_get_key(k, op)
+	tx.keys = tx.keys[0 : n+1]
 	tx.keys[n] = Rec{br: br, read: false, ve: l, kt: op, noset: false}
 }
 

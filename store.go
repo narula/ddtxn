@@ -1,6 +1,7 @@
 package ddtxn
 
 import (
+	"ddtxn/dlog"
 	"errors"
 	"flag"
 	"log"
@@ -22,10 +23,11 @@ type Chunk struct {
 var UseRLocks = flag.Bool("rlock", true, "Use Rlocks\n")
 
 var (
-	ENOKEY  = errors.New("doppel: no key")
-	EABORT  = errors.New("doppel: abort")
-	ESTASH  = errors.New("doppel: stash")
-	EEXISTS = errors.New("doppel: trying to create key which already exists")
+	ENOKEY   = errors.New("doppel: no key")
+	EABORT   = errors.New("doppel: abort")
+	ESTASH   = errors.New("doppel: stash")
+	ENORETRY = errors.New("app error: no retry")
+	EEXISTS  = errors.New("doppel: trying to create key which already exists")
 )
 
 const (
@@ -103,6 +105,8 @@ func (s *Store) CreateLockedKey(k Key, kt KeyType) (*BRecord, error) {
 	chunk.Lock()
 	_, ok := chunk.rows[k]
 	if ok {
+		chunk.Unlock()
+		dlog.Printf("Key already exists %v\n", k)
 		return nil, EEXISTS
 	}
 	chunk.rows[k] = br
@@ -117,6 +121,8 @@ func (s *Store) CreateMuLockedKey(k Key, kt KeyType) (*BRecord, error) {
 	chunk.Lock()
 	_, ok := chunk.rows[k]
 	if ok {
+		chunk.Unlock()
+		dlog.Printf("Key already exists %v\n", k)
 		return nil, EEXISTS
 	}
 	chunk.rows[k] = br

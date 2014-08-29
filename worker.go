@@ -53,6 +53,7 @@ const (
 	NABORTS
 	NENOKEY
 	NSTASHED
+	NENORETRY
 	NSAMPLES
 	NGETKEYCALLS
 	NDDWRITES
@@ -161,6 +162,8 @@ func (w *Worker) doTxn(t Query) (*Result, error) {
 		w.Nstats[NABORTS]++
 	} else if err == ENOKEY {
 		w.Nstats[NENOKEY]++
+	} else if err == ENORETRY {
+		w.Nstats[NENORETRY]++
 	}
 	return x, err
 }
@@ -180,6 +183,8 @@ func (w *Worker) doTxn2(t Query) (*Result, error) {
 		w.Nstats[NABORTS]++
 	} else if err == ENOKEY {
 		w.Nstats[NENOKEY]++
+	} else if err == ENORETRY {
+		w.Nstats[NENORETRY]++
 	}
 	return x, err
 }

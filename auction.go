@@ -10,7 +10,7 @@ const (
 	NUM_USERS      = 1000000
 	NUM_CATEGORIES = 20
 	NUM_REGIONS    = 62
-	NUM_ITEMS      = 33000
+	NUM_ITEMS      = 330000
 	BIDS_PER_ITEM  = 10
 	NUM_COMMENTS   = 506000
 	BUY_NOW        = .1 * NUM_ITEMS
@@ -55,7 +55,7 @@ type BuyNow struct {
 }
 
 type Comment struct {
-	ID      TID
+	ID      uint64
 	From    uint64
 	To      uint64
 	Rating  uint64
@@ -69,7 +69,7 @@ func RegisterUserTxn(t Query, tx ETransaction) (*Result, error) {
 	region := t.U1
 
 	var r *Result = nil
-	n := t.T
+	n := tx.UID()
 	nick := SKey(nickname)
 	user := &User{
 		ID:       uint64(n),
@@ -84,17 +84,19 @@ func RegisterUserTxn(t Query, tx ETransaction) (*Result, error) {
 	if err != ENOKEY {
 		// Someone else is using this nickname
 		dlog.Printf("Nickname taken %v %v\n", nickname, nick)
-		return nil, EABORT
+		tx.Abort()
+		return nil, ENORETRY
 	}
 	tx.Write(u, user, WRITE)
 	tx.Write(nick, nickname, WRITE)
 
 	if tx.Commit() == 0 {
+		dlog.Printf("Could not commit\n")
 		return nil, EABORT
 	}
 	if *Allocate {
 		r = &Result{uint64(n)}
-		dlog.Printf("Registered user %v %v\n", nickname, n)
+		//dlog.Printf("Registered user %v %v\n", nickname, n)
 	}
 	return r, nil
 }
@@ -102,10 +104,9 @@ func RegisterUserTxn(t Query, tx ETransaction) (*Result, error) {
 func NewItemTxn(t Query, tx ETransaction) (*Result, error) {
 	var r *Result = nil
 	now := time.Now().Second()
-	n := t.T
-	xx := uint64(n)
+	n := tx.UID()
 	x := &Item{
-		ID:        xx,
+		ID:        n,
 		Name:      t.S1,
 		Seller:    t.U1,
 		Desc:      t.S2,
@@ -123,32 +124,40 @@ func NewItemTxn(t Query, tx ETransaction) (*Result, error) {
 		if err == ESTASH {
 			return nil, ESTASH
 		}
-		dlog.Printf("User doesn't exist %v\n", t.U1)
 		tx.Abort()
-		return nil, EABORT
-	}
-	region := urec.value.(*User).Region
-	val := Entry{order: now, top: int(n)}
-	tx.Write(ItemKey(xx), x, WRITE)
-	tx.WriteList(ItemsByCatKey(x.Categ), val, LIST)
-	tx.WriteList(ItemsByRegKey(region, x.Categ), val, LIST)
-	err = tx.WriteInt32(MaxBidKey(xx), int32(0), MAX)
-	if err != nil {
+		if err == ENOKEY {
+			dlog.Printf("NewItemTxn: User doesn't exist %v\n", t.U1)
+			return nil, ENORETRY
+		}
 		return nil, err
 	}
-	tx.Write(MaxBidBidderKey(xx), uint64(0), WRITE)
-	err = tx.WriteInt32(NumBidsKey(xx), int32(0), SUM)
+	region := urec.value.(*User).Region
+	val := Entry{order: now, top: int(n), key: ItemKey(n)}
+	tx.Write(ItemKey(n), x, WRITE)
+	tx.WriteList(ItemsByCatKey(x.Categ), val, LIST)
+	tx.WriteList(ItemsByRegKey(region, x.Categ), val, LIST)
+	err = tx.WriteInt32(MaxBidKey(n), int32(0), MAX)
 	if err != nil {
+		tx.Abort()
+		dlog.Printf("Error creating new item %v! %v\n", x, err)
+		return nil, err
+	}
+	tx.Write(MaxBidBidderKey(n), uint64(0), WRITE)
+	err = tx.WriteInt32(NumBidsKey(n), int32(0), SUM)
+	if err != nil {
+		tx.Abort()
+		dlog.Printf("Error creating new item %v! %v\n", x, err)
 		return nil, err
 	}
 
 	if tx.Commit() == 0 {
+		dlog.Printf("Abort %v!\n", x)
 		return r, EABORT
 	}
 
 	if *Allocate {
-		r = &Result{xx}
-		dlog.Printf("Registered new item %v %v\n", x, n)
+		r = &Result{n}
+		//dlog.Printf("Registered new item %v %v\n", x, n)
 	}
 	return r, nil
 }
@@ -159,7 +168,7 @@ func StoreBidTxn(t Query, tx ETransaction) (*Result, error) {
 	item := t.U2
 	price := t.A
 	// insert bid
-	n := t.T
+	n := tx.UID()
 	bid := &Bid{
 		ID:     uint64(n),
 		Item:   item,
@@ -180,11 +189,13 @@ func StoreBidTxn(t Query, tx ETransaction) (*Result, error) {
 			return nil, ESTASH
 		}
 		dlog.Printf("No max key for item? %v\n", item)
+		tx.Abort()
 		return nil, err
 	}
 	if price > max.int_value {
 		err = tx.WriteInt32(high, price, MAX)
 		if err != nil {
+			tx.Abort()
 			return nil, err
 		}
 		tx.Write(bidder, user, WRITE)
@@ -193,6 +204,7 @@ func StoreBidTxn(t Query, tx ETransaction) (*Result, error) {
 	// update # bids per item
 	err = tx.WriteInt32(NumBidsKey(item), 1, SUM)
 	if err != nil {
+		tx.Abort()
 		return nil, err
 	}
 
@@ -205,7 +217,7 @@ func StoreBidTxn(t Query, tx ETransaction) (*Result, error) {
 
 	if *Allocate {
 		r = &Result{uint64(n)}
-		dlog.Printf("%v Bid on %v %v\n", user, item, price)
+		//dlog.Printf("%v Bid on %v %v\n", user, item, price)
 	}
 	return r, nil
 }
@@ -217,7 +229,7 @@ func StoreCommentTxn(t Query, tx ETransaction) (*Result, error) {
 	comment_s := t.S1
 	rating := t.U4
 
-	n := t.T
+	n := tx.UID()
 	comment := &Comment{
 		ID:      n,
 		From:    fromuser,
@@ -233,6 +245,7 @@ func StoreCommentTxn(t Query, tx ETransaction) (*Result, error) {
 	rkey := RatingKey(touser)
 	err := tx.WriteInt32(rkey, int32(rating), SUM)
 	if err != nil {
+		tx.Abort()
 		return nil, err
 	}
 
@@ -243,7 +256,7 @@ func StoreCommentTxn(t Query, tx ETransaction) (*Result, error) {
 	var r *Result = nil
 	if *Allocate {
 		r = &Result{uint64(n)}
-		dlog.Printf("%v Comment %v %v\n", touser, fromuser, item)
+		//dlog.Printf("%v Comment %v %v\n", touser, fromuser, item)
 	}
 	return r, nil
 }
@@ -267,7 +280,11 @@ func StoreBuyNowTxn(t Query, tx ETransaction) (*Result, error) {
 			return nil, ESTASH
 		}
 		dlog.Printf("No user? %v\n", t.U1)
-		return nil, err
+		tx.Abort()
+		if err == ENOKEY {
+			return nil, ENORETRY
+		}
+		return nil, EABORT
 	}
 	ik := ItemKey(item)
 	tx.MaybeWrite(ik)
@@ -277,8 +294,12 @@ func StoreBuyNowTxn(t Query, tx ETransaction) (*Result, error) {
 			dlog.Printf("Item key  %v stashed\n", item)
 			return nil, ESTASH
 		}
-		dlog.Printf("No item? %v\n", item)
-		return nil, err
+		dlog.Printf("StoreBuyNowTxn: No item? %v\n", item)
+		tx.Abort()
+		if err == ENOKEY {
+			return nil, ENORETRY
+		}
+		return nil, EABORT
 	}
 	itemv := irec.Value().(*Item)
 	maxqty := itemv.Qty
@@ -286,9 +307,10 @@ func StoreBuyNowTxn(t Query, tx ETransaction) (*Result, error) {
 
 	if maxqty < qty {
 		dlog.Printf("Req quantity > quantity %v %v\n", qty, maxqty)
-		return nil, nil
+		tx.Abort()
+		return nil, ENORETRY
 	}
-	bnk := BuyNowKey(uint64(t.T))
+	bnk := BuyNowKey(uint64(tx.UID()))
 	tx.Write(bnk, bnrec, WRITE)
 
 	if newq == 0 {
@@ -319,7 +341,11 @@ func ViewBidHistoryTxn(t Query, tx ETransaction) (*Result, error) {
 			dlog.Printf("Item key  %v stashed\n", item)
 			return nil, ESTASH
 		}
-		dlog.Printf("No item? %v\n", item)
+		dlog.Printf("ViewBidTxn: Abort? %v err: %v\n", item, err)
+		tx.Abort()
+		if err == ENOKEY {
+			return nil, ENORETRY
+		}
 		return nil, err
 	}
 
@@ -330,7 +356,11 @@ func ViewBidHistoryTxn(t Query, tx ETransaction) (*Result, error) {
 			dlog.Printf("BidsPerItem key  %v stashed\n", item)
 			return nil, ESTASH
 		}
-		dlog.Printf("No bids for item? %v\n", item)
+		if err == ENOKEY {
+			dlog.Printf("No bids for item %v\n", item)
+			return nil, nil
+		}
+		tx.Abort()
 		return nil, err
 	}
 	listy := brec.entries
@@ -350,7 +380,11 @@ func ViewBidHistoryTxn(t Query, tx ETransaction) (*Result, error) {
 				dlog.Printf("key stashed %v\n", listy[i].key)
 				return nil, ESTASH
 			}
-			dlog.Printf("No such key %v\n", listy[i].key)
+			tx.Abort()
+			if err == ENOKEY {
+				dlog.Printf("No such key %v\n", listy[i].key)
+				return nil, ENORETRY
+			}
 			return nil, err
 		}
 		bid := b.Value().(*Bid)
@@ -364,7 +398,11 @@ func ViewBidHistoryTxn(t Query, tx ETransaction) (*Result, error) {
 				dlog.Printf("user stashed %v\n", uk)
 				return nil, ESTASH
 			}
-			dlog.Printf("No such user %v\n", uk)
+			tx.Abort()
+			if err == ENOKEY {
+				dlog.Printf("Viewing bid and user doesn't exist?! %v\n", uk)
+				return nil, ENORETRY
+			}
 			return nil, err
 		}
 		if *Allocate {
@@ -394,7 +432,11 @@ func ViewUserInfoTxn(t Query, tx ETransaction) (*Result, error) {
 			dlog.Printf("User  %v stashed\n", t.U1)
 			return nil, ESTASH
 		}
-		dlog.Printf("No user? %v\n", t.U1)
+		tx.Abort()
+		if err == ENOKEY {
+			dlog.Printf("No user? %v\n", t.U1)
+			return nil, ENORETRY
+		}
 		return nil, err
 	}
 	if tx.Commit() == 0 {
@@ -417,7 +459,11 @@ func PutBidTxn(t Query, tx ETransaction) (*Result, error) {
 			dlog.Printf("Item key  %v stashed\n", item)
 			return nil, ESTASH
 		}
-		dlog.Printf("No item? %v\n", item)
+		tx.Abort()
+		if err == ENOKEY {
+			dlog.Printf("PutBidTxn: No item? %v\n", item)
+			return nil, ENORETRY
+		}
 		return nil, err
 	}
 	tok := UserKey(int(irec.Value().(*Item).Seller))
@@ -427,7 +473,11 @@ func PutBidTxn(t Query, tx ETransaction) (*Result, error) {
 			dlog.Printf("User key for user %v stashed\n", tok)
 			return nil, ESTASH
 		}
-		dlog.Printf("No user? %v\n", tok)
+		tx.Abort()
+		if err == ENOKEY {
+			dlog.Printf("No user? %v\n", tok)
+			return nil, ENORETRY
+		}
 		return nil, err
 	}
 	nickname := torec.Value().(*User).Nickname
@@ -438,7 +488,11 @@ func PutBidTxn(t Query, tx ETransaction) (*Result, error) {
 			dlog.Printf("Max bid key for item %v stashed\n", item)
 			return nil, ESTASH
 		}
-		dlog.Printf("No max bid? %v\n", item)
+		tx.Abort()
+		if err == ENOKEY {
+			dlog.Printf("No max bid? %v\n", item)
+			return nil, ENORETRY
+		}
 		return nil, err
 	}
 	maxb := maxbrec.int_value
@@ -450,7 +504,11 @@ func PutBidTxn(t Query, tx ETransaction) (*Result, error) {
 			dlog.Printf("Num bids key for item %v stashed\n", item)
 			return nil, ESTASH
 		}
-		dlog.Printf("No num bids? %v\n", item)
+		tx.Abort()
+		if err == ENOKEY {
+			dlog.Printf("No num bids? %v\n", item)
+			return nil, ENORETRY
+		}
 		return nil, err
 	}
 	nb := numbrec.int_value
@@ -481,7 +539,11 @@ func PutCommentTxn(t Query, tx ETransaction) (*Result, error) {
 			dlog.Printf("User key for user %v stashed\n", touser)
 			return nil, ESTASH
 		}
-		dlog.Printf("No user? %v\n", touser)
+		tx.Abort()
+		if err == ENOKEY {
+			dlog.Printf("No user? %v\n", touser)
+			return nil, ENORETRY
+		}
 		return nil, err
 	}
 	nickname := torec.Value().(*User).Nickname
@@ -492,7 +554,11 @@ func PutCommentTxn(t Query, tx ETransaction) (*Result, error) {
 			dlog.Printf("Item key  %v stashed\n", item)
 			return nil, ESTASH
 		}
-		dlog.Printf("No item? %v\n", item)
+		tx.Abort()
+		if err == ENOKEY {
+			dlog.Printf("PutCommentTxn: No item? %v\n", item)
+			return nil, ENORETRY
+		}
 		return nil, err
 	}
 	itemname := irec.Value().(*Item).Name
@@ -524,7 +590,11 @@ func SearchItemsCategTxn(t Query, tx ETransaction) (*Result, error) {
 		if err == ESTASH {
 			return nil, ESTASH
 		}
-		dlog.Printf("No index for category %v\n", ibck)
+		dlog.Printf("SearchItemsCategTxn: Abort? %v %v\n", ibck, err)
+		tx.Abort()
+		if err == ENOKEY {
+			return nil, ENORETRY
+		}
 		return r, err
 	}
 	listy := ibcrec.entries
@@ -551,7 +621,11 @@ func SearchItemsCategTxn(t Query, tx ETransaction) (*Result, error) {
 			if err == ESTASH {
 				return nil, ESTASH
 			}
-			dlog.Printf("Item in list doesn't exist %v\n", k)
+			tx.Abort()
+			if err == ENOKEY {
+				dlog.Printf("search items cat: Item in list doesn't exist %v; %v\n", k, listy[i])
+				return nil, ENORETRY
+			}
 			return r, err
 		}
 		if *Allocate {
@@ -590,7 +664,7 @@ func SearchItemsCategTxn(t Query, tx ETransaction) (*Result, error) {
 				numbids []int32
 			}{ret, maxb, numb},
 		}
-		dlog.Printf("Searched categ %v %v\n", categ, *r)
+		//dlog.Printf("Searched categ %v %v\n", categ, *r)
 	}
 	return r, nil
 }
@@ -610,7 +684,11 @@ func SearchItemsRegionTxn(t Query, tx ETransaction) (*Result, error) {
 		if err == ESTASH {
 			return nil, ESTASH
 		}
-		dlog.Printf("No index for region %v\n", ibrk)
+		tx.Abort()
+		if err == ENOKEY {
+			dlog.Printf("No index for region %v\n", ibrk)
+			return nil, ENORETRY
+		}
 		return r, err
 	}
 	listy := ibrrec.entries
@@ -637,7 +715,11 @@ func SearchItemsRegionTxn(t Query, tx ETransaction) (*Result, error) {
 			if err == ESTASH {
 				return nil, ESTASH
 			}
-			dlog.Printf("Item in list doesn't exist %v\n", k)
+			tx.Abort()
+			if err == ENOKEY {
+				dlog.Printf("Item in list doesn't exist %v; %v\n", k, listy[i])
+				return nil, ENORETRY
+			}
 			return r, err
 		}
 		if *Allocate {
@@ -685,14 +767,32 @@ func ViewItemTxn(t Query, tx ETransaction) (*Result, error) {
 	id := t.U1
 	item, err := tx.Read(ItemKey(id))
 	if err != nil {
+		tx.Abort()
+		if err == ENOKEY {
+			return nil, ENORETRY
+		}
 		return r, err
 	}
 	maxbid, err := tx.Read(MaxBidKey(id))
 	if err != nil {
+		if err == ESTASH {
+			return nil, ESTASH
+		}
+		tx.Abort()
+		if err == ENOKEY {
+			return nil, ENORETRY
+		}
 		return r, err
 	}
 	maxbidder, err := tx.Read(MaxBidBidderKey(id))
 	if err != nil {
+		if err == ESTASH {
+			return nil, ESTASH
+		}
+		tx.Abort()
+		if err == ENOKEY {
+			return nil, ENORETRY
+		}
 		return r, err
 	}
 	if tx.Commit() == 0 {
