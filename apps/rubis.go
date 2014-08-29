@@ -50,6 +50,8 @@ func (b *Rubis) Init(np, nb, nw, ngo int) {
 }
 
 func (b *Rubis) Populate(s *ddtxn.Store, ex ddtxn.ETransaction) {
+	tmp := *ddtxn.Allocate
+	*ddtxn.Allocate = true
 	for i := 0; i < b.nbidders; i++ {
 		q := ddtxn.Query{
 			S1: fmt.Sprintf("xxx%d", i),
@@ -57,7 +59,7 @@ func (b *Rubis) Populate(s *ddtxn.Store, ex ddtxn.ETransaction) {
 		}
 		r, err := ddtxn.RegisterUserTxn(q, ex)
 		if err != nil {
-			log.Fatalf("Could not create user %v %v\n", q.S1, q.U1)
+			log.Fatalf("Could not create user %v\n", i)
 		}
 		b.users[i] = r.V.(uint64)
 		ex.Reset()
@@ -92,6 +94,7 @@ func (b *Rubis) Populate(s *ddtxn.Store, ex ddtxn.ETransaction) {
 			}
 		}
 	}
+	*ddtxn.Allocate = tmp
 	if *Latency {
 		b.SetupLatency(100, 1000000, b.ngo)
 	}

@@ -358,7 +358,11 @@ func ViewBidHistoryTxn(t Query, tx ETransaction) (*Result, error) {
 		}
 		if err == ENOKEY {
 			dlog.Printf("No bids for item %v\n", item)
-			return nil, nil
+			if tx.Commit() != 0 {
+				return nil, EABORT
+			} else {
+				return nil, nil
+			}
 		}
 		tx.Abort()
 		return nil, err
