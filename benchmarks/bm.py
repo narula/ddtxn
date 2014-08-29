@@ -20,6 +20,7 @@ parser.add_option("--wratio", action="store", type="float", dest="wratio", defau
 parser.add_option("--sr", action="store", type="int", dest="sr", default=1000)
 parser.add_option("--phase", action="store", type="int", dest="phase", default=20)
 parser.add_option("--zipf", action="store", type="float", dest="zipf", default=0.5)
+parser.add_option("--skew", action="store_true", dest="skew", default=False)
 
 
 (options, args) = parser.parse_args()
@@ -74,6 +75,8 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg, wratio, phase, atomic, zi
     if xncpus < 80:
         xncpus += 1
     cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr, atomic, zipf)
+    if options.exp == "rubis":
+        cmd = cmd + " -skew=%s" % options.skew
     return cmd
 
 def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=options.phase, atomic=False, zipf=-1):
