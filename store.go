@@ -141,6 +141,10 @@ func (s *Store) SetInt32(br *BRecord, v int32, op KeyType) {
 	}
 }
 
+func (s *Store) SetList(br *BRecord, ve Entry, op KeyType) {
+	br.AddOneToRecord(ve)
+}
+
 func (s *Store) Set(br *BRecord, v Value, op KeyType) {
 	switch op {
 	case SUM:

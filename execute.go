@@ -52,8 +52,9 @@ type ETransaction interface {
 	// Tell Doppel not to count this transaction's reads and writes.
 	NoCount()
 
-	// Get a unique key
+	// Get a unique key; give it up
 	UID(rune) uint64
+	RelinquishKey(uint64, rune)
 }
 
 // Not threadsafe.  Tracks execution of transaction.
@@ -73,6 +74,10 @@ type OTransaction struct {
 
 func (tx *OTransaction) UID(f rune) uint64 {
 	return tx.w.NextKey(f)
+}
+
+func (tx *OTransaction) RelinquishKey(n uint64, r rune) {
+	tx.w.GiveBack(n, r)
 }
 
 func (tx *OTransaction) NoCount() {
@@ -379,7 +384,7 @@ func (tx *OTransaction) Commit() TID {
 			case MAX:
 				tx.s.SetInt32(w.br, w.vint32, w.op)
 			case LIST:
-				tx.s.Set(w.br, w.ve, w.op)
+				tx.s.SetList(w.br, w.ve, w.op)
 			default:
 				if w.br == nil {
 					log.Fatalf("How is this nil?\n")
@@ -435,6 +440,10 @@ func (tx *LTransaction) Reset() {
 
 func (tx *LTransaction) UID(f rune) uint64 {
 	return tx.w.NextKey(f)
+}
+
+func (tx *LTransaction) RelinquishKey(n uint64, r rune) {
+	tx.w.GiveBack(n, r)
 }
 
 func (tx *LTransaction) Read(k Key) (*BRecord, error) {
@@ -626,7 +635,7 @@ func (tx *LTransaction) Commit() TID {
 			case MAX:
 				tx.s.SetInt32(tx.keys[i].br, tx.keys[i].vint32, tx.keys[i].kt)
 			case LIST:
-				tx.s.Set(tx.keys[i].br, tx.keys[i].ve, tx.keys[i].kt)
+				tx.s.SetList(tx.keys[i].br, tx.keys[i].ve, tx.keys[i].kt)
 			default:
 				tx.s.Set(tx.keys[i].br, tx.keys[i].v, tx.keys[i].kt)
 			}

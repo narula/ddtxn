@@ -29,7 +29,7 @@ ben_list_cpus = "socket@0,1,2,7,3-6"
 
 LATENCY_PART = " -latency=%s" % options.latency
 
-BASE_CMD = "GOGC=500 numactl -C `list-cpus seq -n %d %s` ./%s -nprocs=%d -ngo=%d -nw=%d -nsec=%d -contention=%s -rr=%d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -atomic=%s -zipf=%s" + LATENCY_PART
+BASE_CMD = "GOGC=900 numactl -C `list-cpus seq -n %d %s` ./%s -nprocs=%d -ngo=%d -nw=%d -nsec=%d -contention=%s -rr=%d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -atomic=%s -zipf=%s" + LATENCY_PART
 
 def run_one(fn, cmd):
     if options.dprint:
@@ -332,7 +332,8 @@ def latency():
     pass
 
 def rubis_exp(fnpath, host, contention, rr):
-    fnn = '%s-rubis-%d-%d-%s.data' % (host, contention, rr, True)
+    contention = int(contention)
+    fnn = '%s-rubis-%d-%s.data' % (host, contention, options.skew)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     cpus = get_cpus(host)

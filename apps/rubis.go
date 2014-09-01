@@ -75,6 +75,9 @@ func (b *Rubis) Populate(s *ddtxn.Store, c *ddtxn.Coordinator) {
 				log.Fatalf("Could not create user %v; err:%v\n", i, err)
 			}
 			b.users[i] = r.V.(uint64)
+			if b.users[i] == 0 {
+				fmt.Printf("Created user 0; index; %v\n", i)
+			}
 			ex.Reset()
 		}
 	}
@@ -82,12 +85,13 @@ func (b *Rubis) Populate(s *ddtxn.Store, c *ddtxn.Coordinator) {
 	for wi := 0; wi < b.nworkers; wi++ {
 		w := c.Workers[wi]
 		ex := w.E
+		nx := rand.Intn(b.nbidders)
 		for i := chunk * wi; i < chunk*(wi+1); i++ {
 			q := ddtxn.Query{
 				T:  ddtxn.TID(i),
 				S1: "xxx",
 				S2: "lovely",
-				U1: b.users[rand.Intn(b.nbidders)],
+				U1: b.users[nx],
 				U2: 100,
 				U3: 100,
 				U4: 1000,
@@ -97,7 +101,8 @@ func (b *Rubis) Populate(s *ddtxn.Store, c *ddtxn.Coordinator) {
 			}
 			r, err := ddtxn.NewItemTxn(q, ex)
 			if err != nil {
-				log.Fatalf("%v Could not create item %v %v\n", wi, i, err)
+				fmt.Printf("%v Could not create item index %v error: %v user_id: %v user index: %v nb: %v\n", wi, i, err, q.U1, nx, b.nbidders)
+				continue
 			}
 			v := r.V.(uint64)
 			b.products[i] = v

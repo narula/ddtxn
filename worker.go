@@ -312,7 +312,7 @@ func (w *Worker) PreallocateRubis(nx, nb, start int) {
 		k := UserKey(uint64(x))
 		w.store.CreateKey(k, &User{}, WRITE)
 		k = NicknameKey(uint64(x))
-		w.store.CreateKey(k, "", WRITE)
+		w.store.CreateKey(k, uint64(0), WRITE)
 		k = RatingKey(uint64(x))
 		w.store.CreateKey(k, int32(0), SUM)
 
@@ -369,6 +369,12 @@ func (w *Worker) NextKey(f rune) uint64 {
 	x := uint64(y<<16) | uint64(w.ID)<<8 | y%CHUNKS
 	w.CurrKey[f]++
 	return x
+}
+
+func (w *Worker) GiveBack(n uint64, r rune) {
+	if w.PreAllocated {
+		w.CurrKey[r]--
+	}
 }
 
 func (w *Worker) nextTID() TID {

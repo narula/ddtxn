@@ -98,13 +98,16 @@ func (c *Candidates) Read(k Key, br *BRecord) {
 	}
 }
 
+// This is only used when a key is in split mode (can't count
+// conflicts anymore because they don't happen).  Make it count for
+// more.
 func (c *Candidates) Write(k Key, br *BRecord) {
 	o, ok := c.m[k]
 	if !ok {
-		c.m[k] = &OneStat{k: k, reads: 1, writes: 1, conflicts: 0, stash: 0, index: -1}
+		c.m[k] = &OneStat{k: k, reads: 1, writes: 2, conflicts: 0, stash: 0, index: -1}
 		o = c.m[k]
 	} else {
-		o.writes++
+		o.writes = o.writes + 2
 	}
 	x, _ := UndoCKey(k)
 	if x == 3 {
