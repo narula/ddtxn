@@ -34,6 +34,7 @@ type Coordinator struct {
 	Done                  chan chan bool
 	Accelerate            chan bool
 	trigger               int32
+	to_remove             map[Key]bool
 }
 
 func NewCoordinator(n int, s *Store) *Coordinator {
@@ -49,6 +50,7 @@ func NewCoordinator(n int, s *Store) *Coordinator {
 		Accelerate:            make(chan bool),
 		Coordinate:            false,
 		PotentialPhaseChanges: 0,
+		to_remove:             make(map[Key]bool),
 	}
 	for i := 0; i < n; i++ {
 		c.wepoch[i] = make(chan TID)
@@ -99,8 +101,15 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 		br, _ := s.getKey(o.k)
 		if !br.dd {
 			if o.ratio() > *WRRatio && (o.writes > 1 || o.conflicts > 1) {
-				potential_dd_keys[o.k] = true
-				dlog.Printf("Moving %v to split r:%v w:%v c:%v s:%v ratio:%v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
+				if len(s.dd) == 0 { // Higher threshold for the first one, since it kicks off phases
+					if o.ratio() > 2*(*WRRatio) && (o.writes > 1 || o.conflicts > 2) {
+						potential_dd_keys[o.k] = true
+						dlog.Printf("Moving %v to split r:%v w:%v c:%v s:%v ratio:%v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
+					}
+				} else {
+					potential_dd_keys[o.k] = true
+					dlog.Printf("Moving %v to split r:%v w:%v c:%v s:%v ratio:%v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
+				}
 			} else {
 				dlog.Printf("Not enough writes or conflicts or high enough ratio yet for key : %v; r:%v w:%v c:%v s:%v ratio:%v; wr: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), *WRRatio)
 			}
@@ -119,7 +128,12 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 			continue
 		}
 		if o.ratio() < (*WRRatio)/2 {
-			to_remove[k] = true
+			if x, ok := c.to_remove[k]; x && ok {
+				c.to_remove[k] = false
+				to_remove[k] = true
+			} else {
+				c.to_remove[k] = true
+			}
 			dlog.Printf("Moved %v from split r:%v w:%v c:%v s:%v ratio:%v\n", k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
 		}
 	}

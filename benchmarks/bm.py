@@ -16,8 +16,8 @@ parser.add_option("--latency", action="store_true", dest="latency", default=Fals
 parser.add_option("--rlock", action="store_false", dest="rlock", default=True)
 parser.add_option("--scp", action="store_true", dest="scp", default=True)
 parser.add_option("--noscp", action="store_false", dest="scp")
-parser.add_option("--wratio", action="store", type="float", dest="wratio", default=4)
-parser.add_option("--sr", action="store", type="int", dest="sr", default=1000)
+parser.add_option("--wratio", action="store", type="float", dest="wratio", default=1.5)
+parser.add_option("--sr", action="store", type="int", dest="sr", default=800)
 parser.add_option("--phase", action="store", type="int", dest="phase", default=20)
 parser.add_option("--zipf", action="store", type="float", dest="zipf", default=0.5)
 parser.add_option("--skew", action="store_true", dest="skew", default=False)
@@ -29,7 +29,7 @@ ben_list_cpus = "socket@0,1,2,7,3-6"
 
 LATENCY_PART = " -latency=%s" % options.latency
 
-BASE_CMD = "GOGC=900 numactl -C `list-cpus seq -n %d %s` ./%s -nprocs=%d -ngo=%d -nw=%d -nsec=%d -contention=%s -rr=%d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -atomic=%s -zipf=%s" + LATENCY_PART
+BASE_CMD = "GOGC=off numactl -C `list-cpus seq -n %d %s` ./%s -nprocs=%d -ngo=%d -nw=%d -nsec=%d -contention=%s -rr=%d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -atomic=%s -zipf=%s" + LATENCY_PART
 
 def run_one(fn, cmd):
     if options.dprint:
