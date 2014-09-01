@@ -50,7 +50,7 @@ func (b *Buy) Populate(s *ddtxn.Store, ex *ddtxn.ETransaction) {
 	}
 	dlog.Printf("Created products")
 	for i := 0; i < b.nbidders; i++ {
-		k := ddtxn.UserKey(i)
+		k := ddtxn.UserKey(uint64(i))
 		s.CreateKey(k, "x", ddtxn.WRITE)
 	}
 	dlog.Printf("Created bidders")
@@ -82,18 +82,18 @@ func (b *Buy) MakeOne(w int, local_seed *uint32, sp uint32, txn *ddtxn.Query) {
 	if x < b.read_rate {
 		if x > b.ncontended_rate {
 			// Contended read
-			txn.K1 = ddtxn.UserKey(bidder)
+			txn.K1 = ddtxn.UserKey(uint64(bidder))
 			txn.K2 = ddtxn.ProductKey(product)
 		} else {
 			// Uncontended read
 			product = int(ddtxn.RandN(local_seed, uint32(b.nbidders)))
-			txn.K1 = ddtxn.UserKey(bidder)
+			txn.K1 = ddtxn.UserKey(uint64(bidder))
 			txn.K2 = ddtxn.ProductKey(product)
 		}
 		txn.TXN = ddtxn.D_READ_TWO
 	} else {
 		amt := int32(ddtxn.RandN(local_seed, 10))
-		txn.K1 = ddtxn.UserKey(bidder)
+		txn.K1 = ddtxn.UserKey(uint64(bidder))
 		txn.K2 = ddtxn.ProductKey(product)
 		txn.A = amt
 		txn.TXN = ddtxn.D_BUY

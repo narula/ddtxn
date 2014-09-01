@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -15,6 +16,7 @@ import (
 var Skewed = flag.Bool("skew", false, "Rubis-C (skewed workload) or not, default Rubis-B")
 
 type Rubis struct {
+	sync.Mutex
 	padding    [128]byte
 	nproducts  int
 	nbidders   int
@@ -31,6 +33,7 @@ type Rubis struct {
 	sp         uint32
 	rates      []float64
 	padding1   [128]byte
+	pidIdx     map[uint64]int
 }
 
 func (b *Rubis) Init(np, nb, nw, ngo int) {
@@ -40,61 +43,72 @@ func (b *Rubis) Init(np, nb, nw, ngo int) {
 	b.ngo = ngo
 	b.maxes = make([]int32, np)
 	b.num_bids = make([]int32, np)
+	b.pidIdx = make(map[uint64]int, np)
 	b.ratings = make(map[uint64]int32)
 	b.lhr = make([]*stats.LatencyHist, ngo)
 	b.lhw = make([]*stats.LatencyHist, ngo)
 	b.sp = uint32(nb / nw)
 	b.rates = ddtxn.GetTxns(*Skewed)
 	b.users = make([]uint64, nb)
-	b.products = make([]uint64, ddtxn.NUM_ITEMS)
+	if ddtxn.NUM_ITEMS > np {
+		b.products = make([]uint64, ddtxn.NUM_ITEMS)
+	} else {
+		b.products = make([]uint64, np)
+	}
 }
 
-func (b *Rubis) Populate(s *ddtxn.Store, ex ddtxn.ETransaction) {
+func (b *Rubis) Populate(s *ddtxn.Store, c *ddtxn.Coordinator) {
 	tmp := *ddtxn.Allocate
+	tmp2 := *dlog.Debug
 	*ddtxn.Allocate = true
-	for i := 0; i < b.nbidders; i++ {
-		q := ddtxn.Query{
-			S1: fmt.Sprintf("xxx%d", i),
-			U1: uint64(rand.Intn(ddtxn.NUM_REGIONS)),
-		}
-		r, err := ddtxn.RegisterUserTxn(q, ex)
-		if err != nil {
-			log.Fatalf("Could not create user %v\n", i)
-		}
-		b.users[i] = r.V.(uint64)
-		ex.Reset()
-	}
-	for i := 0; i < ddtxn.NUM_ITEMS; i++ {
-		q := ddtxn.Query{
-			S1: "xxx",
-			S2: "lovely",
-			U1: b.users[rand.Intn(b.nbidders)],
-			U2: 100,
-			U3: 100,
-			U4: 1000,
-			U5: 1000,
-			U6: 1,
-			U7: uint64(rand.Intn(ddtxn.NUM_CATEGORIES)),
-		}
-		r, err := ddtxn.NewItemTxn(q, ex)
-		if err != nil {
-			log.Fatalf("Could not create items %v %v\n", i, err)
-		}
-		b.products[i] = r.V.(uint64)
-		ex.Reset()
-		if !*ddtxn.UseRLocks {
-			// Allocate keys for every combination of user and product
-			// bids. This is to avoid using read locks during execution by
-			// guaranteeing the map of keys won't change.
-			if i < b.nproducts {
-				for j := 0; j < b.nbidders; j++ {
-					k := ddtxn.PairBidKey(uint64(j), uint64(i))
-					s.CreateKey(k, "", ddtxn.WRITE)
-				}
+	*dlog.Debug = false
+	for wi := 0; wi < b.nworkers; wi++ {
+		w := c.Workers[wi]
+		ex := w.E
+		for i := b.sp * uint32(wi); i < b.sp*(uint32(wi+1)); i++ {
+			q := ddtxn.Query{
+				U1: uint64(rand.Intn(ddtxn.NUM_REGIONS)),
+				U2: 0,
 			}
+			r, err := ddtxn.RegisterUserTxn(q, ex)
+			if err != nil {
+				log.Fatalf("Could not create user %v; err:%v\n", i, err)
+			}
+			b.users[i] = r.V.(uint64)
+			ex.Reset()
+		}
+	}
+	chunk := ddtxn.NUM_ITEMS / b.nworkers
+	for wi := 0; wi < b.nworkers; wi++ {
+		w := c.Workers[wi]
+		ex := w.E
+		for i := chunk * wi; i < chunk*(wi+1); i++ {
+			q := ddtxn.Query{
+				T:  ddtxn.TID(i),
+				S1: "xxx",
+				S2: "lovely",
+				U1: b.users[rand.Intn(b.nbidders)],
+				U2: 100,
+				U3: 100,
+				U4: 1000,
+				U5: 1000,
+				U6: 1,
+				U7: uint64(rand.Intn(ddtxn.NUM_CATEGORIES)),
+			}
+			r, err := ddtxn.NewItemTxn(q, ex)
+			if err != nil {
+				log.Fatalf("%v Could not create item %v %v\n", wi, i, err)
+			}
+			v := r.V.(uint64)
+			b.products[i] = v
+			b.pidIdx[v] = i
+			k := ddtxn.BidsPerItemKey(v)
+			w.Store().CreateKey(k, nil, ddtxn.LIST)
+			ex.Reset()
 		}
 	}
 	*ddtxn.Allocate = tmp
+	*dlog.Debug = tmp2
 	if *Latency {
 		b.SetupLatency(100, 1000000, b.ngo)
 	}
@@ -163,7 +177,7 @@ func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 	} else if x < b.rates[7] {
 		txn.TXN = ddtxn.RUBIS_REGISTER
 		txn.U1 = uint64(ddtxn.RandN(local_seed, uint32(ddtxn.NUM_REGIONS)))
-		txn.S1 = fmt.Sprintf("xxx%d", ddtxn.RandN(local_seed, 1000000000))
+		txn.U2 = uint64(ddtxn.RandN(local_seed, 1000000000))
 	} else if x < b.rates[8] {
 		txn.TXN = ddtxn.RUBIS_SEARCHCAT
 		txn.U1 = uint64(ddtxn.RandN(local_seed, uint32(ddtxn.NUM_CATEGORIES)))
@@ -188,7 +202,7 @@ func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 
 func (b *Rubis) Add(t ddtxn.Query) {
 	if t.TXN == ddtxn.RUBIS_BID {
-		x := t.U2
+		x := b.pidIdx[t.U2]
 		atomic.AddInt32(&b.num_bids[x], 1)
 		for t.A > b.maxes[x] {
 			v := atomic.LoadInt32(&b.maxes[x])
@@ -198,7 +212,9 @@ func (b *Rubis) Add(t ddtxn.Query) {
 			}
 		}
 	} else if t.TXN == ddtxn.RUBIS_COMMENT {
+		b.Lock()
 		b.ratings[t.U1] += 1
+		b.Unlock()
 	}
 }
 
@@ -220,38 +236,39 @@ func (b *Rubis) Validate(s *ddtxn.Store, nitr int) bool {
 			continue
 		}
 	}
-	for j := 0; j < b.nproducts; j++ {
+	for i := 0; i < b.nproducts; i++ {
+		j := b.products[i]
 		var x int32
-		k := ddtxn.MaxBidKey(uint64(j))
+		k := ddtxn.MaxBidKey(j)
 		v, err := s.Get(k)
 		if err != nil {
-			if b.maxes[j] != 0 {
-				fmt.Printf("Validating key %v failed; store: none should have: %v\n", k, b.maxes[j])
+			if b.maxes[i] != 0 {
+				fmt.Printf("Validating key %v failed; store: none should have: %v\n", k, b.maxes[i])
 				good = false
 			}
 			continue
 		}
 		x = v.Value().(int32)
-		if x != b.maxes[j] {
-			fmt.Printf("Validating key %v failed; store: %v should have: %v\n", k, x, b.maxes[j])
+		if x != b.maxes[i] {
+			fmt.Printf("Validating key %v failed; store: %v should have: %v\n", k, x, b.maxes[i])
 			good = false
 		}
 		if x == 0 {
 			dlog.Printf("Saying x is zero %v %v\n", x, zero_cnt)
 			zero_cnt++
 		}
-		k = ddtxn.NumBidsKey(uint64(j))
+		k = ddtxn.NumBidsKey(j)
 		v, err = s.Get(k)
 		if err != nil {
-			if b.maxes[j] != 0 {
-				fmt.Printf("Validating key %v failed for max bid; store: none should have: %v\n", k, b.num_bids[j])
+			if b.maxes[i] != 0 {
+				fmt.Printf("Validating key %v failed for max bid; store: none should have: %v\n", k, b.num_bids[i])
 				good = false
 			}
 			continue
 		}
 		x = v.Value().(int32)
-		if x != b.num_bids[j] {
-			fmt.Printf("Validating key %v failed for number of bids; store: %v should have: %v\n", k, x, b.num_bids[j])
+		if x != b.num_bids[i] {
+			fmt.Printf("Validating key %v failed for number of bids; store: %v should have: %v\n", k, x, b.num_bids[i])
 			good = false
 		}
 		if x == 0 {

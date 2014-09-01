@@ -96,14 +96,13 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 	xx := len(*s.cand.h)
 	for i := 0; i < xx; i++ {
 		o := heap.Pop(s.cand.h).(*OneStat)
-		x, y := UndoCKey(o.k)
 		br, _ := s.getKey(o.k)
 		if !br.dd {
 			if o.ratio() > *WRRatio && (o.writes > 1 || o.conflicts > 1) {
 				potential_dd_keys[o.k] = true
-				dlog.Printf("Moving %v %v to split r:%v w:%v c:%v s:%v ratio:%v\n", x, y, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
+				dlog.Printf("Moving %v to split r:%v w:%v c:%v s:%v ratio:%v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
 			} else {
-				dlog.Printf("Not enough writes or conflicts or high enough ratio yet for key : %v %v; r:%v w:%v c:%v s:%v ratio:%v; wr: %v\n", x, y, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), *WRRatio)
+				dlog.Printf("Not enough writes or conflicts or high enough ratio yet for key : %v; r:%v w:%v c:%v s:%v ratio:%v; wr: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), *WRRatio)
 			}
 		} else if br.dd {
 			// Key is split; might potentially move back
@@ -116,14 +115,12 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 		}
 		o, ok := s.cand.m[k]
 		if !ok {
-			x, y := UndoCKey(k)
-			dlog.Printf("Key %v %v was split but now is not in store candidates\n", x, y)
+			dlog.Printf("Key %v was split but now is not in store candidates\n", k)
 			continue
 		}
 		if o.ratio() < (*WRRatio)/2 {
 			to_remove[k] = true
-			x, y := UndoCKey(o.k)
-			dlog.Printf("Moved %v %v from split r:%v w:%v c:%v s:%v ratio:%v\n", x, y, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
+			dlog.Printf("Moved %v from split r:%v w:%v c:%v s:%v ratio:%v\n", k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
 		}
 	}
 	if len(s.dd) == 0 && len(potential_dd_keys) == 0 {

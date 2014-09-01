@@ -22,7 +22,7 @@ func BenchmarkMany(b *testing.B) {
 		s.CreateKey(ProductKey(i), int32(0), SUM)
 	}
 	for i := 0; i < nb; i++ {
-		s.CreateKey(UserKey(i), "x", WRITE)
+		s.CreateKey(UserKey(uint64(i)), "x", WRITE)
 	}
 	c := NewCoordinator(n, s)
 	val := make([]int32, np)
@@ -35,7 +35,7 @@ func BenchmarkMany(b *testing.B) {
 			w := c.Workers[id]
 			for i := 0; i < b.N/3; i++ {
 				p := ProductKey(i % np)
-				u := UserKey(i % nb)
+				u := UserKey(uint64(i % nb))
 				amt := int32(rand.Intn(100))
 				tx := Query{TXN: D_BUY, K1: u, A: amt, K2: p, W: nil, T: 0}
 				_, err := w.One(tx)
@@ -65,7 +65,7 @@ func BenchmarkBuy(b *testing.B) {
 		s.CreateKey(ProductKey(i), int32(0), MAX)
 	}
 	for i := 0; i < nb; i++ {
-		s.CreateKey(UserKey(i), "x", WRITE)
+		s.CreateKey(UserKey(uint64(i)), "x", WRITE)
 	}
 	c := NewCoordinator(n, s)
 	val := make([]int32, np)
@@ -78,7 +78,7 @@ func BenchmarkBuy(b *testing.B) {
 			w := c.Workers[id]
 			for i := 0; i < b.N/3; i++ {
 				p := ProductKey(i % np)
-				u := UserKey(i % nb)
+				u := UserKey(uint64(i % nb))
 				amt := int32(rand.Intn(100))
 				tx := Query{TXN: D_BUY, K1: u, A: amt, K2: p, W: nil, T: 0}
 				_, err := w.One(tx)
@@ -111,7 +111,7 @@ func BenchmarkRead(b *testing.B) {
 		s.CreateKey(ProductKey(i), int32(0), SUM)
 	}
 	for i := 0; i < nb; i++ {
-		s.CreateKey(UserKey(i), "x", WRITE)
+		s.CreateKey(UserKey(uint64(i)), "x", WRITE)
 	}
 
 	c := NewCoordinator(n, s)
@@ -126,7 +126,7 @@ func BenchmarkRead(b *testing.B) {
 			w := c.Workers[id]
 			for i := 0; i < b.N/3; i++ {
 				p := ProductKey(i % np)
-				u := UserKey(i % nb)
+				u := UserKey(uint64(i % nb))
 				amt := int32(rand.Intn(100))
 				var tx Query
 				rr := rand.Intn(100)

@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"runtime/debug"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -33,18 +34,18 @@ const (
 	D_INCR_ONE
 	D_ATOMIC_INCR_ONE
 
-	RUBIS_BID         // 12  7%
-	RUBIS_VIEWBIDHIST // 13  3%
-	RUBIS_BUYNOW      // 14  3%
-	RUBIS_COMMENT     // 15  1%
-	RUBIS_NEWITEM     // 16  4%
-	RUBIS_PUTBID      // 17  10%
-	RUBIS_PUTCOMMENT  // 18  1%
-	RUBIS_REGISTER    // 19  4%
-	RUBIS_SEARCHCAT   // 20  27%
-	RUBIS_SEARCHREG   // 21  12%
-	RUBIS_VIEW        // 22  23%
-	RUBIS_VIEWUSER    // 23  4%
+	RUBIS_BID         // 6   7%
+	RUBIS_VIEWBIDHIST // 7   3%
+	RUBIS_BUYNOW      // 8   3%
+	RUBIS_COMMENT     // 9   1%
+	RUBIS_NEWITEM     // 10  4%
+	RUBIS_PUTBID      // 11  10%
+	RUBIS_PUTCOMMENT  // 12  1%
+	RUBIS_REGISTER    // 13  4%
+	RUBIS_SEARCHCAT   // 14  27%
+	RUBIS_SEARCHREG   // 15  12%
+	RUBIS_VIEW        // 16  23%
+	RUBIS_VIEWUSER    // 17  4%
 
 	BIG_INCR
 	BIG_RW
@@ -84,6 +85,12 @@ type Worker struct {
 	Nwait2       time.Duration
 	NKeyAccesses []int64
 	tickle       chan TID
+
+	// Rubis junk
+	LastKey      []int
+	CurrKey      []int
+	PreAllocated bool
+	start        int
 }
 
 func (w *Worker) Register(fn int, transaction TransactionFunc) {
@@ -92,15 +99,16 @@ func (w *Worker) Register(fn int, transaction TransactionFunc) {
 
 func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 	w := &Worker{
-		ID:          id,
-		store:       s,
-		local_store: NewLocalStore(s),
-		coordinator: c,
-		Nstats:      make([]int64, LAST_STAT),
-		epoch:       TID(c.epochTID),
-		done:        make(chan bool),
-		txns:        make([]TransactionFunc, LAST_TXN),
-		tickle:      make(chan TID),
+		ID:           id,
+		store:        s,
+		local_store:  NewLocalStore(s),
+		coordinator:  c,
+		Nstats:       make([]int64, LAST_STAT),
+		epoch:        TID(c.epochTID),
+		done:         make(chan bool),
+		txns:         make([]TransactionFunc, LAST_TXN),
+		tickle:       make(chan TID),
+		PreAllocated: false,
 	}
 	if *SysType == DOPPEL {
 		w.waiters = TSInit(START_SIZE)
@@ -293,6 +301,76 @@ func (w *Worker) One(t Query) (*Result, error) {
 	return r, err
 }
 
+func (w *Worker) PreallocateRubis(nx, nb, start int) {
+	w.LastKey = make([]int, 300)
+	w.CurrKey = make([]int, 300)
+	w.start = start
+
+	for i := start; i < nx+start; i++ {
+		x := uint64(i<<16) | uint64(w.ID)<<8 | uint64(i%CHUNKS)
+
+		k := UserKey(uint64(x))
+		w.store.CreateKey(k, &User{}, WRITE)
+		k = NicknameKey(uint64(x))
+		w.store.CreateKey(k, "", WRITE)
+		k = RatingKey(uint64(x))
+		w.store.CreateKey(k, int32(0), SUM)
+
+		k = CommentKey(uint64(x))
+		w.store.CreateKey(k, nil, WRITE)
+
+		k = ItemKey(uint64(x))
+		w.store.CreateKey(k, nil, WRITE)
+		k = MaxBidKey(uint64(x))
+		w.store.CreateKey(k, int32(0), MAX)
+		k = MaxBidBidderKey(uint64(x))
+		w.store.CreateKey(k, uint64(0), WRITE)
+		k = NumBidsKey(uint64(x))
+		w.store.CreateKey(k, int32(0), SUM)
+		k = BidsPerItemKey(uint64(x))
+		w.store.CreateKey(k, nil, LIST)
+
+		k = BuyNowKey(uint64(x))
+		w.store.CreateKey(k, &BuyNow{}, WRITE)
+	}
+	w.LastKey['i'] = nx
+	w.LastKey['u'] = nx
+	w.LastKey['d'] = nx
+	w.LastKey['c'] = nx
+	w.LastKey['k'] = nx
+
+	for i := start; i < nb+start; i++ {
+		x := uint64(i<<16) | uint64(w.ID)<<8 | uint64(i%CHUNKS)
+		k := BidKey(uint64(x))
+		w.store.CreateKey(k, nil, WRITE)
+
+	}
+	w.LastKey['b'] = nb
+	var i, j uint64
+	for i = 0; i < NUM_CATEGORIES; i++ {
+		w.store.CreateKey(ItemsByCatKey(i), nil, LIST)
+		for j = 0; j < NUM_REGIONS; j++ {
+			w.store.CreateKey(ItemsByRegKey(j, i), nil, LIST)
+		}
+	}
+	w.PreAllocated = true
+}
+
+func (w *Worker) NextKey(f rune) uint64 {
+	if !w.PreAllocated {
+		w.next++
+		x := uint64(w.next<<16) | uint64(w.ID)<<8 | uint64(w.next%CHUNKS)
+		return x
+	}
+	if w.LastKey[f] == w.CurrKey[f] {
+		log.Fatalf("%v Ran out of preallocated keys for %v; %v %v", w.ID, strconv.QuoteRuneToASCII(f), w.CurrKey[f], w.LastKey[f])
+	}
+	y := uint64(w.CurrKey[f] + w.start)
+	x := uint64(y<<16) | uint64(w.ID)<<8 | y%CHUNKS
+	w.CurrKey[f]++
+	return x
+}
+
 func (w *Worker) nextTID() TID {
 	w.next++
 	x := uint64(w.next<<16) | uint64(w.ID)<<8 | uint64(w.next%CHUNKS)
@@ -301,4 +379,8 @@ func (w *Worker) nextTID() TID {
 
 func (w *Worker) commitTID() TID {
 	return w.nextTID() | w.epoch
+}
+
+func (w *Worker) Store() *Store {
+	return w.store
 }

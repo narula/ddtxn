@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"os"
 	"runtime"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -28,6 +29,9 @@ var readrate = flag.Int("rr", 0, "Read rate %.  Rest are bids")
 var notcontended_readrate = flag.Float64("ncrr", .8, "Uncontended read rate %.  Default to .8")
 var dataFile = flag.String("out", "rubis-data.out", "Filename for output")
 var atomicIncr = flag.Bool("atomic", false, "NOT USED")
+
+var preUsers = flag.Int("pu", 100000, "Number of user keys to preallocate (also used for comments and items)")
+var preBids = flag.Int("pb", 3000000, "Number of bid keys to preallocate")
 
 func main() {
 	flag.Parse()
@@ -59,9 +63,25 @@ func main() {
 
 	rubis := &apps.Rubis{}
 	rubis.Init(nproducts, *nbidders, *nworkers, *clientGoRoutines)
-	rubis.Populate(s, coord.Workers[0].E)
+	rubis.Populate(s, coord)
+	fmt.Printf("Done populating rubis\n")
 
-	dlog.Printf("Done initializing rubis\n")
+	if !*ddtxn.Allocate {
+		tmp := *ddtxn.UseRLocks
+		*ddtxn.UseRLocks = true
+		// Preallocate keys
+		var wg sync.WaitGroup
+		for i := 0; i < *nworkers; i++ {
+			wg.Add(1)
+			go func(i int) {
+				coord.Workers[i].PreallocateRubis(*preUsers, *preBids, *nbidders)
+				wg.Done()
+			}(i)
+		}
+		wg.Wait()
+		*ddtxn.UseRLocks = tmp
+	}
+	fmt.Printf("Done initializing rubis\n")
 
 	p := prof.StartProfile()
 	start := time.Now()
@@ -149,7 +169,16 @@ func main() {
 		gave_up[0] = gave_up[0] + gave_up[i]
 	}
 
-	out := fmt.Sprintf("  nworkers: %v, nwmoved: %v, nrmoved: %v, sys: %v, total/sec: %v, abortrate: %.2f, stashrate: %.2f, nbidders: %v, nitems: %v, contention: %v, done: %v, actual time: %v, epoch changes: %v, throughput: ns/txn: %v, naborts: %v, coord time: %v, coord stats time: %v, total worker time transitioning: %v, nstashed: %v, rlock: %v, wrratio: %v, nsamples: %v, getkeys: %v, ddwrites: %v, nolock: %v, failv: %v, stashdone: %v, nfast: %v, gaveup: %v, potential: %v  ", *nworkers, ddtxn.WMoved, ddtxn.RMoved, *ddtxn.SysType, float64(nitr)/end.Seconds(), 100*float64(stats[ddtxn.NABORTS])/float64(nitr+stats[ddtxn.NABORTS]), 100*float64(stats[ddtxn.NSTASHED])/float64(nitr+stats[ddtxn.NABORTS]), *nbidders, nproducts, *contention, nitr, end, ddtxn.NextEpoch, end.Nanoseconds()/nitr, stats[ddtxn.NABORTS], ddtxn.Time_in_IE, ddtxn.Time_in_IE1, nwait, stats[ddtxn.NSTASHED], *ddtxn.UseRLocks, *ddtxn.WRRatio, stats[ddtxn.NSAMPLES], stats[ddtxn.NGETKEYCALLS], stats[ddtxn.NDDWRITES], stats[ddtxn.NO_LOCK], stats[ddtxn.NFAIL_VERIFY], stats[ddtxn.NDIDSTASHED], ddtxn.Nfast, gave_up[0], coord.PotentialPhaseChanges)
+	keys := []rune{'b', 'c', 'd', 'i', 'k', 'u'}
+	for i := 0; i < *nworkers; i++ {
+		dlog.Printf("w: %v ", i)
+		for _, k := range keys {
+			dlog.Printf("%v %v/%v \t", strconv.QuoteRuneToASCII(k), coord.Workers[i].CurrKey[k], coord.Workers[i].LastKey[k])
+		}
+		dlog.Printf("\n")
+	}
+
+	out := fmt.Sprintf("  nworkers: %v, nwmoved: %v, nrmoved: %v, sys: %v, total/sec: %v, abortrate: %.2f, stashrate: %.2f, nbidders: %v, nitems: %v, contention: %v, done: %v, actual time: %v, throughput: ns/txn: %v, naborts: %v, coord time: %v, coord stats time: %v, total worker time transitioning: %v, nstashed: %v, rlock: %v, wrratio: %v, nsamples: %v, getkeys: %v, ddwrites: %v, nolock: %v, failv: %v, stashdone: %v, nfast: %v, gaveup: %v,  epoch changes: %v, potential: %v  ", *nworkers, ddtxn.WMoved, ddtxn.RMoved, *ddtxn.SysType, float64(nitr)/end.Seconds(), 100*float64(stats[ddtxn.NABORTS])/float64(nitr+stats[ddtxn.NABORTS]), 100*float64(stats[ddtxn.NSTASHED])/float64(nitr+stats[ddtxn.NABORTS]), *nbidders, nproducts, *contention, nitr, end, end.Nanoseconds()/nitr, stats[ddtxn.NABORTS], ddtxn.Time_in_IE, ddtxn.Time_in_IE1, nwait, stats[ddtxn.NSTASHED], *ddtxn.UseRLocks, *ddtxn.WRRatio, stats[ddtxn.NSAMPLES], stats[ddtxn.NGETKEYCALLS], stats[ddtxn.NDDWRITES], stats[ddtxn.NO_LOCK], stats[ddtxn.NFAIL_VERIFY], stats[ddtxn.NDIDSTASHED], ddtxn.Nfast, gave_up[0], ddtxn.NextEpoch, coord.PotentialPhaseChanges)
 	fmt.Printf(out)
 	fmt.Printf("\n")
 	f, err := os.OpenFile(*dataFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)

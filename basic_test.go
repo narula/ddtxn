@@ -87,14 +87,6 @@ func TestListRecord(t *testing.T) {
 	}
 }
 
-func TestUndoKey(t *testing.T) {
-	var x uint64 = 655647
-	k := CKey(x, 'p')
-	if y, r := UndoCKey(k); y != x || r != 'p' {
-		t.Errorf("Mismatch: %v %v %v\n", x, k, y)
-	}
-}
-
 func TestTStore(t *testing.T) {
 	ts := TSInit(10)
 	if len(ts.t) != 0 {
@@ -131,8 +123,8 @@ func TestAuction(t *testing.T) {
 	s := NewStore()
 	c := NewCoordinator(1, s)
 	w := c.Workers[0]
-	myname := "johnny appleseed"
-	tx := Query{TXN: RUBIS_REGISTER, S1: myname, U1: 1}
+	myname := uint64(12345)
+	tx := Query{TXN: RUBIS_REGISTER, U2: myname, U1: 1}
 	r, err := w.One(tx)
 	if err != nil {
 		t.Errorf("Register\n")
@@ -202,7 +194,7 @@ func TestAuction(t *testing.T) {
 	if len(lst.bids) != 1 || len(lst.nns) != 1 {
 		t.Fatalf("Wrong length\n")
 	}
-	if lst.nns[0] != "johnny appleseed" {
+	if lst.nns[0] != string(myname) {
 		t.Errorf("Wrong nickname %v\n", lst.nns[0])
 	}
 	if lst.bids[0].Price != 20 {

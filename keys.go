@@ -1,5 +1,12 @@
 package ddtxn
 
+import (
+	"fmt"
+	"strconv"
+)
+
+type KeyGenFunc func(uint64) Key
+
 func CKey(x uint64, ch rune) Key {
 	var b [16]byte
 	var i uint64
@@ -19,6 +26,11 @@ func UndoCKey(k Key) (uint64, rune) {
 		x = x + uint64(v<<(i*8))
 	}
 	return x, rune(b[8])
+}
+
+func (k Key) String() string {
+	x, y := UndoCKey(k)
+	return fmt.Sprintf("[%v%v]", strconv.QuoteRuneToASCII(y), x)
 }
 
 func TKey(x uint64, y uint64) Key {
@@ -45,8 +57,12 @@ func SKey(s string) Key {
 	return Key(b)
 }
 
-func UserKey(bidder int) Key {
+func UserKey(bidder uint64) Key {
 	return CKey(uint64(bidder), 'u')
+}
+
+func NicknameKey(bidder uint64) Key {
+	return CKey(uint64(bidder), 'd')
 }
 
 func BidKey(id uint64) Key {
@@ -109,5 +125,5 @@ func ItemsByRegKey(region uint64, categ uint64) Key {
 }
 
 func RatingKey(user uint64) Key {
-	return CKey(user, 'c')
+	return CKey(user, 's')
 }

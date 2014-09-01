@@ -52,8 +52,8 @@ type ETransaction interface {
 	// Tell Doppel not to count this transaction's reads and writes.
 	NoCount()
 
-	// Get a unique ID
-	UID() uint64
+	// Get a unique key
+	UID(rune) uint64
 }
 
 // Not threadsafe.  Tracks execution of transaction.
@@ -71,8 +71,8 @@ type OTransaction struct {
 	padding  [128]byte
 }
 
-func (tx *OTransaction) UID() uint64 {
-	return uint64(tx.w.commitTID())
+func (tx *OTransaction) UID(f rune) uint64 {
+	return tx.w.NextKey(f)
 }
 
 func (tx *OTransaction) NoCount() {
@@ -130,7 +130,7 @@ func (tx *OTransaction) Read(k Key) (*BRecord, error) {
 	br, err := tx.s.getKey(k)
 	if *CountKeys {
 		p, r := UndoCKey(k)
-		if r == 112 {
+		if r == 'p' {
 			tx.w.NKeyAccesses[p]++
 		}
 	}
@@ -174,7 +174,7 @@ func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 	br, err := tx.s.getKey(k)
 	if *CountKeys {
 		p, r := UndoCKey(k)
-		if r == 112 {
+		if r == 'p' {
 			tx.w.NKeyAccesses[p]++
 		}
 	}
@@ -287,7 +287,7 @@ func (tx *OTransaction) Commit() TID {
 			w.br, err = tx.s.getKey(w.key)
 			if *CountKeys {
 				p, r := UndoCKey(w.key)
-				if r == 112 {
+				if r == 'p' {
 					tx.w.NKeyAccesses[p]++
 				}
 			}
@@ -301,6 +301,7 @@ func (tx *OTransaction) Commit() TID {
 						tx.ls.candidates.Conflict(w.key, w.br)
 					}
 					tx.w.Nstats[NFAIL_VERIFY]++
+					dlog.Printf("Fail verify key %v\n", w.key)
 					return tx.Abort()
 				}
 				w.locked = true
@@ -332,7 +333,7 @@ func (tx *OTransaction) Commit() TID {
 			rk.br, err = tx.s.getKey(rk.key)
 			if *CountKeys {
 				p, r := UndoCKey(rk.key)
-				if r == 112 {
+				if r == 'p' {
 					tx.w.NKeyAccesses[p]++
 				}
 			}
@@ -342,6 +343,7 @@ func (tx *OTransaction) Commit() TID {
 				continue
 			}
 			tx.w.Nstats[NFAIL_VERIFY]++
+			dlog.Printf("Fail verify2 key %v\n", rk.br.key)
 			return tx.Abort()
 		}
 		if rk.br.Verify(rk.last) {
@@ -379,6 +381,9 @@ func (tx *OTransaction) Commit() TID {
 			case LIST:
 				tx.s.Set(w.br, w.ve, w.op)
 			default:
+				if w.br == nil {
+					log.Fatalf("How is this nil?\n")
+				}
 				tx.s.Set(w.br, w.v, w.op)
 			}
 			w.br.Unlock(tid)
@@ -428,8 +433,8 @@ func (tx *LTransaction) Reset() {
 	tx.t++
 }
 
-func (tx *LTransaction) UID() uint64 {
-	return uint64(tx.w.commitTID())
+func (tx *LTransaction) UID(f rune) uint64 {
+	return tx.w.NextKey(f)
 }
 
 func (tx *LTransaction) Read(k Key) (*BRecord, error) {
@@ -440,7 +445,7 @@ func (tx *LTransaction) Read(k Key) (*BRecord, error) {
 	br, err := tx.s.getKey(k)
 	if *CountKeys {
 		p, r := UndoCKey(k)
-		if r == 112 {
+		if r == 'p' {
 			tx.w.NKeyAccesses[p]++
 		}
 	}
@@ -448,6 +453,7 @@ func (tx *LTransaction) Read(k Key) (*BRecord, error) {
 		// TODO: Create and read lock for an empty key?
 		return nil, err
 	}
+	dlog.Printf("%v Read() Rlocking %v\n", tx.w.ID, k)
 	br.SRLock()
 	n := len(tx.keys)
 	tx.keys = tx.keys[0 : n+1]
@@ -464,7 +470,7 @@ func (tx *LTransaction) MaybeWrite(k Key) {
 	br, err := tx.s.getKey(k)
 	if *CountKeys {
 		p, r := UndoCKey(k)
-		if r == 112 {
+		if r == 'p' {
 			tx.w.NKeyAccesses[p]++
 		}
 	}
@@ -473,7 +479,7 @@ func (tx *LTransaction) MaybeWrite(k Key) {
 		//dlog.Printf("Key doesn't exist? %v %v\n", k, err)
 		return
 	}
-	dlog.Printf("Locking %v in MaybeWrite\n", br.key)
+	dlog.Printf("%v Locking %v in MaybeWrite\n", tx.w.ID, br.key)
 	br.SLock()
 	n := len(tx.keys)
 	tx.keys = tx.keys[0 : n+1]
@@ -497,16 +503,16 @@ func (tx *LTransaction) already_exists(k Key) (bool, int) {
 func (tx *LTransaction) make_or_get_key(k Key, op KeyType) *BRecord {
 	br, err := tx.s.getKey(k)
 	if br != nil && err == nil {
-		//dlog.Printf("Locking %v in make_or_get_key\n", k)
+		dlog.Printf("%v Locking %v in make_or_get_key\n", tx.w.ID, k)
 		br.SLock()
 		return br
 	}
 	//dlog.Printf("Error %v %v %v\n", k, err)
 	var err2 error
-	//dlog.Printf("Perhaps locking in %v in make_or_get_key, Create\n", k)
+	dlog.Printf("%v Perhaps locking %v in make_or_get_key, Create\n", tx.w.ID, k)
 	br, err2 = tx.s.CreateMuLockedKey(k, op)
 	if br == nil || err2 != nil {
-		dlog.Printf("Error creating key: %v %v\n", k, err2)
+		dlog.Printf("%v Error creating key: %v %v\n", tx.w.ID, k, err2)
 		br, err = tx.s.getKey(k)
 		if err != nil {
 			log.Fatalf("Should exist\n")
@@ -589,8 +595,10 @@ func (tx *LTransaction) Store() *Store {
 func (tx *LTransaction) Abort() TID {
 	for i := len(tx.keys) - 1; i >= 0; i-- {
 		if tx.keys[i].read {
+			dlog.Printf("%v Abort() RUnlocking %v\n", tx.w.ID, tx.keys[i].br.key)
 			tx.keys[i].br.SRUnlock()
 		} else {
+			dlog.Printf("%v Abort() Unlocking %v\n", tx.w.ID, tx.keys[i].br.key)
 			tx.keys[i].br.SUnlock()
 		}
 	}
@@ -608,6 +616,7 @@ func (tx *LTransaction) Commit() TID {
 			if tx.keys[i].noset {
 				// No changes, we write-locked it because we thought
 				// we *might* write
+				dlog.Printf("%v Commit() Unlocking %v (noset)\n", tx.w.ID, tx.keys[i].br.key)
 				tx.keys[i].br.SUnlock()
 				continue
 			}
@@ -621,10 +630,10 @@ func (tx *LTransaction) Commit() TID {
 			default:
 				tx.s.Set(tx.keys[i].br, tx.keys[i].v, tx.keys[i].kt)
 			}
-			//dlog.Printf("%v Unlocking %v\n", tx.keys[i].br.key, tx.w.ID)
+			dlog.Printf("%v Commit() Unlocking %v\n", tx.w.ID, tx.keys[i].br.key)
 			tx.keys[i].br.SUnlock()
 		} else {
-			//dlog.Printf("%v RUnlocking %v\n", tx.keys[i].br.key, tx.w.ID)
+			dlog.Printf("%v Commit() RUnlocking %v\n", tx.w.ID, tx.keys[i].br.key)
 			tx.keys[i].br.SRUnlock()
 		}
 	}
