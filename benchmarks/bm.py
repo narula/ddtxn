@@ -395,8 +395,9 @@ if __name__ == "__main__":
         zipf_exp(fnpath, host, 0, options.default_ncores)
     elif options.exp == "rubis":
         if options.read_rate == -1:
-            rubis_exp(fnpath, host, 30, 90)
-            rubis_exp(fnpath, host, 1000000, 50)
+            rubis_exp(fnpath, host, 3, 0)
+            options.skew = True
+            rubis_exp(fnpath, host, 100000, 0)
         else:
             rubis_exp(fnpath, host, options.default_contention, options.read_rate)
     elif options.exp == "all":
@@ -405,8 +406,15 @@ if __name__ == "__main__":
         options.exp = "all"
         rw_exp(fnpath, host, options.default_contention, options.default_ncores)
         products_exp(fnpath, host, options.read_rate, options.default_ncores)
-        contention_exp(fnpath, host, options.default_contention, 90)
-        contention_exp(fnpath, host, options.default_contention, 10)
         contention_exp(fnpath, host, options.default_contention, 50)
+        options.exp = "zipfscale2"
+        zipf_scale_exp2(fnpath, host, options.zipf, options.read_rate)
+        options.exp="zipf"
+        zipf_exp(fnpath, host, 0, options.default_ncores)
+        options.exp="rubis"
+        options.skew = False
+        rubis_exp(fnpath, host, 3, 0)
+        options.skew = True
+        rubis_exp(fnpath, host, 100000, 0)
     elif options.exp == "wratio":
         wratio_exp(fnpath, host, options.default_contention, options.read_rate)
