@@ -21,6 +21,7 @@ parser.add_option("--sr", action="store", type="int", dest="sr", default=800)
 parser.add_option("--phase", action="store", type="int", dest="phase", default=20)
 parser.add_option("--zipf", action="store", type="float", dest="zipf", default=0.5)
 parser.add_option("--skew", action="store_true", dest="skew", default=False)
+parser.add_option("--partition", action="store_true", dest="partition", default=False)
 
 
 (options, args) = parser.parse_args()
@@ -77,6 +78,9 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg, wratio, phase, atomic, zi
     cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr, atomic, zipf)
     if options.exp == "rubis":
         cmd = cmd + " -skew=%s" % options.skew
+    if options.exp == "single":
+        # Zipf experiments are already not partitioned.
+        cmd = cmd + " -partition=%s" % options.partition
     return cmd
 
 def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=options.phase, atomic=False, zipf=-1):
@@ -226,7 +230,7 @@ def products_exp(fnpath, host, rr, ncores):
         system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 def single_exp(fnpath, host, rr, ncores):
-    fnn = '%s-single-%d-%s.data' % (host, ncores, True)
+    fnn = '%s-single-%d-%s-%s.data' % (host, ncores, True, not options.partition)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     prob = [0, 1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
