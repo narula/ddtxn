@@ -102,9 +102,11 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 		if !br.dd {
 			if o.ratio() > *WRRatio && (o.writes > 1 || o.conflicts > 1) {
 				if len(s.dd) == 0 { // Higher threshold for the first one, since it kicks off phases
-					if o.ratio() > 2*(*WRRatio) && (o.writes > 1 || o.conflicts > 2) {
+					if o.ratio() > 1.33*(*WRRatio) && (o.writes > 1 || o.conflicts > 2) {
 						potential_dd_keys[o.k] = true
 						dlog.Printf("Moving %v to split r:%v w:%v c:%v s:%v ratio:%v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
+					} else {
+						dlog.Printf("Key %v didn't pass higher ratio threshold; len(s.dd)==0  r:%v w:%v c:%v s:%v ratio:%v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
 					}
 				} else {
 					potential_dd_keys[o.k] = true
