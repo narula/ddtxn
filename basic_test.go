@@ -220,32 +220,3 @@ func TestCandidates(t *testing.T) {
 	}
 	c.Merge(&c2)
 }
-
-func TestZipf(t *testing.T) {
-	var n int64 = 1000
-	x := NewZipf(n, .99)
-	y := make([]int64, n)
-	for i := 0; i < 1000000; i++ {
-		z := x.NextSeeded()
-		y[z-1]++
-	}
-	fmt.Println("\n.99:")
-	var i int64
-	for i = 0; i < n; i++ {
-		if y[i] != 0 {
-			fmt.Printf("%v ", y[i])
-		}
-	}
-	fmt.Println("\n0:")
-	x = NewZipf(n, 0)
-	y = make([]int64, n)
-	for i := 0; i < 1000000; i++ {
-		z := x.NextSeeded()
-		y[z-1]++
-	}
-	for i = 0; i < n; i++ {
-		if y[i] != 0 {
-			fmt.Printf("%v ", y[i])
-		}
-	}
-}

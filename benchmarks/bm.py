@@ -70,7 +70,7 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg, wratio, phase, atomic, zi
     bn = "buy"
     if options.exp == "rubis":
         bn = "rubis"
-    if options.exp == "single" or options.exp == "zipf" or options.exp == "zipfscale2":
+    if options.exp == "single" or options.exp == "zipf" or options.exp == "zipfscale2" or "singlescale":
         bn = "single"
     xncpus = ncpus
     if xncpus < 80:
@@ -78,7 +78,7 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg, wratio, phase, atomic, zi
     cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr, atomic, zipf)
     if options.exp == "rubis":
         cmd = cmd + " -skew=%s" % options.skew
-    if options.exp == "single":
+    if options.exp == "single" or options.exp == "singlescale" :
         # Zipf experiments are already not partitioned.
         cmd = cmd + " -partition=%s" % options.partition
     return cmd
@@ -254,12 +254,35 @@ def single_exp(fnpath, host, rr, ncores):
         system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
         system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
+def single_scale_exp(fnpath, host, contention, rr):
+    fnn = '%s-single-scale-%d-%d.data' % (host, contention, rr)
+    filename=os.path.join(fnpath, fnn)
+    f = open(filename, 'w')
+    cpus = get_cpus(host)
+    cpu_args = ""
+    if host == "ben":
+        cpu_args = ben_list_cpus
+
+    f.write("#Doppel\tOCC\t2PL\tAtomic\n")
+    for i in cpus:
+        f.write("%d"% i)
+        f.write("\t")
+        do(f, rr, contention, i, cpu_args, 0, zipf=-1)
+        do(f, rr, contention, i, cpu_args, 1, zipf=-1)
+        do(f, rr, contention, i, cpu_args, 2, zipf=-1)
+        do(f, rr, contention, i, cpu_args, 2, zipf=-1, atomic=True)
+        f.write("\n")
+    f.close()
+    if options.scp:
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
+
 def zipf_exp(fnpath, host, rr, ncores):
     fnn = '%s-zipf.data' % (host)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
-    theta = [0, .1, .3, .5, .6, .7, .8, .9]
-    cpus = [20, 40, 80]
+    theta = [.00001, .2, .4, .6, .8, 1.00001, 1.2, 1.4, 1.6, 1.8, 2.0]
+    cpus = [20,]# 40, 80]
     sys = [0, 1, 2]
     cpu_args = ""
     if host == "ben":
@@ -395,6 +418,8 @@ if __name__ == "__main__":
         products_exp(fnpath, host, options.read_rate, options.default_ncores)
     elif options.exp == "single":
         single_exp(fnpath, host, 0, options.default_ncores)
+    elif options.exp == "singlescale":
+        single_scale_exp(fnpath, host, options.default_contention, options.read_rate)
     elif options.exp == "zipf":
         zipf_exp(fnpath, host, 0, options.default_ncores)
     elif options.exp == "rubis":

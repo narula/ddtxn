@@ -510,6 +510,12 @@ func (tx *LTransaction) already_exists(k Key) (bool, int) {
 
 func (tx *LTransaction) make_or_get_key(k Key, op KeyType) *BRecord {
 	br, err := tx.s.getKey(k)
+	if *CountKeys {
+		p, r := UndoCKey(k)
+		if r == 'p' {
+			tx.w.NKeyAccesses[p]++
+		}
+	}
 	if br != nil && err == nil {
 		//dlog.Printf("%v Locking %v in make_or_get_key\n", tx.w.ID, k)
 		br.SLock()
@@ -519,6 +525,12 @@ func (tx *LTransaction) make_or_get_key(k Key, op KeyType) *BRecord {
 	var err2 error
 	//dlog.Printf("%v Perhaps locking %v in make_or_get_key, Create\n", tx.w.ID, k)
 	br, err2 = tx.s.CreateMuLockedKey(k, op)
+	if *CountKeys {
+		p, r := UndoCKey(k)
+		if r == 'p' {
+			tx.w.NKeyAccesses[p]++
+		}
+	}
 	if br == nil || err2 != nil {
 		//dlog.Printf("%v Error creating key: %v %v\n", tx.w.ID, k, err2)
 		br, err = tx.s.getKey(k)
