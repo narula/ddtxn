@@ -3,14 +3,12 @@ package apps
 import (
 	"ddtxn"
 	"ddtxn/dlog"
-	"ddtxn/stats"
 	"flag"
 	"fmt"
 	"log"
 	"math/rand"
 	"sync"
 	"sync/atomic"
-	"time"
 )
 
 var Skewed = flag.Bool("skew", false, "Rubis-C (skewed workload) or not, default Rubis-B")
@@ -28,8 +26,6 @@ type Rubis struct {
 	ratings    map[uint64]int32
 	users      []uint64
 	products   []uint64
-	lhr        []*stats.LatencyHist
-	lhw        []*stats.LatencyHist
 	sp         uint32
 	rates      []float64
 	padding1   [128]byte
@@ -45,8 +41,6 @@ func (b *Rubis) Init(np, nb, nw, ngo int) {
 	b.num_bids = make([]int32, np)
 	b.pidIdx = make(map[uint64]int, np)
 	b.ratings = make(map[uint64]int32)
-	b.lhr = make([]*stats.LatencyHist, ngo)
-	b.lhw = make([]*stats.LatencyHist, ngo)
 	b.sp = uint32(nb / nw)
 	b.rates = ddtxn.GetTxns(*Skewed)
 	b.users = make([]uint64, nb)
@@ -114,16 +108,6 @@ func (b *Rubis) Populate(s *ddtxn.Store, c *ddtxn.Coordinator) {
 	}
 	*ddtxn.Allocate = tmp
 	*dlog.Debug = tmp2
-	if *Latency {
-		b.SetupLatency(100, 1000000, b.ngo)
-	}
-}
-
-func (b *Rubis) SetupLatency(nincr int64, nbuckets int64, ngo int) {
-	for i := 0; i < ngo; i++ {
-		b.lhr[i] = stats.MakeLatencyHistogram(nincr, nbuckets)
-		b.lhw[i] = stats.MakeLatencyHistogram(nincr, nbuckets)
-	}
 }
 
 func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
@@ -291,23 +275,4 @@ func (b *Rubis) Validate(s *ddtxn.Store, nitr int) bool {
 		dlog.Printf("Validate succeeded\n")
 	}
 	return good
-}
-
-func (b *Rubis) Time(t *ddtxn.Query, txn_end time.Duration, n int) {
-	if t.TXN == ddtxn.D_READ_ONE {
-		b.lhr[n].AddOne(txn_end.Nanoseconds())
-	} else {
-		b.lhw[n].AddOne(txn_end.Nanoseconds())
-	}
-}
-
-func (b *Rubis) LatencyString() (string, string) {
-	if !*Latency {
-		return "", ""
-	}
-	for i := 1; i < b.ngo; i++ {
-		b.lhr[0].Combine(b.lhr[i])
-		b.lhw[0].Combine(b.lhw[i])
-	}
-	return fmt.Sprintf("Read 25: %v\nRead 50: %v\nRead 75: %v\nRead 99: %v\n", b.lhr[0].GetPercentile(25), b.lhr[0].GetPercentile(50), b.lhr[0].GetPercentile(75), b.lhr[0].GetPercentile(99)), fmt.Sprintf("Write 25: %v\nWrite 50: %v\nWrite 75: %v\nWrite 99: %v\n", b.lhw[0].GetPercentile(25), b.lhw[0].GetPercentile(50), b.lhw[0].GetPercentile(75), b.lhw[0].GetPercentile(99))
 }

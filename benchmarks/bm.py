@@ -19,7 +19,7 @@ parser.add_option("--noscp", action="store_false", dest="scp")
 parser.add_option("--wratio", action="store", type="float", dest="wratio", default=1.5)
 parser.add_option("--sr", action="store", type="int", dest="sr", default=800)
 parser.add_option("--phase", action="store", type="int", dest="phase", default=20)
-parser.add_option("--zipf", action="store", type="float", dest="zipf", default=0.5)
+parser.add_option("--zipf", action="store", type="float", dest="zipf", default=-1)
 parser.add_option("--skew", action="store_true", dest="skew", default=False)
 parser.add_option("--partition", action="store_true", dest="partition", default=False)
 
@@ -58,7 +58,7 @@ def get_cpus(host):
     elif host == "tom":
         ncpus = [1, 2, 6, 12, 18]
     elif host == "ben":
-        ncpus = [1, 4, 10, 20, 30, 40, 50, 60, 70, 80]
+        ncpus = [1, 2, 4, 10, 20, 30, 40, 50, 60, 70, 80]
     if options.short:
         ncpus=[2, 4]
     return ncpus
@@ -68,9 +68,10 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg, wratio, phase, atomic, zi
     if options.short:
         nsec = 1
     bn = "buy"
+    print bn
     if options.exp == "rubis":
         bn = "rubis"
-    if options.exp == "single" or options.exp == "zipf" or options.exp == "zipfscale2" or "singlescale":
+    if options.exp == "single" or options.exp == "zipf" or options.exp == "zipfscale2" or options.exp == "singlescale":
         bn = "single"
     xncpus = ncpus
     if xncpus < 80:
@@ -113,8 +114,8 @@ def wratio_exp(fnpath, host, contention, rr):
         system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 # x-axis is # cores
-def contention_exp(fnpath, host, contention, rr):
-    fnn = '%s-scalability-%d-%d-%s.data' % (host, contention, rr, True)
+def contention_exp(fnpath, host, contention, rr, zipf=-1):
+    fnn = '%s-scalability-%d-%d-%.2f.data' % (host, contention, rr, zipf)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     cpus = get_cpus(host)
@@ -126,9 +127,9 @@ def contention_exp(fnpath, host, contention, rr):
     for i in cpus:
         f.write("%d"% i)
         f.write("\t")
-        do(f, rr, contention, i, cpu_args, 0, zipf=-1)
-        do(f, rr, contention, i, cpu_args, 1, zipf=-1)
-        do(f, rr, contention, i, cpu_args, 2, zipf=-1)
+        do(f, rr, contention, i, cpu_args, 0, zipf=zipf)
+        do(f, rr, contention, i, cpu_args, 1, zipf=zipf)
+        do(f, rr, contention, i, cpu_args, 2, zipf=zipf)
         f.write("\n")
     f.close()
     if options.scp:
@@ -405,11 +406,11 @@ if __name__ == "__main__":
         zipf_scale_exp2(fnpath, host, options.zipf, options.read_rate)
     if options.exp == "contention":
         if options.read_rate == -1:
-            contention_exp(fnpath, host, options.default_contention, 90)
-            contention_exp(fnpath, host, options.default_contention, 10)
-            contention_exp(fnpath, host, options.default_contention, 50)
+            contention_exp(fnpath, host, options.default_contention, 90, options.zipf)
+            contention_exp(fnpath, host, options.default_contention, 10, options.zipf)
+            contention_exp(fnpath, host, options.default_contention, 50, options.zipf)
         else:
-            contention_exp(fnpath, host, options.default_contention, options.read_rate)
+            contention_exp(fnpath, host, options.default_contention, options.read_rate, options.zipf)
     elif options.exp == "rw":
         rw_exp(fnpath, host, options.default_contention, options.default_ncores)
     elif options.exp == "phase":

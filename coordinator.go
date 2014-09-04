@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"ddtxn/dlog"
 	"flag"
+	"fmt"
 	"log"
 	"sync/atomic"
 	"time"
@@ -268,4 +269,18 @@ func (c *Coordinator) Process() {
 			}
 		}
 	}
+}
+
+func (c *Coordinator) Latency() (string, string) {
+	if !*Latency {
+		return "", ""
+	}
+	for i := 1; i < c.n; i++ {
+		c.Workers[0].lhr.Combine(c.Workers[i].lhr)
+		c.Workers[0].lhw.Combine(c.Workers[i].lhw)
+	}
+	lhr := c.Workers[0].lhr
+	lhw := c.Workers[0].lhw
+	return fmt.Sprintf("Read 25: %v\nRead 50: %v\nRead 75: %v\nRead 99: %v\n", lhr.GetPercentile(25), lhr.GetPercentile(50), lhr.GetPercentile(75), lhr.GetPercentile(99)), fmt.Sprintf("Write 25: %v\nWrite 50: %v\nWrite 75: %v\nWrite 99: %v\n", lhw.GetPercentile(25), lhw.GetPercentile(50), lhw.GetPercentile(75), lhw.GetPercentile(99))
+
 }

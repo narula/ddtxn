@@ -31,6 +31,7 @@ type Query struct {
 	S2 string
 	I  int
 	TS time.Time
+	S  time.Time
 }
 
 type Result struct {

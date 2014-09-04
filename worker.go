@@ -1,6 +1,7 @@
 package ddtxn
 
 import (
+	"ddtxn/stats"
 	"flag"
 	"log"
 	"runtime/debug"
@@ -18,6 +19,7 @@ const (
 
 var SysType = flag.Int("sys", DOPPEL, "Type of system to run\n")
 var CountKeys = flag.Bool("ck", false, "Count keys accessed")
+var Latency = flag.Bool("latency", false, "Measure latency")
 
 type TransactionFunc func(Query, ETransaction) (*Result, error)
 
@@ -91,6 +93,10 @@ type Worker struct {
 	CurrKey      []int
 	PreAllocated bool
 	start        int
+
+	// Latency
+	lhr *stats.LatencyHist
+	lhw *stats.LatencyHist
 }
 
 func (w *Worker) Register(fn int, transaction TransactionFunc) {
@@ -119,6 +125,10 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 		w.E = StartLTransaction(w)
 	} else {
 		w.E = StartOTransaction(w)
+	}
+	if *Latency {
+		w.lhr = stats.MakeLatencyHistogram(100, 1000000)
+		w.lhw = stats.MakeLatencyHistogram(100, 1000000)
 	}
 	w.E.SetPhase(SPLIT)
 	w.Register(D_BUY, BuyTxn)
@@ -173,6 +183,13 @@ func (w *Worker) doTxn(t Query) (*Result, error) {
 	} else if err == ENORETRY {
 		w.Nstats[NENORETRY]++
 	}
+	if *Latency {
+		if IsRead(t.TXN) {
+			w.lhr.AddOne(time.Since(t.S).Nanoseconds())
+		} else {
+			w.lhw.AddOne(time.Since(t.S).Nanoseconds())
+		}
+	}
 	return x, err
 }
 
@@ -193,6 +210,13 @@ func (w *Worker) doTxn2(t Query) (*Result, error) {
 		w.Nstats[NENOKEY]++
 	} else if err == ENORETRY {
 		w.Nstats[NENORETRY]++
+	}
+	if *Latency {
+		if IsRead(t.TXN) {
+			w.lhr.AddOne(time.Since(t.S).Nanoseconds())
+		} else {
+			w.lhw.AddOne(time.Since(t.S).Nanoseconds())
+		}
 	}
 	return x, err
 }
