@@ -281,6 +281,6 @@ func (c *Coordinator) Latency() (string, string) {
 	}
 	lhr := c.Workers[0].lhr
 	lhw := c.Workers[0].lhw
-	return fmt.Sprintf("Read 25: %v\nRead 50: %v\nRead 75: %v\nRead 99: %v\n", lhr.GetPercentile(25), lhr.GetPercentile(50), lhr.GetPercentile(75), lhr.GetPercentile(99)), fmt.Sprintf("Write 25: %v\nWrite 50: %v\nWrite 75: %v\nWrite 99: %v\n", lhw.GetPercentile(25), lhw.GetPercentile(50), lhw.GetPercentile(75), lhw.GetPercentile(99))
+	return fmt.Sprintf("Read 25: %v\nRead 50: %v\nRead 75: %v\nRead 99: %v\nRead Avg: %v\n", lhr.GetPercentile(25), lhr.GetPercentile(50), lhr.GetPercentile(75), lhr.GetPercentile(99), lhr.Avg()), fmt.Sprintf("Write 25: %v\nWrite 50: %v\nWrite 75: %v\nWrite 99: %v\n Write Avg: %v\n", lhw.GetPercentile(25), lhw.GetPercentile(50), lhw.GetPercentile(75), lhw.GetPercentile(99), lhw.Avg())
 
 }

@@ -127,8 +127,8 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 		w.E = StartOTransaction(w)
 	}
 	if *Latency {
-		w.lhr = stats.MakeLatencyHistogram(100, 1000000)
-		w.lhw = stats.MakeLatencyHistogram(100, 1000000)
+		w.lhr = stats.MakeLatencyHistogram(100, 100000)
+		w.lhw = stats.MakeLatencyHistogram(100, 100000)
 	}
 	w.E.SetPhase(SPLIT)
 	w.Register(D_BUY, BuyTxn)
@@ -176,19 +176,19 @@ func (w *Worker) doTxn(t Query) (*Result, error) {
 		return nil, err
 	} else if err == nil {
 		w.Nstats[t.TXN]++
+		if *Latency {
+			if IsRead(t.TXN) {
+				w.lhr.AddOne(time.Since(t.S).Nanoseconds())
+			} else {
+				w.lhw.AddOne(time.Since(t.S).Nanoseconds())
+			}
+		}
 	} else if err == EABORT {
 		w.Nstats[NABORTS]++
 	} else if err == ENOKEY {
 		w.Nstats[NENOKEY]++
 	} else if err == ENORETRY {
 		w.Nstats[NENORETRY]++
-	}
-	if *Latency {
-		if IsRead(t.TXN) {
-			w.lhr.AddOne(time.Since(t.S).Nanoseconds())
-		} else {
-			w.lhw.AddOne(time.Since(t.S).Nanoseconds())
-		}
 	}
 	return x, err
 }
@@ -204,6 +204,13 @@ func (w *Worker) doTxn2(t Query) (*Result, error) {
 		log.Fatalf("Should not be in stashing stage right now\n")
 	} else if err == nil {
 		w.Nstats[t.TXN]++
+		if *Latency {
+			if IsRead(t.TXN) {
+				w.lhr.AddOne(time.Since(t.S).Nanoseconds())
+			} else {
+				w.lhw.AddOne(time.Since(t.S).Nanoseconds())
+			}
+		}
 	} else if err == EABORT {
 		w.Nstats[NABORTS]++
 	} else if err == ENOKEY {

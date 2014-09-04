@@ -95,15 +95,15 @@ func main() {
 					t = heap.Pop(&retries).(ddtxn.Query)
 				} else {
 					buy_app.MakeOne(w.ID, &local_seed, sp, &t)
+					if *ddtxn.Latency {
+						t.S = time.Now()
+					}
 				}
 				if *doValidate {
 					t.W = make(chan struct {
 						R *ddtxn.Result
 						E error
 					}, 1)
-				}
-				if *ddtxn.Latency {
-					t.S = time.Now()
 				}
 				committed := false
 				_, err := w.One(t)
