@@ -240,7 +240,7 @@ func (c *Coordinator) Process() {
 	for {
 		select {
 		case x := <-c.Done:
-			if *SysType == DOPPEL {
+			if *SysType == DOPPEL && c.n > 1 {
 				c.IncrementEpoch(true)
 			}
 			for i := 0; i < c.n; i++ {
@@ -249,11 +249,11 @@ func (c *Coordinator) Process() {
 			x <- true
 			return
 		case <-tm:
-			if *SysType == DOPPEL {
+			if *SysType == DOPPEL && c.n > 1 {
 				c.IncrementEpoch(false)
 			}
 		case <-check_trigger:
-			if *SysType == DOPPEL {
+			if *SysType == DOPPEL && c.n > 1 {
 				x := atomic.LoadInt32(&c.trigger)
 				if x == int32(c.n) {
 					Nfast++
@@ -262,7 +262,7 @@ func (c *Coordinator) Process() {
 				}
 			}
 		case <-c.Accelerate:
-			if *SysType == DOPPEL {
+			if *SysType == DOPPEL && c.n > 1 {
 				dlog.Printf("Accelerating\n")
 				c.IncrementEpoch(true)
 			}
