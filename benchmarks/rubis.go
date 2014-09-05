@@ -150,19 +150,20 @@ func main() {
 					t = heap.Pop(&retries).(ddtxn.Query)
 				} else {
 					rubis.MakeOne(w.ID, &local_seed, &t)
+					if *ddtxn.Latency {
+						t.S = time.Now()
+					}
 				}
-				var txn_start time.Time
-				if *apps.Latency || *doValidate {
+				if *doValidate {
 					t.W = make(chan struct {
 						R *ddtxn.Result
 						E error
 					})
-					txn_start = time.Now()
 				}
 				committed := false
 				_, err := w.One(t)
 				if err == ddtxn.ESTASH {
-					if *apps.Latency || *doValidate {
+					if *doValidate {
 						x := <-t.W
 						err = x.E
 					}
@@ -182,9 +183,6 @@ func main() {
 					}
 				}
 
-				if committed && *apps.Latency {
-					rubis.Time(&t, time.Since(txn_start), n)
-				}
 				if committed && *doValidate {
 					rubis.Add(t)
 				}
@@ -234,7 +232,7 @@ func main() {
 
 	ddtxn.PrintStats(out, stats, f, coord, s, *nbidders)
 
-	x, y := rubis.LatencyString()
+	x, y := coord.Latency()
 	f.WriteString(x)
 	f.WriteString(y)
 	f.WriteString("\n")
