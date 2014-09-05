@@ -184,7 +184,7 @@ def zipf_scale_exp2(fnpath, host, zipf, rr):
 
 
 def rw_exp(fnpath, host, contention, ncores):
-    fnn = '%s-rw-%d-%d-%s.data' % (host, contention, ncores, True)
+    fnn = '%s-rw-%d-%d-%.2f.data' % (host, contention, ncores, options.zipf)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     rr = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
@@ -197,9 +197,9 @@ def rw_exp(fnpath, host, contention, ncores):
     for i in rr:
         f.write("%d"% i)
         f.write("\t")
-        do(f, i, contention, ncores, cpu_args, 0, zipf=-1)
-        do(f, i, contention, ncores, cpu_args, 1, zipf=-1)
-        do(f, i, contention, ncores, cpu_args, 2, zipf=-1)
+        do(f, i, contention, ncores, cpu_args, 0, zipf=options.zipf)
+        do(f, i, contention, ncores, cpu_args, 1, zipf=options.zipf)
+        do(f, i, contention, ncores, cpu_args, 2, zipf=options.zipf)
         f.write("\n")
     f.close()
     if options.scp:
