@@ -30,7 +30,7 @@ ben_list_cpus = "socket@0,1,2,7,3-6"
 
 LATENCY_PART = " -latency=%s" % options.latency
 
-BASE_CMD = "GOGC=off numactl -C `list-cpus seq -n %d %s` ./%s -nprocs=%d -ngo=%d -nw=%d -nsec=%d -contention=%s -rr=%d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -atomic=%s -zipf=%s" + LATENCY_PART
+BASE_CMD = "GOGC=off numactl -C `list-cpus seq -n %d %s` ./%s -nprocs=%d -ngo=%d -nw=%d -nsec=%d -contention=%s -rr=%d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -atomic=%s -zipf=%s -out=data.out" + LATENCY_PART
 
 def run_one(fn, cmd):
     if options.dprint:
@@ -74,8 +74,8 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg, wratio, phase, atomic, zi
     if options.exp == "single" or options.exp == "zipf" or options.exp == "zipfscale2" or options.exp == "singlescale":
         bn = "single"
     xncpus = ncpus
-    if xncpus < 80:
-        xncpus += 1
+#    if xncpus < 80:
+#        xncpus += 1
     cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr, atomic, zipf)
     if options.exp == "rubis":
         cmd = cmd + " -skew=%s" % options.skew
@@ -474,3 +474,4 @@ if __name__ == "__main__":
         wratio_exp(fnpath, host, options.default_contention, options.read_rate)
     elif options.exp == "bad":
         bad_exp(fnpath, host, options.read_rate)
+    system("scp data.out tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/data/")
