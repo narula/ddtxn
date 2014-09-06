@@ -22,7 +22,7 @@ parser.add_option("--phase", action="store", type="int", dest="phase", default=2
 parser.add_option("--zipf", action="store", type="float", dest="zipf", default=-1)
 parser.add_option("--skew", action="store_true", dest="skew", default=False)
 parser.add_option("--partition", action="store_true", dest="partition", default=False)
-
+parser.add_option("--ncrr", action="store", type="float", dest="not_contended_read_rate", default=.8)
 
 (options, args) = parser.parse_args()
 
@@ -82,6 +82,8 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg, wratio, phase, atomic, zi
     if options.exp == "single" or options.exp == "singlescale" :
         # Zipf experiments are already not partitioned.
         cmd = cmd + " -partition=%s" % options.partition
+    if options.exp == "bad":
+        cmd = cmd + " -ncrr=%s" % options.not_contended_read_rate
     return cmd
 
 def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=options.phase, atomic=False, zipf=-1):
@@ -107,6 +109,28 @@ def wratio_exp(fnpath, host, contention, rr):
         do(f, rr, contention, i, cpu_args, 0, 4)
         do(f, rr, contention, i, cpu_args, 0, 5)
         do(f, rr, contention, i, cpu_args, 1)
+        f.write("\n")
+    f.close()
+    if options.scp:
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
+
+def bad_exp(fnpath, host, rr, ncores=options.default_ncores):
+    fnn = '%s-bad-%d.data' % (host, rr)
+    filename=os.path.join(fnpath, fnn)
+    f = open(filename, 'w')
+    cpus = get_cpus(host)
+    f.write("#Doppel\tOCC\t2PL\n")
+    cpu_args = ""
+    if host == "ben":
+        cpu_args = ben_list_cpus
+    theta = [.00001, .2, .4, .6, .8, 1.00001, 1.2, 1.4, 1.6, 1.8, 2.0]
+    for i in theta:
+        f.write("%0.2f"% i)
+        f.write("\t")
+        do(f, rr, -1, ncores, cpu_args, 0, zipf=i)
+        do(f, rr, -1, ncores, cpu_args, 1, zipf=i)
+        do(f, rr, -1, ncores, cpu_args, 2, zipf=i)
         f.write("\n")
     f.close()
     if options.scp:
@@ -256,7 +280,7 @@ def single_exp(fnpath, host, rr, ncores):
         system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 def single_scale_exp(fnpath, host, contention, rr):
-    fnn = '%s-single-scale-%d-%d.data' % (host, contention, rr)
+    fnn = '%s-single-scale-%d-%d-X.data' % (host, contention, rr)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     cpus = get_cpus(host)
@@ -448,3 +472,5 @@ if __name__ == "__main__":
         rubis_exp(fnpath, host, 100000, 0)
     elif options.exp == "wratio":
         wratio_exp(fnpath, host, options.default_contention, options.read_rate)
+    elif options.exp == "bad":
+        bad_exp(fnpath, host, options.read_rate)

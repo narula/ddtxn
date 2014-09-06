@@ -23,7 +23,7 @@ var clientGoRoutines = flag.Int("ngo", 0, "Number of goroutines/workers generati
 var nworkers = flag.Int("nw", 0, "Number of workers")
 var doValidate = flag.Bool("validate", false, "Validate")
 
-var contention = flag.Int("contention", 30, "Amount of contention, higher is more")
+var contention = flag.Int("contention", 3, "Amount of contention, higher is more")
 var nbidders = flag.Int("nb", 1000000, "Bidders in store, default is 1M")
 var readrate = flag.Int("rr", 0, "Read rate %.  Rest are bids")
 var notcontended_readrate = flag.Float64("ncrr", .8, "Uncontended read rate %.  Default to .8")

@@ -127,8 +127,8 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 		w.E = StartOTransaction(w)
 	}
 	if *Latency {
-		w.lhr = stats.MakeLatencyHistogram(100, 100000)
-		w.lhw = stats.MakeLatencyHistogram(100, 100000)
+		w.lhr = stats.MakeLatencyHistogram(1000, 1000000)
+		w.lhw = stats.MakeLatencyHistogram(1000, 1000000)
 	}
 	w.E.SetPhase(SPLIT)
 	w.Register(D_BUY, BuyTxn)
@@ -177,10 +177,11 @@ func (w *Worker) doTxn(t Query) (*Result, error) {
 	} else if err == nil {
 		w.Nstats[t.TXN]++
 		if *Latency {
+			x := time.Since(t.S)
 			if IsRead(t.TXN) {
-				w.lhr.AddOne(time.Since(t.S).Nanoseconds())
+				w.lhr.AddOne(x.Nanoseconds())
 			} else {
-				w.lhw.AddOne(time.Since(t.S).Nanoseconds())
+				w.lhw.AddOne(x.Nanoseconds())
 			}
 		}
 	} else if err == EABORT {
