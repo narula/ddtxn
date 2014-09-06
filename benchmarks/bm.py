@@ -71,7 +71,7 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg, wratio, phase, atomic, zi
     print bn
     if options.exp == "rubis":
         bn = "rubis"
-    if options.exp == "single" or options.exp == "zipf" or options.exp == "zipfscale2" or options.exp == "singlescale":
+    if options.exp == "single" or options.exp == "zipf" or options.exp == "singlescale":
         bn = "single"
     xncpus = ncpus
 #    if xncpus < 80:
@@ -182,30 +182,6 @@ def zipf_scale_exp(fnpath, host, zipf, rr):
     if options.scp:
         system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
         system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
-
-def zipf_scale_exp2(fnpath, host, zipf, rr):
-    fnn = '%s-zipf-scale2-%.02f-%d-%s.data' % (host, zipf, rr, True)
-    print fnn
-    filename=os.path.join(fnpath, fnn)
-    f = open(filename, 'w')
-    cpus = get_cpus(host)
-    f.write("#Doppel\tOCC\t2PL\n")
-    cpu_args = ""
-    if host == "ben":
-        cpu_args = ben_list_cpus
-
-    for i in cpus:
-        f.write("%d"% i)
-        f.write("\t")
-        do(f, rr, -1, i, cpu_args, 0, zipf=zipf)
-        do(f, rr, -1, i, cpu_args, 1, zipf=zipf)
-        do(f, rr, -1, i, cpu_args, 2, zipf=zipf)
-        f.write("\n")
-    f.close()
-    if options.scp:
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
-
 
 def rw_exp(fnpath, host, contention, ncores):
     fnn = '%s-rw-%d-%d-%.2f.data' % (host, contention, ncores, options.zipf)
@@ -426,8 +402,6 @@ if __name__ == "__main__":
 
     if options.exp == "zipfscale":
         zipf_scale_exp(fnpath, host, options.zipf, options.read_rate)
-    if options.exp == "zipfscale2":
-        zipf_scale_exp2(fnpath, host, options.zipf, options.read_rate)
     if options.exp == "contention":
         if options.read_rate == -1:
             contention_exp(fnpath, host, options.default_contention, 90, options.zipf)
@@ -461,8 +435,6 @@ if __name__ == "__main__":
         rw_exp(fnpath, host, options.default_contention, options.default_ncores)
         products_exp(fnpath, host, options.read_rate, options.default_ncores)
         contention_exp(fnpath, host, options.default_contention, 50)
-        options.exp = "zipfscale2"
-        zipf_scale_exp2(fnpath, host, options.zipf, options.read_rate)
         options.exp="zipf"
         zipf_exp(fnpath, host, 0, options.default_ncores)
         options.exp="rubis"
@@ -474,4 +446,8 @@ if __name__ == "__main__":
         wratio_exp(fnpath, host, options.default_contention, options.read_rate)
     elif options.exp == "bad":
         bad_exp(fnpath, host, options.read_rate)
+    elif options.exp == "likescale":
+        zipf_scale_exp(fnpath, host, 0.6, 50)
+        zipf_scale_exp(fnpath, host, 1.001, 50)
+        zipf_scale_exp(fnpath, host, 1.4, 50)
     system("scp data.out tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/data/")
