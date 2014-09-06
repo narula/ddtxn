@@ -187,7 +187,7 @@ def rw_graph(all_points):
             if avg is None:
                 print (one, sys, atomic, len(points))
                 raise Exception("Could not get stats")
-            points.append(Point(r, avg, mn, mx))
+            points.append(Point(100-r, avg, mn, mx))
         lines.append(Line(points, get_title(sys, atomic)))
         points = []
     G = Gnuplot("", "\% of transactions that write", "Throughput (txns/sec)", lines, "center right")
@@ -199,7 +199,7 @@ def phase_length(all_points):
     
     points = []
     for ph in phases:
-        one = all_matching(all_points, nworkers="20", sys=sys, binary="buy", atomic="False", rr=str(r), zipf="-1", zipf="1.4", phase=str(ph))
+        one = all_matching(all_points, nworkers="20", sys=sys, binary="buy", atomic="False", rr=str(r), zipf="1.4", phase=str(ph))
         if len(one) == 0:
             raise Exception("Could not get any matching points", r)
         avg, mn, mx = stat(one, "total/sec", flt("total/sec"))
