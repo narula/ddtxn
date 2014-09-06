@@ -201,9 +201,10 @@ def stat(points, field, fnc=flt("total/sec")):
     if len(points) == 0:
         return None, None, None
 
+    np = points
     if fnc is not None:
-        points = map(fnc, points)
-    for i,p in enumerate(points):
+        np = map(fnc, points)
+    for i,p in enumerate(np):
         if i == 0:
             mn = p
             mx = p

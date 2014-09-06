@@ -139,7 +139,7 @@ def per_core_graph(all_points):
     for sys, atomic in LINES:
         points = []
         for n in cores:
-            one = all_matching(all_points, nworkers=str(n), sys=sys, binary="single", atomic=atomic, rr="0", contention="100")
+            one = all_matching(all_points, nworkers=str(n), sys=sys, binary="single", atomic=atomic, rr="0", contention="100", phase="20")
             if len(one) == 0:
                 raise Exception("Could not get any matching points")
             avg, mn, mx = stat(one, "total/sec", fltn("total/sec", n))
@@ -149,7 +149,7 @@ def per_core_graph(all_points):
             points.append(Point(n, avg, mn, mx))
         lines.append(Line(points, get_title(sys, atomic)))
         points = []
-    G = Gnuplot("", "number of cores", "Throughput (txns/sec)", lines, "top right")
+    G = Gnuplot("", "number of cores", "Throughput (txns/sec/core)", lines, "top right")
     G.eps("percore.pdf")
 
 def zipf_graph(all_points):
@@ -158,7 +158,7 @@ def zipf_graph(all_points):
     for sys, atomic in LINES:
         points = []
         for a in alphas:
-            one = all_matching(all_points, nworkers="20", sys=sys, binary="single", atomic=atomic, rr="0", contention="-1", zipf=a)
+            one = all_matching(all_points, nworkers="20", sys=sys, binary="single", atomic=atomic, rr="0", contention="-1", zipf=a, phase="20")
             if len(one) == 0:
                 raise Exception("Could not get any matching points", a)
             avg, mn, mx = stat(one, "total/sec", flt("total/sec"))
@@ -180,7 +180,7 @@ def rw_graph(all_points):
             continue
         points = []
         for r in rw:
-            one = all_matching(all_points, nworkers="20", sys=sys, binary="buy", atomic="False", rr=str(r), contention="-1", zipf="1.4")
+            one = all_matching(all_points, nworkers="20", sys=sys, binary="buy", atomic="False", rr=str(r), contention="-1", zipf="1.4", phase="20")
             if len(one) == 0:
                 raise Exception("Could not get any matching points", r)
             avg, mn, mx = stat(one, "total/sec", flt("total/sec"))
@@ -193,16 +193,35 @@ def rw_graph(all_points):
     G = Gnuplot("", "\% of transactions that write", "Throughput (txns/sec)", lines, "center right")
     G.eps("rw.pdf")
 
+def phase_length(all_points):
+    lines = []
+    phases = [5, 10, 20, 40, 60, 80, 100]
+    
+    points = []
+    for ph in phases:
+        one = all_matching(all_points, nworkers="20", sys=sys, binary="buy", atomic="False", rr=str(r), zipf="-1", zipf="1.4", phase=str(ph))
+        if len(one) == 0:
+            raise Exception("Could not get any matching points", r)
+        avg, mn, mx = stat(one, "total/sec", flt("total/sec"))
+        if avg is None:
+            print (one, sys, atomic, len(points))
+            raise Exception("Could not get stats")
+        points.append(Point(ph, avg, mn, mx))
+    lines.append(Line(points, get_title(sys, atomic)))
+    points = []
+    G = Gnuplot("", "phase length (ms)", "Throughput (txns/sec)", lines, "bottom right")
+    G.eps("phases.pdf")
+
+
 if __name__ == "__main__":
     f = open('single-data.out.1', 'r')
     all_points = wrangle_file(f)
     single_graph(all_points)
+
     f = open('single-data.out', 'r')
     all_points = wrangle_file(f)
     per_core_graph(all_points)
 
-    f = open('single-data.out', 'r')
-    all_points = wrangle_file(f)
     zipf_graph(all_points)
 
     f = open('buy-data.out', 'r')
