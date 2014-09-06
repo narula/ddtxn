@@ -139,6 +139,39 @@ def reduce_points(points, xaxis="nw", yaxis="total/sec", *args, **kwargs):
         graph_points[xpointval] = p
     return graph_points
 
+def get_title(x, y):
+    if x == "0":
+        return "Doppel"
+    if x == "1":
+        return "OCC"
+    if x == "2" and y == "False":
+        return "2PL"
+    if x == "2" and y == "True":
+        return "Atomic"
+    raise Exception("Unknown sys:", x, y)
+
+
+def pp(p):
+    print p["binary"], p["sys"], p["contention"], p["nprocs"]
+
+def all_matching(points, *args, **kwargs):
+    noval = 0
+    if len(points) == 0:
+        raise Exception("no points!")
+    new_points = []
+    for p in points:
+        matches = True
+        for name, val in kwargs.items():
+            if not p.has_key(name):
+                noval+=1
+                continue
+            if p[name] != val:
+                matches = False
+                #print "did not match", name, "point", p[name], "want", val
+                continue
+        if matches:
+            new_points.append(p)
+    return new_points
 
 def output_data(points, yaxis):
     for key in sorted(points):
@@ -151,19 +184,54 @@ def make_line(gp, xl, yl, title):
     line = Line(pp, title)
     return line
 
+def flt(field):
+    def fnc(p):
+        return float(p[field])
+    return fnc
+
+def fltn(field, n):
+    def fnc(p):
+        return float(p[field])/n
+    return fnc
+
+def stat(points, field, fnc=flt("total/sec")):
+    sum = 0
+    mn = 0
+    mx = 0
+    if len(points) == 0:
+        return None, None, None
+
+    if fnc is not None:
+        points = map(fnc, points)
+    for i,p in enumerate(points):
+        if i == 0:
+            mn = p
+            mx = p
+        sum = sum + p
+        if p > mx:
+            mx = p
+        if p < mn:
+            mn = p
+    return sum/len(points), mn, mx
+
 if __name__ == "__main__":
-    f = open('buy-data.out', 'r')
+    f = open('single-data.out.1', 'r')
     points = wrangle_file(f)
 
-    gp = reduce_points(points, xaxis="rr", yaxis="total/sec", nworkers="20", sys="0", phase="20", binary="buy")
-    line0 = make_line(gp, "rr", "total/sec", "doppel")
+    # gp = reduce_points(points, xaxis="rr", yaxis="total/sec", nworkers="20", sys="0", phase="20", binary="buy")
+    # line0 = make_line(gp, "rr", "total/sec", "doppel")
 
-    gp = reduce_points(points, xaxis="rr", yaxis="total/sec", nworkers="20", sys="2", phase="20", binary="buy")
-    line2 = make_line(gp, "rr", "total/sec", "2PL")
+    # gp = reduce_points(points, xaxis="rr", yaxis="total/sec", nworkers="20", sys="2", phase="20", binary="buy")
+    # line2 = make_line(gp, "rr", "total/sec", "2PL")
 
-    gp = reduce_points(points, xaxis="rr", yaxis="total/sec", nworkers="20", sys="1", phase="20", binary="buy")
-    line1 = make_line(gp, "rr", "total/sec", "OCC")
+    # gp = reduce_points(points, xaxis="rr", yaxis="total/sec", nworkers="20", sys="1", phase="20", binary="buy")
+    # line1 = make_line(gp, "rr", "total/sec", "OCC")
 
-    G = Gnuplot("test", "% read transactions", "Throughput (txns/sec)", [line0, line2, line1])
-    G.eps()
-    
+    # G = Gnuplot("test", "% read transactions", "Throughput (txns/sec)", [line0, line2, line1])
+    # G.eps()
+
+    prob = [0, 1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    for n in prob:
+        one = all_matching(points, nworkers="20", sys="2", binary="single", atomic="True", rr="0", contention=str(n))
+        avg, mn, mx = stat(one, "total/sec")
+        print n, avg, mn, mx
