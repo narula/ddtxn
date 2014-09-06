@@ -21,6 +21,8 @@ type LatencyHist struct {
 	incr  int64
 	nb    int64
 	total int64
+	sum   int64
+	avg   int64
 }
 
 func MakeLatencyHistogram(incr int64, buckets int64) *LatencyHist {
@@ -41,6 +43,7 @@ func (lh *LatencyHist) Combine(lh2 *LatencyHist) {
 		lh.bins[i] += lh2.bins[i]
 	}
 	lh.total += lh2.total
+	lh.sum += lh2.sum
 }
 
 func (lh *LatencyHist) AddOne(tm int64) {
@@ -60,6 +63,11 @@ func (lh *LatencyHist) AddOne(tm int64) {
 	}
 	lh.bins[int(b)]++
 	lh.total++
+	lh.sum += tm
+}
+
+func (lh *LatencyHist) Avg() float64 {
+	return float64(lh.sum) / float64(lh.total)
 }
 
 func (lh *LatencyHist) GetPercentile(percent float64) int64 {

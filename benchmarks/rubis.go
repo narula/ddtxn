@@ -23,7 +23,7 @@ var clientGoRoutines = flag.Int("ngo", 0, "Number of goroutines/workers generati
 var nworkers = flag.Int("nw", 0, "Number of workers")
 var doValidate = flag.Bool("validate", false, "Validate")
 
-var contention = flag.Int("contention", 30, "Amount of contention, higher is more")
+var contention = flag.Int("contention", 3, "Amount of contention, higher is more")
 var nbidders = flag.Int("nb", 1000000, "Bidders in store, default is 1M")
 var readrate = flag.Int("rr", 0, "Read rate %.  Rest are bids")
 var notcontended_readrate = flag.Float64("ncrr", .8, "Uncontended read rate %.  Default to .8")
@@ -150,19 +150,20 @@ func main() {
 					t = heap.Pop(&retries).(ddtxn.Query)
 				} else {
 					rubis.MakeOne(w.ID, &local_seed, &t)
+					if *ddtxn.Latency {
+						t.S = time.Now()
+					}
 				}
-				var txn_start time.Time
-				if *apps.Latency || *doValidate {
+				if *doValidate {
 					t.W = make(chan struct {
 						R *ddtxn.Result
 						E error
 					})
-					txn_start = time.Now()
 				}
 				committed := false
 				_, err := w.One(t)
 				if err == ddtxn.ESTASH {
-					if *apps.Latency || *doValidate {
+					if *doValidate {
 						x := <-t.W
 						err = x.E
 					}
@@ -182,9 +183,6 @@ func main() {
 					}
 				}
 
-				if committed && *apps.Latency {
-					rubis.Time(&t, time.Since(txn_start), n)
-				}
 				if committed && *doValidate {
 					rubis.Add(t)
 				}
@@ -234,7 +232,7 @@ func main() {
 
 	ddtxn.PrintStats(out, stats, f, coord, s, *nbidders)
 
-	x, y := rubis.LatencyString()
+	x, y := coord.Latency()
 	f.WriteString(x)
 	f.WriteString(y)
 	f.WriteString("\n")

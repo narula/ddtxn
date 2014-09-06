@@ -23,10 +23,11 @@ var nbidders = flag.Int("nb", 1000000, "Keys in store, default is 1M")
 var prob = flag.Float64("contention", 100.0, "Probability contended key is in txn. -1 means zipfian distribution and we use ZipfDist")
 var readrate = flag.Int("rr", 0, "Read rate %.  Rest are writes")
 var dataFile = flag.String("out", "single-data.out", "Filename for output")
-var latency = flag.Bool("latency", false, "dummy")
 var atomicIncr = flag.Bool("atomic", false, "Workload of just atomic increments")
 
 var ZipfDist = flag.Float64("zipf", 1, "Zipfian distribution theta.  1 means only 1 hot key and we'll vary the percentage (single exp)")
+var partition = flag.Bool("partition", false, "Whether or not to partition the non-contended keys amongst the cores")
+var GoZipf = flag.Bool("gozipf", true, "Use Go's Zipf function")
 
 func main() {
 	flag.Parse()
@@ -38,18 +39,12 @@ func main() {
 	if *nworkers == 0 {
 		*nworkers = *nprocs
 	}
-
-	var zipf *ddtxn.Zipf
 	if *prob == -1 && *ZipfDist < 0 {
 		log.Fatalf("Zipf distribution must be positive")
 	}
 	if *ZipfDist >= 0 && *prob > -1 {
 		log.Fatalf("Set contention to -1 to use Zipf distribution of keys")
 	}
-	if *prob == -1 && *ZipfDist >= 0 {
-		zipf = ddtxn.NewZipf(int64(*nbidders), *ZipfDist)
-	}
-
 	s := ddtxn.NewStore()
 	for i := 0; i < *nbidders; i++ {
 		k := ddtxn.ProductKey(i)
@@ -75,19 +70,38 @@ func main() {
 	pkey := int(sp - 1)
 	dlog.Printf("Partition size: %v; Contended key %v\n", sp/2, pkey)
 	gave_up := make([]int64, *clientGoRoutines)
+
+	myZipf := make([]*ddtxn.MyZipf, *clientGoRoutines)
+	goZipf := make([]*ddtxn.Zipf, *clientGoRoutines)
+	if *prob == -1 && *ZipfDist >= 0 {
+		if *GoZipf {
+			for i := 0; i < *clientGoRoutines; i++ {
+				rnd := rand.New(rand.NewSource(int64(i * 12467)))
+				goZipf[i] = ddtxn.NewZipf(rnd, *ZipfDist, 1, uint64(*nbidders)-1)
+				if goZipf[i] == nil {
+					panic("nil zipf")
+				}
+			}
+		} else {
+			for i := 0; i < *clientGoRoutines; i++ {
+				myZipf[i] = ddtxn.NewMyZipf(int64(*nbidders), *ZipfDist)
+			}
+		}
+	}
+
 	for i := 0; i < *clientGoRoutines; i++ {
 		wg.Add(1)
 		go func(n int) {
 			exp := ddtxn.MakeExp(30)
 			retries := make(ddtxn.RetryHeap, 0)
 			heap.Init(&retries)
-			end_time := time.Now().Add(time.Duration(*nsec) * time.Second)
 			var local_seed uint32 = uint32(rand.Intn(10000000))
 			wi := n % (*nworkers)
 			w := coord.Workers[wi]
 			top := (wi + 1) * int(sp)
 			bottom := wi * int(sp)
 			dlog.Printf("%v: Noncontended section: %v to %v\n", n, bottom, top)
+			end_time := time.Now().Add(time.Duration(*nsec) * time.Second)
 			for {
 				tm := time.Now()
 				if !end_time.After(tm) {
@@ -99,17 +113,32 @@ func main() {
 				} else {
 					x := float64(ddtxn.RandN(&local_seed, 100))
 					if *prob == -1 {
-						t.K1 = ddtxn.ProductKey(int(zipf.Next(&local_seed) - 1))
+						if *GoZipf {
+							x := goZipf[n].Uint64()
+							if x >= uint64(*nbidders) || x < 0 {
+								log.Fatalf("x not in bounds: %v\n", x)
+							}
+							t.K1 = ddtxn.ProductKey(int(x))
+						} else {
+							t.K1 = ddtxn.ProductKey(int(myZipf[n].Next(&local_seed) - 1))
+						}
 					} else if x < *prob {
 						// contended txn
 						t.K1 = ddtxn.ProductKey(pkey)
 					} else {
 						// uncontended
-						rnd := ddtxn.RandN(&local_seed, sp/2)
-						lb := int(rnd)
-						k := lb + wi*int(sp) + 1
-						if k < bottom || k >= top+1 {
-							log.Fatalf("%v: outside my range %v [%v-%v]\n", n, k, bottom, top)
+						k := pkey
+						for k == pkey {
+							if *partition {
+								rnd := ddtxn.RandN(&local_seed, sp-1)
+								lb := int(rnd)
+								k = lb + wi*int(sp) + 1
+								if k < bottom || k >= top+1 {
+									log.Fatalf("%v: outside my range %v [%v-%v]\n", n, k, bottom, top)
+								}
+							} else {
+								k = int(ddtxn.RandN(&local_seed, uint32(*nbidders)))
+							}
 						}
 						t.K1 = ddtxn.ProductKey(k)
 					}

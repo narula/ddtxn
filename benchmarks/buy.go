@@ -13,6 +13,7 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -22,7 +23,7 @@ var clientGoRoutines = flag.Int("ngo", 0, "Number of goroutines/workers generati
 var nworkers = flag.Int("nw", 0, "Number of workers")
 var doValidate = flag.Bool("validate", false, "Validate")
 
-var contention = flag.Int("contention", 1000, "Amount of contention, higher is more")
+var contention = flag.Float64("contention", 1000, "Amount of contention, higher is more")
 var nbidders = flag.Int("nb", 1000000, "Bidders in store, default is 1M")
 var readrate = flag.Int("rr", 0, "Read rate %.  Rest are buys")
 var notcontended_readrate = flag.Float64("ncrr", .8, "Uncontended read rate %.  Default to .8")
@@ -45,7 +46,12 @@ func main() {
 			log.Fatalf("Cannot correctly validate without waiting for results; add -allocate\n")
 		}
 	}
-	nproducts := *nbidders / *contention
+	var nproducts int
+	if *contention > 0 {
+		nproducts = *nbidders / int(*contention)
+	} else {
+		nproducts = *nbidders
+	}
 	s := ddtxn.NewStore()
 	buy_app := &apps.Buy{}
 	buy_app.Init(nproducts, *nbidders, *nworkers, *readrate, *clientGoRoutines, *notcontended_readrate)
@@ -68,7 +74,9 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	gave_up := make([]int64, *clientGoRoutines)
+	gave_upr := make([]int64, *clientGoRoutines)
+	gave_upw := make([]int64, *clientGoRoutines)
+	var ending_retries int64
 	for i := 0; i < *clientGoRoutines; i++ {
 		wg.Add(1)
 		go func(n int) {
@@ -90,19 +98,20 @@ func main() {
 					t = heap.Pop(&retries).(ddtxn.Query)
 				} else {
 					buy_app.MakeOne(w.ID, &local_seed, sp, &t)
+					if *ddtxn.Latency {
+						t.S = time.Now()
+					}
 				}
-				var txn_start time.Time
-				if *apps.Latency || *doValidate {
+				if *doValidate {
 					t.W = make(chan struct {
 						R *ddtxn.Result
 						E error
 					}, 1)
-					txn_start = time.Now()
 				}
 				committed := false
 				_, err := w.One(t)
 				if err == ddtxn.ESTASH {
-					if *apps.Latency || *doValidate {
+					if *doValidate {
 						x := <-t.W
 						err = x.E
 						if err == ddtxn.EABORT {
@@ -121,11 +130,12 @@ func main() {
 					if t.TS.Before(end_time) {
 						heap.Push(&retries, t)
 					} else {
-						gave_up[n]++
+						if ddtxn.IsRead(t.TXN) {
+							gave_upr[n]++
+						} else {
+							gave_upw[n]++
+						}
 					}
-				}
-				if committed && *apps.Latency {
-					buy_app.Time(&t, time.Since(txn_start), n)
 				}
 				if committed && *doValidate {
 					buy_app.Add(t)
@@ -135,7 +145,7 @@ func main() {
 			if len(retries) > 0 {
 				dlog.Printf("[%v] Length of retry queue on exit: %v\n", n, len(retries))
 			}
-			gave_up[n] = gave_up[n] + int64(len(retries))
+			atomic.AddInt64(&ending_retries, int64(len(retries)))
 		}(i)
 	}
 	wg.Wait()
@@ -151,13 +161,14 @@ func main() {
 	}
 
 	for i := 1; i < *clientGoRoutines; i++ {
-		gave_up[0] = gave_up[0] + gave_up[i]
+		gave_upr[0] = gave_upr[0] + gave_upr[i]
+		gave_upw[0] = gave_upw[0] + gave_upw[i]
 	}
 
 	// nitr + NABORTS + ENOKEY is how many requests were issued.  A
 	// stashed transaction eventually executes and contributes to
 	// nitr.
-	out := fmt.Sprintf(" nworkers: %v, nwmoved: %v, nrmoved: %v, sys: %v, total/sec: %v, abortrate: %.2f, stashrate: %.2f, rr: %v, ncrr: %v, nbids: %v, nproducts: %v, contention: %v, done: %v, actual time: %v, nreads: %v, nbuys: %v, epoch changes: %v, throughput ns/txn: %v, naborts: %v, coord time: %v, coord stats time: %v, total worker time transitioning: %v, nstashed: %v, rlock: %v, wrratio: %v, nsamples: %v, getkeys: %v, ddwrites: %v, nolock: %v, failv: %v, stashdone: %v, nfast: %v, gaveup: %v, potential: %v  ", *nworkers, ddtxn.WMoved, ddtxn.RMoved, *ddtxn.SysType, float64(nitr)/end.Seconds(), 100*float64(stats[ddtxn.NABORTS])/float64(nitr+stats[ddtxn.NABORTS]), 100*float64(stats[ddtxn.NSTASHED])/float64(nitr+stats[ddtxn.NABORTS]), *readrate, *notcontended_readrate*float64(*readrate), *nbidders, nproducts, *contention, nitr, end, stats[ddtxn.D_READ_TWO], stats[ddtxn.D_BUY], ddtxn.NextEpoch, end.Nanoseconds()/nitr, stats[ddtxn.NABORTS], ddtxn.Time_in_IE, ddtxn.Time_in_IE1, nwait, stats[ddtxn.NSTASHED], *ddtxn.UseRLocks, *ddtxn.WRRatio, stats[ddtxn.NSAMPLES], stats[ddtxn.NGETKEYCALLS], stats[ddtxn.NDDWRITES], stats[ddtxn.NO_LOCK], stats[ddtxn.NFAIL_VERIFY], stats[ddtxn.NDIDSTASHED], ddtxn.Nfast, gave_up[0], coord.PotentialPhaseChanges)
+	out := fmt.Sprintf(" nworkers: %v, nwmoved: %v, nrmoved: %v, sys: %v, total/sec: %v, abortrate: %.2f, stashrate: %.2f, rr: %v, ncrr: %v, nbids: %v, nproducts: %v, contention: %v, done: %v, actual time: %v, nreads: %v, nbuys: %v, epoch changes: %v, throughput ns/txn: %v, naborts: %v, coord time: %v, coord stats time: %v, total worker time transitioning: %v, nstashed: %v, rlock: %v, wrratio: %v, nsamples: %v, getkeys: %v, ddwrites: %v, nolock: %v, failv: %v, stashdone: %v, nfast: %v, gaveup_reads: %v, gaveup_writes: %v, lenretries: %v, potential: %v  ", *nworkers, ddtxn.WMoved, ddtxn.RMoved, *ddtxn.SysType, float64(nitr)/end.Seconds(), 100*float64(stats[ddtxn.NABORTS])/float64(nitr+stats[ddtxn.NABORTS]), 100*float64(stats[ddtxn.NSTASHED])/float64(nitr+stats[ddtxn.NABORTS]), *readrate, *notcontended_readrate*float64(*readrate), *nbidders, nproducts, *contention, nitr, end, stats[ddtxn.D_READ_TWO], stats[ddtxn.D_BUY], ddtxn.NextEpoch, end.Nanoseconds()/nitr, stats[ddtxn.NABORTS], ddtxn.Time_in_IE, ddtxn.Time_in_IE1, nwait, stats[ddtxn.NSTASHED], *ddtxn.UseRLocks, *ddtxn.WRRatio, stats[ddtxn.NSAMPLES], stats[ddtxn.NGETKEYCALLS], stats[ddtxn.NDDWRITES], stats[ddtxn.NO_LOCK], stats[ddtxn.NFAIL_VERIFY], stats[ddtxn.NDIDSTASHED], ddtxn.Nfast, gave_upr[0], gave_upw[0], ending_retries, coord.PotentialPhaseChanges)
 	fmt.Printf(out)
 	fmt.Printf("\n")
 	f, err := os.OpenFile(*dataFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
@@ -168,7 +179,7 @@ func main() {
 
 	ddtxn.PrintStats(out, stats, f, coord, s, *nbidders)
 
-	x, y := buy_app.LatencyString()
+	x, y := coord.Latency()
 	f.WriteString(x)
 	f.WriteString(y)
 	f.WriteString("\n")

@@ -19,9 +19,10 @@ parser.add_option("--noscp", action="store_false", dest="scp")
 parser.add_option("--wratio", action="store", type="float", dest="wratio", default=1.5)
 parser.add_option("--sr", action="store", type="int", dest="sr", default=800)
 parser.add_option("--phase", action="store", type="int", dest="phase", default=20)
-parser.add_option("--zipf", action="store", type="float", dest="zipf", default=0.5)
+parser.add_option("--zipf", action="store", type="float", dest="zipf", default=-1)
 parser.add_option("--skew", action="store_true", dest="skew", default=False)
-
+parser.add_option("--partition", action="store_true", dest="partition", default=False)
+parser.add_option("--ncrr", action="store", type="float", dest="not_contended_read_rate", default=.8)
 
 (options, args) = parser.parse_args()
 
@@ -57,7 +58,7 @@ def get_cpus(host):
     elif host == "tom":
         ncpus = [1, 2, 6, 12, 18]
     elif host == "ben":
-        ncpus = [1, 4, 10, 20, 30, 40, 50, 60, 70, 80]
+        ncpus = [1, 2, 4, 10, 20, 30, 40, 50, 60, 70, 80]
     if options.short:
         ncpus=[2, 4]
     return ncpus
@@ -67,9 +68,10 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg, wratio, phase, atomic, zi
     if options.short:
         nsec = 1
     bn = "buy"
+    print bn
     if options.exp == "rubis":
         bn = "rubis"
-    if options.exp == "single" or options.exp == "zipf" or options.exp == "zipfscale2":
+    if options.exp == "single" or options.exp == "zipf" or options.exp == "zipfscale2" or options.exp == "singlescale":
         bn = "single"
     xncpus = ncpus
     if xncpus < 80:
@@ -77,6 +79,11 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg, wratio, phase, atomic, zi
     cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr, atomic, zipf)
     if options.exp == "rubis":
         cmd = cmd + " -skew=%s" % options.skew
+    if options.exp == "single" or options.exp == "singlescale" :
+        # Zipf experiments are already not partitioned.
+        cmd = cmd + " -partition=%s" % options.partition
+    if options.exp == "bad":
+        cmd = cmd + " -ncrr=%s" % options.not_contended_read_rate
     return cmd
 
 def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=options.phase, atomic=False, zipf=-1):
@@ -108,9 +115,31 @@ def wratio_exp(fnpath, host, contention, rr):
         system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
         system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
+def bad_exp(fnpath, host, rr, ncores=options.default_ncores):
+    fnn = '%s-bad-%d.data' % (host, rr)
+    filename=os.path.join(fnpath, fnn)
+    f = open(filename, 'w')
+    cpus = get_cpus(host)
+    f.write("#Doppel\tOCC\t2PL\n")
+    cpu_args = ""
+    if host == "ben":
+        cpu_args = ben_list_cpus
+    theta = [.00001, .2, .4, .6, .8, 1.00001, 1.2, 1.4, 1.6, 1.8, 2.0]
+    for i in theta:
+        f.write("%0.2f"% i)
+        f.write("\t")
+        do(f, rr, -1, ncores, cpu_args, 0, zipf=i)
+        do(f, rr, -1, ncores, cpu_args, 1, zipf=i)
+        do(f, rr, -1, ncores, cpu_args, 2, zipf=i)
+        f.write("\n")
+    f.close()
+    if options.scp:
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
+
 # x-axis is # cores
-def contention_exp(fnpath, host, contention, rr):
-    fnn = '%s-scalability-%d-%d-%s.data' % (host, contention, rr, True)
+def contention_exp(fnpath, host, contention, rr, zipf=-1):
+    fnn = '%s-scalability-%d-%d-%.2f.data' % (host, contention, rr, zipf)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     cpus = get_cpus(host)
@@ -122,9 +151,9 @@ def contention_exp(fnpath, host, contention, rr):
     for i in cpus:
         f.write("%d"% i)
         f.write("\t")
-        do(f, rr, contention, i, cpu_args, 0, zipf=-1)
-        do(f, rr, contention, i, cpu_args, 1, zipf=-1)
-        do(f, rr, contention, i, cpu_args, 2, zipf=-1)
+        do(f, rr, contention, i, cpu_args, 0, zipf=zipf)
+        do(f, rr, contention, i, cpu_args, 1, zipf=zipf)
+        do(f, rr, contention, i, cpu_args, 2, zipf=zipf)
         f.write("\n")
     f.close()
     if options.scp:
@@ -179,7 +208,7 @@ def zipf_scale_exp2(fnpath, host, zipf, rr):
 
 
 def rw_exp(fnpath, host, contention, ncores):
-    fnn = '%s-rw-%d-%d-%s.data' % (host, contention, ncores, True)
+    fnn = '%s-rw-%d-%d-%.2f.data' % (host, contention, ncores, options.zipf)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     rr = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
@@ -192,9 +221,9 @@ def rw_exp(fnpath, host, contention, ncores):
     for i in rr:
         f.write("%d"% i)
         f.write("\t")
-        do(f, i, contention, ncores, cpu_args, 0, zipf=-1)
-        do(f, i, contention, ncores, cpu_args, 1, zipf=-1)
-        do(f, i, contention, ncores, cpu_args, 2, zipf=-1)
+        do(f, i, contention, ncores, cpu_args, 0, zipf=options.zipf)
+        do(f, i, contention, ncores, cpu_args, 1, zipf=options.zipf)
+        do(f, i, contention, ncores, cpu_args, 2, zipf=options.zipf)
         f.write("\n")
     f.close()
     if options.scp:
@@ -226,7 +255,7 @@ def products_exp(fnpath, host, rr, ncores):
         system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 def single_exp(fnpath, host, rr, ncores):
-    fnn = '%s-single-%d-%s.data' % (host, ncores, True)
+    fnn = '%s-single-%d-%s-%s.data' % (host, ncores, True, not options.partition)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     prob = [0, 1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
@@ -250,12 +279,35 @@ def single_exp(fnpath, host, rr, ncores):
         system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
         system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
+def single_scale_exp(fnpath, host, contention, rr):
+    fnn = '%s-single-scale-%d-%d-X.data' % (host, contention, rr)
+    filename=os.path.join(fnpath, fnn)
+    f = open(filename, 'w')
+    cpus = get_cpus(host)
+    cpu_args = ""
+    if host == "ben":
+        cpu_args = ben_list_cpus
+
+    f.write("#Doppel\tOCC\t2PL\tAtomic\n")
+    for i in cpus:
+        f.write("%d"% i)
+        f.write("\t")
+        do(f, rr, contention, i, cpu_args, 0, zipf=-1)
+        do(f, rr, contention, i, cpu_args, 1, zipf=-1)
+        do(f, rr, contention, i, cpu_args, 2, zipf=-1)
+        do(f, rr, contention, i, cpu_args, 2, zipf=-1, atomic=True)
+        f.write("\n")
+    f.close()
+    if options.scp:
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
+
 def zipf_exp(fnpath, host, rr, ncores):
     fnn = '%s-zipf.data' % (host)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
-    theta = [0, .1, .3, .5, .6, .7, .8, .9]
-    cpus = [20, 40, 80]
+    theta = [.00001, .2, .4, .6, .8, 1.00001, 1.2, 1.4, 1.6, 1.8, 2.0]
+    cpus = [20,]# 40, 80]
     sys = [0, 1, 2]
     cpu_args = ""
     if host == "ben":
@@ -378,11 +430,11 @@ if __name__ == "__main__":
         zipf_scale_exp2(fnpath, host, options.zipf, options.read_rate)
     if options.exp == "contention":
         if options.read_rate == -1:
-            contention_exp(fnpath, host, options.default_contention, 90)
-            contention_exp(fnpath, host, options.default_contention, 10)
-            contention_exp(fnpath, host, options.default_contention, 50)
+            contention_exp(fnpath, host, options.default_contention, 90, options.zipf)
+            contention_exp(fnpath, host, options.default_contention, 10, options.zipf)
+            contention_exp(fnpath, host, options.default_contention, 50, options.zipf)
         else:
-            contention_exp(fnpath, host, options.default_contention, options.read_rate)
+            contention_exp(fnpath, host, options.default_contention, options.read_rate, options.zipf)
     elif options.exp == "rw":
         rw_exp(fnpath, host, options.default_contention, options.default_ncores)
     elif options.exp == "phase":
@@ -391,12 +443,15 @@ if __name__ == "__main__":
         products_exp(fnpath, host, options.read_rate, options.default_ncores)
     elif options.exp == "single":
         single_exp(fnpath, host, 0, options.default_ncores)
+    elif options.exp == "singlescale":
+        single_scale_exp(fnpath, host, options.default_contention, options.read_rate)
     elif options.exp == "zipf":
         zipf_exp(fnpath, host, 0, options.default_ncores)
     elif options.exp == "rubis":
         if options.read_rate == -1:
-            rubis_exp(fnpath, host, 30, 90)
-            rubis_exp(fnpath, host, 1000000, 50)
+            rubis_exp(fnpath, host, 3, 0)
+            options.skew = True
+            rubis_exp(fnpath, host, 100000, 0)
         else:
             rubis_exp(fnpath, host, options.default_contention, options.read_rate)
     elif options.exp == "all":
@@ -405,8 +460,17 @@ if __name__ == "__main__":
         options.exp = "all"
         rw_exp(fnpath, host, options.default_contention, options.default_ncores)
         products_exp(fnpath, host, options.read_rate, options.default_ncores)
-        contention_exp(fnpath, host, options.default_contention, 90)
-        contention_exp(fnpath, host, options.default_contention, 10)
         contention_exp(fnpath, host, options.default_contention, 50)
+        options.exp = "zipfscale2"
+        zipf_scale_exp2(fnpath, host, options.zipf, options.read_rate)
+        options.exp="zipf"
+        zipf_exp(fnpath, host, 0, options.default_ncores)
+        options.exp="rubis"
+        options.skew = False
+        rubis_exp(fnpath, host, 3, 0)
+        options.skew = True
+        rubis_exp(fnpath, host, 100000, 0)
     elif options.exp == "wratio":
         wratio_exp(fnpath, host, options.default_contention, options.read_rate)
+    elif options.exp == "bad":
+        bad_exp(fnpath, host, options.read_rate)

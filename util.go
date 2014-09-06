@@ -34,8 +34,8 @@ func (e *Exp2) Exp(n int) uint32 {
 }
 
 func RandN(seed *uint32, n uint32) uint32 {
-	*seed = *seed*1103515245 + 12345
-	return ((*seed & 0x7fffffff) % (n * 8) / 8)
+	*seed = *seed*1664525 + 1013904223
+	return ((*seed & 0x7fffffff) % (n * 8)) / 8
 }
 
 func Randstr(sz int) string {
@@ -215,6 +215,11 @@ func WriteCountKeyStats(coord *Coordinator, nb int, f *os.File) {
 	}
 	mean, stddev := StddevKeys(bk)
 	f.WriteString(fmt.Sprintf("b-kmean: %v\nb-kstddev: %v\n", mean, stddev))
+	var sum int64
+	var max int64
+	max_idx := 0
+	var second int64
+	second_idx := 0
 	for i := 0; i < nb; i++ {
 		x := float64(mean) - float64(bk[i])
 		if x < 0 {
@@ -229,17 +234,23 @@ func WriteCountKeyStats(coord *Coordinator, nb int, f *os.File) {
 		} else {
 			ok[3]++
 		}
-		// if x > 2*stddev && bk[i] != 0 {
-		// 	f.WriteString(fmt.Sprintf("BKey %v: %v\n", i, bk[i]))
-		// }
-		// if x > stddev && bk[i] != 0 && x < 2*stddev {
-		// 	f.WriteString(fmt.Sprintf("BKey %v: %v\n", i, bk[i]))
-		// }
 		if i < 1000 {
 			f.WriteString(fmt.Sprintf("BKey %v: %v\n", i, bk[i]))
 		}
+		sum += bk[i]
+		if bk[i] > max {
+			second = max
+			second_idx = max_idx
+			max = bk[i]
+			max_idx = i
+		} else if bk[i] > second {
+			second = bk[i]
+			second_idx = i
+		}
 	}
 	f.WriteString(fmt.Sprintf("b-stddev counts: %v\n", ok))
+	f.WriteString(fmt.Sprintf("top key (%v): %v\n", max_idx, float64(max)/float64(sum)))
+	f.WriteString(fmt.Sprintf("next key (%v): %v\n", second_idx, float64(second)/float64(sum)))
 }
 
 func CollectCounts(coord *Coordinator, stats []int64) (int64, time.Duration, time.Duration) {

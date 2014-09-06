@@ -3,14 +3,14 @@ package apps
 import (
 	"ddtxn"
 	"ddtxn/dlog"
-	"ddtxn/stats"
 	"flag"
 	"fmt"
+	"math/rand"
 	"sync/atomic"
-	"time"
 )
 
-var ZipfDist = flag.Float64("zipf", .99, "Zipfian distribution theta")
+var ZipfDist = flag.Float64("zipf", 1, "Zipfian distribution theta. -1 means use -contention instead")
+var partition = flag.Bool("partition", false, "Whether or not to partition the non-contended keys amongst the cores")
 
 type Buy struct {
 	padding         [128]byte
@@ -22,9 +22,7 @@ type Buy struct {
 	nworkers        int
 	ngo             int
 	validate        []int32
-	lhr             []*stats.LatencyHist
-	lhw             []*stats.LatencyHist
-	z               *ddtxn.Zipf
+	z               []*ddtxn.Zipf
 	padding1        [128]byte
 }
 
@@ -36,10 +34,14 @@ func (b *Buy) Init(np, nb, nw, rr, ngo int, ncrr float64) {
 	b.read_rate = rr
 	b.ncontended_rate = int(ncrr * float64(rr))
 	b.validate = make([]int32, nb)
-	b.lhr = make([]*stats.LatencyHist, ngo)
-	b.lhw = make([]*stats.LatencyHist, ngo)
 	b.sp = uint32(nb / nw)
-	b.z = ddtxn.NewZipf(int64(b.nbidders), *ZipfDist)
+	if *ZipfDist != -1 {
+		b.z = make([]*ddtxn.Zipf, nw)
+		for i := 0; i < nw; i++ {
+			r := rand.New(rand.NewSource(int64(i * 38748767)))
+			b.z[i] = ddtxn.NewZipf(r, *ZipfDist, 1, uint64(b.nbidders-1))
+		}
+	}
 	dlog.Printf("Read rate %v, not contended: %v\n", b.read_rate, b.ncontended_rate)
 }
 
@@ -54,38 +56,33 @@ func (b *Buy) Populate(s *ddtxn.Store, ex *ddtxn.ETransaction) {
 		s.CreateKey(k, "x", ddtxn.WRITE)
 	}
 	dlog.Printf("Created bidders")
-	if *Latency {
-		b.SetupLatency(100, 1000000, b.ngo)
-	}
 	dlog.Printf("Done with Populate")
-}
-
-func (b *Buy) SetupLatency(nincr int64, nbuckets int64, ngo int) {
-	for i := 0; i < ngo; i++ {
-		b.lhr[i] = stats.MakeLatencyHistogram(nincr, nbuckets)
-		b.lhw[i] = stats.MakeLatencyHistogram(nincr, nbuckets)
-	}
 }
 
 // Calls rand 4 times
 func (b *Buy) MakeOne(w int, local_seed *uint32, sp uint32, txn *ddtxn.Query) {
-	rnd := ddtxn.RandN(local_seed, sp/8)
-	lb := int(rnd)
-	bidder := lb + w*int(sp)
-	x := int(ddtxn.RandN(local_seed, 100))
+	var bidder int
 	var product int
-	if *ZipfDist > -0 {
-		product = int(b.z.Next(local_seed) - 1)
+	if *partition {
+		rnd := ddtxn.RandN(local_seed, sp/8)
+		lb := int(rnd)
+		bidder = lb + w*int(sp)
+	} else {
+		bidder = int(ddtxn.RandN(local_seed, uint32(b.nbidders)))
+	}
+	x := int(ddtxn.RandN(local_seed, 100))
+	if *ZipfDist > 0 {
+		product = int(b.z[w].Uint64())
 	} else {
 		product = int(ddtxn.RandN(local_seed, uint32(b.nproducts)))
 	}
 	if x < b.read_rate {
 		if x > b.ncontended_rate {
-			// Contended read
+			// Contended read; use Zipfian distribution or np
 			txn.K1 = ddtxn.UserKey(uint64(bidder))
 			txn.K2 = ddtxn.ProductKey(product)
 		} else {
-			// Uncontended read
+			// (Hopefully) uncontended read.  Random product.
 			product = int(ddtxn.RandN(local_seed, uint32(b.nbidders)))
 			txn.K1 = ddtxn.UserKey(uint64(bidder))
 			txn.K2 = ddtxn.ProductKey(product)
@@ -136,23 +133,4 @@ func (b *Buy) Validate(s *ddtxn.Store, nitr int) bool {
 		good = false
 	}
 	return good
-}
-
-func (b *Buy) Time(t *ddtxn.Query, txn_end time.Duration, n int) {
-	if t.TXN == ddtxn.D_READ_TWO {
-		b.lhr[n].AddOne(txn_end.Nanoseconds())
-	} else {
-		b.lhw[n].AddOne(txn_end.Nanoseconds())
-	}
-}
-
-func (b *Buy) LatencyString() (string, string) {
-	if !*Latency {
-		return "", ""
-	}
-	for i := 1; i < b.ngo; i++ {
-		b.lhr[0].Combine(b.lhr[i])
-		b.lhw[0].Combine(b.lhw[i])
-	}
-	return fmt.Sprintf("Read 25: %v\nRead 50: %v\nRead 75: %v\nRead 99: %v\n", b.lhr[0].GetPercentile(25), b.lhr[0].GetPercentile(50), b.lhr[0].GetPercentile(75), b.lhr[0].GetPercentile(99)), fmt.Sprintf("Write 25: %v\nWrite 50: %v\nWrite 75: %v\nWrite 99: %v\n", b.lhw[0].GetPercentile(25), b.lhw[0].GetPercentile(50), b.lhw[0].GetPercentile(75), b.lhw[0].GetPercentile(99))
 }
