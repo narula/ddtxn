@@ -24,6 +24,7 @@ var prob = flag.Float64("contention", 100.0, "Probability contended key is in tx
 var readrate = flag.Int("rr", 0, "Read rate %.  Rest are writes")
 var dataFile = flag.String("out", "xdata.out", "Filename for output")
 var atomicIncr = flag.Bool("atomic", false, "Workload of just atomic increments")
+var notcontended_readrate = flag.Float64("ncrr", .8, "NOT USED")
 
 var ZipfDist = flag.Float64("zipf", 1, "Zipfian distribution theta.  1 means only 1 hot key and we'll vary the percentage (single exp)")
 var partition = flag.Bool("partition", false, "Whether or not to partition the non-contended keys amongst the cores")
