@@ -26,7 +26,7 @@ type TransactionFunc func(Query, ETransaction) (*Result, error)
 const (
 	BUFFER     = 100000
 	START_SIZE = 1000000
-	TIMES      = 10000000
+	TIMES      = 10
 )
 
 const (
