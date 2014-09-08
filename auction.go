@@ -995,37 +995,54 @@ func ViewItemTxn(t Query, tx ETransaction) (*Result, error) {
 	return r, nil
 }
 
-func GetTxns(skewed bool) []float64 {
+func GetTxns(skewed bool, oldmode bool) []float64 {
 	perc := make(map[float64]int)
-	if skewed {
-		perc = map[float64]int{
-			10.0: RUBIS_SEARCHCAT,
-			10.5: RUBIS_VIEW,
-			5.47: RUBIS_SEARCHREG,
-			4.97: RUBIS_PUTBID,
-			40.0: RUBIS_BID,
-			2.13: RUBIS_VIEWUSER,
-			1.81: RUBIS_NEWITEM,
-			1.8:  RUBIS_REGISTER,
-			1.4:  RUBIS_BUYNOW,
-			1.34: RUBIS_VIEWBIDHIST,
-			.55:  RUBIS_PUTCOMMENT,
-			.5:   RUBIS_COMMENT,
+	if oldmode {
+		if skewed {
+			perc = map[float64]int{
+				10.0: RUBIS_SEARCHCAT,
+					10.5: RUBIS_VIEW,
+					5.47: RUBIS_SEARCHREG,
+					4.97: RUBIS_PUTBID,
+					40.0: RUBIS_BID,
+					2.13: RUBIS_VIEWUSER,
+					1.81: RUBIS_NEWITEM,
+					1.8:  RUBIS_REGISTER,
+					1.4:  RUBIS_BUYNOW,
+					1.34: RUBIS_VIEWBIDHIST,
+					.55:  RUBIS_PUTCOMMENT,
+					.5:   RUBIS_COMMENT,
+			}
+		} else {
+			perc = map[float64]int{
+				13.4: RUBIS_SEARCHCAT,
+					11.3: RUBIS_VIEW,
+					5.47: RUBIS_SEARCHREG,
+					4.97: RUBIS_PUTBID,
+					3.7:  RUBIS_BID,
+					2.13: RUBIS_VIEWUSER,
+					1.81: RUBIS_NEWITEM,
+					1.8:  RUBIS_REGISTER,
+					1.4:  RUBIS_BUYNOW,
+					1.34: RUBIS_VIEWBIDHIST,
+					.55:  RUBIS_PUTCOMMENT,
+					.5:   RUBIS_COMMENT,
+			}
 		}
 	} else {
 		perc = map[float64]int{
-			13.4: RUBIS_SEARCHCAT,
-			11.3: RUBIS_VIEW,
-			5.47: RUBIS_SEARCHREG,
-			4.97: RUBIS_PUTBID,
-			3.7:  RUBIS_BID,
-			2.13: RUBIS_VIEWUSER,
-			1.81: RUBIS_NEWITEM,
-			1.8:  RUBIS_REGISTER,
-			1.4:  RUBIS_BUYNOW,
-			1.34: RUBIS_VIEWBIDHIST,
-			.55:  RUBIS_PUTCOMMENT,
-			.5:   RUBIS_COMMENT,
+			10.0: RUBIS_SEARCHCAT,
+				10.5: RUBIS_VIEW,
+				5.47: RUBIS_SEARCHREG,
+				4.97: RUBIS_PUTBID,
+				40.0: RUBIS_BID,
+				2.13: RUBIS_VIEWUSER,
+				1.81: RUBIS_NEWITEM,
+				1.8:  RUBIS_REGISTER,
+				1.4:  RUBIS_BUYNOW,
+				1.34: RUBIS_VIEWBIDHIST,
+				.55:  RUBIS_PUTCOMMENT,
+				.5:   RUBIS_COMMENT,
 		}
 	}
 

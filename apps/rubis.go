@@ -9,9 +9,12 @@ import (
 	"math/rand"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 var Skewed = flag.Bool("skew", false, "Rubis-C (skewed workload) or not, default Rubis-B")
+var Cont = flag.Float64("ccont", 1.04, "\"theta\" parameter for zipf")
+var Oldmode = flag.Bool("oldskew", false, "specify Rubis txn probs via \"skew\"")
 
 type Rubis struct {
 	sync.Mutex
@@ -30,6 +33,7 @@ type Rubis struct {
 	rates      []float64
 	padding1   [128]byte
 	pidIdx     map[uint64]int
+	zip        []*ddtxn.Zipf
 }
 
 func (b *Rubis) Init(np, nb, nw, ngo int) {
@@ -42,13 +46,15 @@ func (b *Rubis) Init(np, nb, nw, ngo int) {
 	b.pidIdx = make(map[uint64]int, np)
 	b.ratings = make(map[uint64]int32)
 	b.sp = uint32(nb / nw)
-	b.rates = ddtxn.GetTxns(*Skewed)
+	b.rates = ddtxn.GetTxns(*Skewed, *Oldmode)
 	b.users = make([]uint64, nb)
 	if ddtxn.NUM_ITEMS > np {
 		b.products = make([]uint64, ddtxn.NUM_ITEMS)
 	} else {
 		b.products = make([]uint64, np)
 	}
+
+	b.zip = make([]*ddtxn.Zipf, nw)
 }
 
 func (b *Rubis) Populate(s *ddtxn.Store, c *ddtxn.Coordinator) {
@@ -74,6 +80,9 @@ func (b *Rubis) Populate(s *ddtxn.Store, c *ddtxn.Coordinator) {
 			}
 			ex.Reset()
 		}
+
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		b.zip[wi] = ddtxn.NewZipf(r, *Cont, 1, uint64(len(b.products)))
 	}
 	chunk := ddtxn.NUM_ITEMS / b.nworkers
 	for wi := 0; wi < b.nworkers; wi++ {
@@ -115,7 +124,8 @@ func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 	if x < b.rates[0] {
 		txn.TXN = ddtxn.RUBIS_BID
 		bidder := b.users[int(ddtxn.RandN(local_seed, b.sp))+w*int(b.sp)]
-		product := b.products[ddtxn.RandN(local_seed, uint32(b.nproducts))]
+		//product := b.products[ddtxn.RandN(local_seed, uint32(b.nproducts))]
+		product := b.zip[w].Uint64()
 		txn.U1 = uint64(bidder)
 		txn.U2 = uint64(product)
 		txn.A = int32(ddtxn.RandN(local_seed, 10))
