@@ -289,7 +289,7 @@ func compute(w *Worker, txn int) (int64, int64) {
 			break
 		}
 	}
-	fmt.Printf("%v avg: %v us; 99: %v us, x99: %v, sum: %v, total: %v \n", txn, sum/total, v99, x99, sum, total)
+	dlog.Printf("%v avg: %v us; 99: %v us, x99: %v, sum: %v, total: %v \n", txn, sum/total, v99, x99, sum, total)
 	return sum / total, v99
 }
 
@@ -306,6 +306,6 @@ func (c *Coordinator) Latency() (string, string) {
 	}
 	x, y := compute(c.Workers[0], D_BUY)
 	x2, y2 := compute(c.Workers[0], D_READ_TWO)
-	return fmt.Sprintf("Read 99: %v\nRead Avg: %v\n", y2, x2), fmt.Sprintf("Write 99: %v\n Write Avg: %v\n", y, x)
+	return fmt.Sprintf("Read 99: %v\nRead Avg: %v\n", y2, x2), fmt.Sprintf("Write 99: %v\nWrite Avg: %v\n", y, x)
 
 }

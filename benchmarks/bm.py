@@ -32,6 +32,25 @@ LATENCY_PART = " -latency=%s" % options.latency
 
 BASE_CMD = "GOGC=off numactl -C `list-cpus seq -n %d %s` ./%s -nprocs=%d -ngo=%d -nw=%d -nsec=%d -contention=%s -rr=%d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -atomic=%s -zipf=%s -out=data.out -ncrr=%s" + LATENCY_PART
 
+def do_param(fn, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=options.phase, atomic=False, zipf=-1, ncrr=options.not_contended_read_rate, yval="total/sec"):
+    cmd = fill_cmd(rr, contention, ncpu, sys, list_cpus, wratio, phase, atomic, zipf, ncrr)
+
+    if options.dprint:
+        print cmd
+    status, output = commands.getstatusoutput(cmd)
+    if status != 0:
+        print "Bad status", status, output
+        exit(1)
+    if options.dprint:
+        print output
+    fields = output.split(",")
+    x = 0
+    for f in fields:
+        if yval in f:
+            x = f.split(":")[1]
+    lat = float(x)
+    fn.write("%0.2f\t" % lat)
+
 def run_one(fn, cmd):
     if options.dprint:
         print cmd
@@ -323,7 +342,7 @@ def zipf_exp(fnpath, host, rr, ncores):
         system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 def phase_exp(fnpath, host, ncores):
-    fnn = '%s-phase-%d-%s.data' % (host, ncores, True)
+    fnn = '%s-phase-%d.data' % (host, ncores)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     phase_len = [5, 10, 15, 20, 30, 40, 50, 60, 70, 80, 90, 100]
@@ -337,9 +356,9 @@ def phase_exp(fnpath, host, ncores):
     for i in phase_len:
         f.write("%d"% i)
         f.write("\t")
-        do(f, 10, -1, ncores, cpu_args, 0, phase=i, zipf=1.4)
-        do(f, 50, -1, ncores, cpu_args, 0, phase=i, zipf=1.4)
-        do(f, 50, -1, ncores, cpu_args, 0, phase=i, zipf=.6)
+        do_param(f, 10, -1, ncores, cpu_args, 0, phase=i, zipf=1.4, yval="Read Avg")
+        do_param(f, 50, -1, ncores, cpu_args, 0, phase=i, zipf=1.4, yval="Read Avg")
+        do_param(f, 50, 1, ncores, cpu_args, 0, phase=i, zipf=-1, yval="Read Avg")
         f.write("\n")
     f.close()
     if options.scp:
