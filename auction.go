@@ -236,7 +236,7 @@ func StoreBidTxn(t Query, tx ETransaction) (*Result, error) {
 		if err != nil {
 			tx.RelinquishKey(n, 'b')
 			tx.Abort()
-			dlog.Printf("StoreBidTxn(): Couldn't write maxbid for item %v\n", item)
+			dlog.Printf("StoreBidTxn(): Couldn't write maxbid for item %v; %v\n", item, err)
 			return nil, err
 		}
 		tx.Write(bidder, user, WRITE)
@@ -247,13 +247,13 @@ func StoreBidTxn(t Query, tx ETransaction) (*Result, error) {
 	if err != nil {
 		tx.RelinquishKey(n, 'b')
 		tx.Abort()
-		dlog.Printf("StoreBidTxn(): Couldn't write numbids for item %v\n", item)
+		dlog.Printf("StoreBidTxn(): Couldn't write numbids for item %v; %v\n", item, err)
 		return nil, err
 	}
 
 	if tx.Commit() == 0 {
 		tx.RelinquishKey(n, 'b')
-		dlog.Printf("StoreBidTxn(): Abort %v\n", item)
+		dlog.Printf("StoreBidTxn(): Abort item %v\n", item)
 		return r, EABORT
 	}
 
@@ -1001,42 +1001,10 @@ func GetTxns(skewed bool, oldmode bool) []float64 {
 		if skewed {
 			perc = map[float64]int{
 				10.0: RUBIS_SEARCHCAT,
-					10.5: RUBIS_VIEW,
-					5.47: RUBIS_SEARCHREG,
-					4.97: RUBIS_PUTBID,
-					40.0: RUBIS_BID,
-					2.13: RUBIS_VIEWUSER,
-					1.81: RUBIS_NEWITEM,
-					1.8:  RUBIS_REGISTER,
-					1.4:  RUBIS_BUYNOW,
-					1.34: RUBIS_VIEWBIDHIST,
-					.55:  RUBIS_PUTCOMMENT,
-					.5:   RUBIS_COMMENT,
-			}
-		} else {
-			perc = map[float64]int{
-				13.4: RUBIS_SEARCHCAT,
-					11.3: RUBIS_VIEW,
-					5.47: RUBIS_SEARCHREG,
-					4.97: RUBIS_PUTBID,
-					3.7:  RUBIS_BID,
-					2.13: RUBIS_VIEWUSER,
-					1.81: RUBIS_NEWITEM,
-					1.8:  RUBIS_REGISTER,
-					1.4:  RUBIS_BUYNOW,
-					1.34: RUBIS_VIEWBIDHIST,
-					.55:  RUBIS_PUTCOMMENT,
-					.5:   RUBIS_COMMENT,
-			}
-		}
-	} else {
-		perc = map[float64]int{
-			10.0: RUBIS_SEARCHCAT,
 				10.5: RUBIS_VIEW,
 				5.47: RUBIS_SEARCHREG,
 				4.97: RUBIS_PUTBID,
 				40.0: RUBIS_BID,
-				//3.7:  RUBIS_BID,
 				2.13: RUBIS_VIEWUSER,
 				1.81: RUBIS_NEWITEM,
 				1.8:  RUBIS_REGISTER,
@@ -1044,6 +1012,38 @@ func GetTxns(skewed bool, oldmode bool) []float64 {
 				1.34: RUBIS_VIEWBIDHIST,
 				.55:  RUBIS_PUTCOMMENT,
 				.5:   RUBIS_COMMENT,
+			}
+		} else {
+			perc = map[float64]int{
+				13.4: RUBIS_SEARCHCAT,
+				11.3: RUBIS_VIEW,
+				5.47: RUBIS_SEARCHREG,
+				4.97: RUBIS_PUTBID,
+				3.7:  RUBIS_BID,
+				2.13: RUBIS_VIEWUSER,
+				1.81: RUBIS_NEWITEM,
+				1.8:  RUBIS_REGISTER,
+				1.4:  RUBIS_BUYNOW,
+				1.34: RUBIS_VIEWBIDHIST,
+				.55:  RUBIS_PUTCOMMENT,
+				.5:   RUBIS_COMMENT,
+			}
+		}
+	} else {
+		perc = map[float64]int{
+			10.0: RUBIS_SEARCHCAT,
+			10.5: RUBIS_VIEW,
+			5.47: RUBIS_SEARCHREG,
+			4.97: RUBIS_PUTBID,
+			40.0: RUBIS_BID,
+			//3.7:  RUBIS_BID,
+			2.13: RUBIS_VIEWUSER,
+			1.81: RUBIS_NEWITEM,
+			1.8:  RUBIS_REGISTER,
+			1.4:  RUBIS_BUYNOW,
+			1.34: RUBIS_VIEWBIDHIST,
+			.55:  RUBIS_PUTCOMMENT,
+			.5:   RUBIS_COMMENT,
 		}
 	}
 

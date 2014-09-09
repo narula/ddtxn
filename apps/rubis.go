@@ -37,23 +37,23 @@ type Rubis struct {
 }
 
 func (b *Rubis) Init(np, nb, nw, ngo int) {
-	b.nproducts = np
+	if ddtxn.NUM_ITEMS > np {
+		b.nproducts = np
+		b.products = make([]uint64, ddtxn.NUM_ITEMS)
+	} else {
+		b.nproducts = ddtxn.NUM_ITEMS
+		b.products = make([]uint64, b.nproducts)
+	}
 	b.nbidders = nb
 	b.nworkers = nw
 	b.ngo = ngo
-	b.maxes = make([]int32, np)
-	b.num_bids = make([]int32, np)
-	b.pidIdx = make(map[uint64]int, np)
+	b.maxes = make([]int32, b.nproducts)
+	b.num_bids = make([]int32, b.nproducts)
+	b.pidIdx = make(map[uint64]int, b.nproducts)
 	b.ratings = make(map[uint64]int32)
 	b.sp = uint32(nb / nw)
 	b.rates = ddtxn.GetTxns(*Skewed, *Oldmode)
 	b.users = make([]uint64, nb)
-	if ddtxn.NUM_ITEMS > np {
-		b.products = make([]uint64, ddtxn.NUM_ITEMS)
-	} else {
-		b.products = make([]uint64, np)
-	}
-
 	b.zip = make([]*ddtxn.Zipf, nw)
 }
 
@@ -91,7 +91,7 @@ func (b *Rubis) Populate(s *ddtxn.Store, c *ddtxn.Coordinator) {
 		nx := rand.Intn(b.nbidders)
 		for i := chunk * wi; i < chunk*(wi+1); i++ {
 			q := ddtxn.Query{
-				T:  ddtxn.TID(i),
+				T:  ddtxn.TID(i + 1),
 				S1: "xxx",
 				S2: "lovely",
 				U1: b.users[nx],
@@ -125,18 +125,30 @@ func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 		txn.TXN = ddtxn.RUBIS_BID
 		bidder := b.users[int(ddtxn.RandN(local_seed, b.sp))+w*int(b.sp)]
 		//product := b.products[ddtxn.RandN(local_seed, uint32(b.nproducts))]
-		product := b.zip[w].Uint64()
+		x := b.zip[w].Uint64()
+		product := b.products[x]
 		txn.U1 = uint64(bidder)
+		if product == 0 {
+			log.Fatalf("store bid ID 0? %v %v", x, b.products[x])
+		}
 		txn.U2 = uint64(product)
 		txn.A = int32(ddtxn.RandN(local_seed, 10))
 	} else if x < b.rates[1] {
 		txn.TXN = ddtxn.RUBIS_VIEWBIDHIST
-		product := b.products[ddtxn.RandN(local_seed, uint32(b.nproducts))]
+		x := ddtxn.RandN(local_seed, uint32(b.nproducts))
+		product := b.products[x]
+		if product == 0 {
+			log.Fatalf("view bid hist ID 0? %v %v", x, b.products[x])
+		}
 		txn.U1 = uint64(product)
 	} else if x < b.rates[2] {
 		txn.TXN = ddtxn.RUBIS_BUYNOW
 		bidder := b.users[int(ddtxn.RandN(local_seed, b.sp))+w*int(b.sp)]
-		product := b.products[ddtxn.RandN(local_seed, uint32(b.nproducts))]
+		x := ddtxn.RandN(local_seed, uint32(b.nproducts))
+		product := b.products[x]
+		if product == 0 {
+			log.Fatalf("buy now ID 0? %v %v", x, b.products[x])
+		}
 		txn.U1 = uint64(bidder)
 		txn.U2 = uint64(product)
 		txn.A = int32(ddtxn.RandN(local_seed, 10))
@@ -144,7 +156,11 @@ func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 		txn.TXN = ddtxn.RUBIS_COMMENT
 		u1 := b.users[int(ddtxn.RandN(local_seed, b.sp))+w*int(b.sp)]
 		u2 := b.users[int(ddtxn.RandN(local_seed, b.sp))+w*int(b.sp)]
-		product := b.products[ddtxn.RandN(local_seed, uint32(b.nproducts))]
+		x := ddtxn.RandN(local_seed, uint32(b.nproducts))
+		product := b.products[x]
+		if product == 0 {
+			log.Fatalf("comment ID 0? %v %v", x, b.products[x])
+		}
 		txn.U1 = uint64(u1)
 		txn.U2 = uint64(u2)
 		txn.U3 = uint64(product)
@@ -165,11 +181,19 @@ func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 		txn.U7 = uint64(ddtxn.RandN(local_seed, uint32(ddtxn.NUM_CATEGORIES)))
 	} else if x < b.rates[5] {
 		txn.TXN = ddtxn.RUBIS_PUTBID
-		product := b.products[ddtxn.RandN(local_seed, uint32(b.nproducts))]
+		x := ddtxn.RandN(local_seed, uint32(b.nproducts))
+		product := b.products[x]
+		if product == 0 {
+			log.Fatalf("put bid ID 0? %v %v", x, b.products[x])
+		}
 		txn.U1 = uint64(product)
 	} else if x < b.rates[6] {
 		txn.TXN = ddtxn.RUBIS_PUTCOMMENT
-		product := b.products[ddtxn.RandN(local_seed, uint32(b.nproducts))]
+		x := ddtxn.RandN(local_seed, uint32(b.nproducts))
+		product := b.products[x]
+		if product == 0 {
+			log.Fatalf("put comment ID 0? %v %v", x, b.products[x])
+		}
 		bidder := b.users[int(ddtxn.RandN(local_seed, b.sp))+w*int(b.sp)]
 		txn.U1 = uint64(bidder)
 		txn.U2 = uint64(product)
@@ -188,7 +212,11 @@ func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 		txn.U3 = 5
 	} else if x < b.rates[10] {
 		txn.TXN = ddtxn.RUBIS_VIEW
-		product := b.products[ddtxn.RandN(local_seed, uint32(b.nproducts))]
+		x := ddtxn.RandN(local_seed, uint32(b.nproducts))
+		product := b.products[x]
+		if product == 0 {
+			log.Fatalf("view ID 0? %v %v", x, b.products[x])
+		}
 		txn.U1 = uint64(product)
 	} else if x < b.rates[11] {
 		txn.TXN = ddtxn.RUBIS_VIEWUSER

@@ -132,6 +132,7 @@ func TestAuction(t *testing.T) {
 	jaid := r.V.(uint64)
 
 	tx = Query{TXN: RUBIS_NEWITEM, U1: jaid, S1: "burrito", S2: "slightly used burrito",
+		T:  -1,
 		U2: 1,   // initial price
 		U3: 2,   // reserve price
 		U4: 5,   // buy now price

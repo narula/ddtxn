@@ -88,7 +88,7 @@ func main() {
 			users_per_worker = users_per_worker * .75
 			bids_per_worker = bids_per_worker * .75
 		}
-		bids_per_worker *= 16
+		bids_per_worker *= 5
 
 		if *rounds {
 			parallelism := 10
