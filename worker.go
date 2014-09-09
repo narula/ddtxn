@@ -175,7 +175,7 @@ func (w *Worker) doTxn(t Query) (*Result, error) {
 			x := time.Since(t.S)
 			if t.TXN < 4 {
 				y := x.Nanoseconds() / 1000
-				if y > TIMES {
+				if y >= TIMES {
 					fmt.Printf("(doTxn): Too big: %v\n", x)
 				} else {
 					w.times[t.TXN][y]++
@@ -207,7 +207,7 @@ func (w *Worker) doTxn2(t Query) (*Result, error) {
 			x := time.Since(t.S)
 			if t.TXN < 4 {
 				y := x.Nanoseconds() / 1000
-				if y > TIMES {
+				if y >= TIMES {
 					fmt.Printf("(doTxn2) Too big: %v\n", x)
 				} else {
 					w.times[t.TXN][y]++
