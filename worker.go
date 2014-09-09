@@ -1,8 +1,8 @@
 package ddtxn
 
 import (
-	"ddtxn/stats"
 	"flag"
+	"fmt"
 	"log"
 	"runtime/debug"
 	"strconv"
@@ -26,6 +26,7 @@ type TransactionFunc func(Query, ETransaction) (*Result, error)
 const (
 	BUFFER     = 100000
 	START_SIZE = 1000000
+	TIMES      = 10
 )
 
 const (
@@ -94,9 +95,7 @@ type Worker struct {
 	PreAllocated bool
 	start        int
 
-	// Latency
-	lhr *stats.LatencyHist
-	lhw *stats.LatencyHist
+	times [4][TIMES]int64
 }
 
 func (w *Worker) Register(fn int, transaction TransactionFunc) {
@@ -125,10 +124,6 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 		w.E = StartLTransaction(w)
 	} else {
 		w.E = StartOTransaction(w)
-	}
-	if *Latency {
-		w.lhr = stats.MakeLatencyHistogram(1000, 1000000)
-		w.lhw = stats.MakeLatencyHistogram(1000, 1000000)
 	}
 	w.E.SetPhase(SPLIT)
 	w.Register(D_BUY, BuyTxn)
@@ -178,10 +173,13 @@ func (w *Worker) doTxn(t Query) (*Result, error) {
 		w.Nstats[t.TXN]++
 		if *Latency {
 			x := time.Since(t.S)
-			if IsRead(t.TXN) {
-				w.lhr.AddOne(x.Nanoseconds())
-			} else {
-				w.lhw.AddOne(x.Nanoseconds())
+			if t.TXN < 4 {
+				y := x.Nanoseconds() / 1000
+				if y >= TIMES {
+					fmt.Printf("(doTxn): Too big: %v\n", x)
+				} else {
+					w.times[t.TXN][y]++
+				}
 			}
 		}
 	} else if err == EABORT {
@@ -206,10 +204,14 @@ func (w *Worker) doTxn2(t Query) (*Result, error) {
 	} else if err == nil {
 		w.Nstats[t.TXN]++
 		if *Latency {
-			if IsRead(t.TXN) {
-				w.lhr.AddOne(time.Since(t.S).Nanoseconds())
-			} else {
-				w.lhw.AddOne(time.Since(t.S).Nanoseconds())
+			x := time.Since(t.S)
+			if t.TXN < 4 {
+				y := x.Nanoseconds() / 1000
+				if y >= TIMES {
+					fmt.Printf("(doTxn2) Too big: %v\n", x)
+				} else {
+					w.times[t.TXN][y]++
+				}
 			}
 		}
 	} else if err == EABORT {
@@ -218,13 +220,6 @@ func (w *Worker) doTxn2(t Query) (*Result, error) {
 		w.Nstats[NENOKEY]++
 	} else if err == ENORETRY {
 		w.Nstats[NENORETRY]++
-	}
-	if *Latency {
-		if IsRead(t.TXN) {
-			w.lhr.AddOne(time.Since(t.S).Nanoseconds())
-		} else {
-			w.lhw.AddOne(time.Since(t.S).Nanoseconds())
-		}
 	}
 	return x, err
 }
