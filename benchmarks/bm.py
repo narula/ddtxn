@@ -128,9 +128,6 @@ def wratio_exp(fnpath, host, contention, rr):
         do(f, rr, contention, i, cpu_args, 1)
         f.write("\n")
     f.close()
-    if options.scp:
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 def bad_exp(fnpath, host, rr, ncores=options.default_ncores):
     fnn = '%s-bad-%d.data' % (host, rr)
@@ -150,9 +147,6 @@ def bad_exp(fnpath, host, rr, ncores=options.default_ncores):
         do(f, rr, -1, ncores, cpu_args, 2, zipf=i)
         f.write("\n")
     f.close()
-    if options.scp:
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 def ncrr_exp(fnpath, host, rr, ncores):
     fnn = '%s-ncrr-%d.data' % (host, rr)
@@ -172,9 +166,6 @@ def ncrr_exp(fnpath, host, rr, ncores):
         do(f, rr, -1, ncores, cpu_args, 2, zipf=1.4, ncrr=i)
         f.write("\n")
     f.close()
-    if options.scp:
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 def single_reads_exp(fnpath, host, ncores):
     fnn = '%s-singler.data' % (host)
@@ -196,9 +187,6 @@ def single_reads_exp(fnpath, host, ncores):
         do(f, 50, i, ncores, cpu_args, 2)
         f.write("\n")
     f.close()
-    if options.scp:
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 def single_rw_exp(fnpath, host, ncores):
     fnn = '%s-singleh.data' % (host)
@@ -214,16 +202,13 @@ def single_rw_exp(fnpath, host, ncores):
         rr = [0, 50]
     for i in rr:
         f.write("%d"% i)
-#        f.write("\t")
-#        do(f, i, 100, ncores, cpu_args, 0)
-#        do(f, i, 100, ncores, cpu_args, 1)
-#        do(f, i, 100, ncores, cpu_args, 2)
+        f.write("\t")
+        do(f, i, 100, ncores, cpu_args, 0)
+        do(f, i, 100, ncores, cpu_args, 1)
+        do(f, i, 100, ncores, cpu_args, 2)
         do(f, i, 100, ncores, cpu_args, 0, wratio=.5, cw=100.0, split=True)
         f.write("\n")
     f.close()
-    if options.scp:
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 # x-axis is # cores
 def contention_exp(fnpath, host, contention, rr, zipf=-1):
@@ -244,9 +229,6 @@ def contention_exp(fnpath, host, contention, rr, zipf=-1):
         do(f, rr, contention, i, cpu_args, 2, zipf=zipf)
         f.write("\n")
     f.close()
-    if options.scp:
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 def zipf_scale_exp(fnpath, host, zipf, rr):
     fnn = '%s-zipf-scale-%.02f-%d-%s.data' % (host, zipf, rr, True)
@@ -267,9 +249,6 @@ def zipf_scale_exp(fnpath, host, zipf, rr):
         do(f, rr, -1, i, cpu_args, 2, zipf=zipf)
         f.write("\n")
     f.close()
-    if options.scp:
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 def rw_exp(fnpath, host, contention, ncores):
     fnn = '%s-rw-%d-%d-%.2f.data' % (host, contention, ncores, options.zipf)
@@ -290,9 +269,6 @@ def rw_exp(fnpath, host, contention, ncores):
         do(f, i, contention, ncores, cpu_args, 2, zipf=options.zipf)
         f.write("\n")
     f.close()
-    if options.scp:
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 def products_exp(fnpath, host, rr, ncores):
     fnn = '%s-products-%d-%d-%s.data' % (host, rr, ncores, True)
@@ -314,9 +290,6 @@ def products_exp(fnpath, host, rr, ncores):
         do(f, rr, i, ncores, cpu_args, 2, zipf=-1)
         f.write("\n")
     f.close()
-    if options.scp:
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 def single_exp(fnpath, host, rr, ncores):
     fnn = '%s-single-%d-%s-%s.data' % (host, ncores, True, not options.partition)
@@ -339,9 +312,6 @@ def single_exp(fnpath, host, rr, ncores):
         do(f, rr, i, ncores, cpu_args, 2, zipf=-1, atomic=True)
         f.write("\n")
     f.close()
-    if options.scp:
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 def single_scale_exp(fnpath, host, contention, rr):
     fnn = '%s-single-scale-%d-%d-X.data' % (host, contention, rr)
@@ -362,9 +332,6 @@ def single_scale_exp(fnpath, host, contention, rr):
         do(f, rr, contention, i, cpu_args, 2, zipf=-1, atomic=True)
         f.write("\n")
     f.close()
-    if options.scp:
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 def zipf_exp(fnpath, host, rr, ncores):
     fnn = '%s-zipf.data' % (host)
@@ -388,9 +355,6 @@ def zipf_exp(fnpath, host, rr, ncores):
             do(f, rr, -1, j, cpu_args, 2, atomic=True, zipf=i)
         f.write("\n")
     f.close()
-    if options.scp:
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 def phase_exp(fnpath, host, ncores):
     fnn = '%s-phase-%d.data' % (host, ncores)
@@ -412,9 +376,6 @@ def phase_exp(fnpath, host, ncores):
         do_param(f, 50, 1, ncores, cpu_args, 0, phase=i, zipf=-1, yval="Read Avg", ncrr=0)
         f.write("\n")
     f.close()
-    if options.scp:
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
 
 def phase_tps_exp(fnpath, host, ncores):
     fnn = '%s-phase-tps-%d.data' % (host, ncores)
@@ -436,9 +397,6 @@ def phase_tps_exp(fnpath, host, ncores):
         do(f, 50, 1, ncores, cpu_args, 0, phase=i, zipf=-1, ncrr=0)
         f.write("\n")
     f.close()
-    if options.scp:
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
     
 
 def print_output(output, prefix, sys):
@@ -570,4 +528,5 @@ if __name__ == "__main__":
         zipf_scale_exp(fnpath, host, 0.6, 50)
         zipf_scale_exp(fnpath, host, 1.001, 50)
         zipf_scale_exp(fnpath, host, 1.4, 50)
-    system("scp data.out tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/data/")
+    if options.scp and not options.short:
+        system("scp data.out tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/data/")
