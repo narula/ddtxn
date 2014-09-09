@@ -9,7 +9,6 @@ import (
 	"sync/atomic"
 )
 
-var ZipfDist = flag.Float64("zipf", 1, "Zipfian distribution theta. -1 means use -contention instead")
 var partition = flag.Bool("partition", false, "Whether or not to partition the non-contended keys amongst the cores")
 
 type Buy struct {
@@ -22,11 +21,12 @@ type Buy struct {
 	nworkers        int
 	ngo             int
 	validate        []int32
+	zipfd           float64
 	z               []*ddtxn.Zipf
 	padding1        [128]byte
 }
 
-func (b *Buy) Init(np, nb, nw, rr, ngo int, ncrr float64) {
+func (b *Buy) Init(np, nb, nw, rr, ngo int, ncrr, zipfd float64) {
 	b.nproducts = np
 	b.nbidders = nb
 	b.nworkers = nw
@@ -35,13 +35,14 @@ func (b *Buy) Init(np, nb, nw, rr, ngo int, ncrr float64) {
 	b.ncontended_rate = int(ncrr * float64(rr))
 	b.validate = make([]int32, nb)
 	b.sp = uint32(nb / nw)
-	if *ZipfDist != -1 {
+	if zipfd != -1 {
 		b.z = make([]*ddtxn.Zipf, nw)
 		for i := 0; i < nw; i++ {
 			r := rand.New(rand.NewSource(int64(i * 38748767)))
-			b.z[i] = ddtxn.NewZipf(r, *ZipfDist, 1, uint64(b.nbidders-1))
+			b.z[i] = ddtxn.NewZipf(r, zipfd, 1, uint64(b.nbidders-1))
 		}
 	}
+	b.zipfd = zipfd
 	dlog.Printf("Read rate %v, not contended: %v\n", b.read_rate, b.ncontended_rate)
 }
 
@@ -71,7 +72,7 @@ func (b *Buy) MakeOne(w int, local_seed *uint32, sp uint32, txn *ddtxn.Query) {
 		bidder = int(ddtxn.RandN(local_seed, uint32(b.nbidders)))
 	}
 	x := int(ddtxn.RandN(local_seed, 100))
-	if *ZipfDist > 0 {
+	if b.zipfd > 0 {
 		product = int(b.z[w].Uint64())
 	} else {
 		product = int(ddtxn.RandN(local_seed, uint32(b.nproducts)))

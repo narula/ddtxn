@@ -167,7 +167,14 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 
 func (c *Coordinator) IncrementEpoch(force bool) {
 	c.PotentialPhaseChanges++
-	move_dd, remove_dd := c.Stats()
+	s := c.Workers[0].store
+	var move_dd, remove_dd map[Key]bool
+	if *AlwaysSplit {
+		c.Coordinate = true
+		s.any_dd = true
+	} else {
+		move_dd, remove_dd = c.Stats()
+	}
 	if !c.Coordinate && !force {
 		return
 	}
@@ -195,23 +202,23 @@ func (c *Coordinator) IncrementEpoch(force bool) {
 		}
 
 	}
-
-	s := c.Workers[0].store
 	// Merge dd
-	if move_dd != nil {
-		for k, _ := range move_dd {
-			br, _ := s.getKey(k)
-			br.dd = true
-			s.dd[k] = true
-			WMoved += 1
+	if !*AlwaysSplit {
+		if move_dd != nil {
+			for k, _ := range move_dd {
+				br, _ := s.getKey(k)
+				br.dd = true
+				s.dd[k] = true
+				WMoved += 1
+			}
 		}
-	}
-	if remove_dd != nil {
-		for k, _ := range remove_dd {
-			br, _ := s.getKey(k)
-			br.dd = false
-			s.dd[k] = false
-			RMoved += 1
+		if remove_dd != nil {
+			for k, _ := range remove_dd {
+				br, _ := s.getKey(k)
+				br.dd = false
+				s.dd[k] = false
+				RMoved += 1
+			}
 		}
 	}
 
@@ -271,16 +278,41 @@ func (c *Coordinator) Process() {
 	}
 }
 
+func compute(w *Worker, txn int) (int64, int64) {
+	var total int64
+	var sum int64
+	var i int64
+	for i = 0; i < TIMES; i++ {
+		total = total + w.times[txn][i]
+		sum = sum + (w.times[txn][i] * i)
+	}
+	var x99 int64 = int64(float64(total) * .99)
+	var y99 int64
+	var v99 int64
+	for i = 0; i < TIMES; i++ {
+		y99 = y99 + w.times[txn][i]
+		if y99 >= x99 {
+			v99 = i
+			break
+		}
+	}
+	dlog.Printf("%v avg: %v us; 99: %v us, x99: %v, sum: %v, total: %v \n", txn, sum/total, v99, x99, sum, total)
+	return sum / total, v99
+}
+
 func (c *Coordinator) Latency() (string, string) {
 	if !*Latency {
 		return "", ""
 	}
 	for i := 1; i < c.n; i++ {
-		c.Workers[0].lhr.Combine(c.Workers[i].lhr)
-		c.Workers[0].lhw.Combine(c.Workers[i].lhw)
+		for j := 0; j < 4; j++ {
+			for k := 0; k < TIMES; k++ {
+				c.Workers[0].times[j][k] = c.Workers[0].times[j][k] + c.Workers[i].times[j][k]
+			}
+		}
 	}
-	lhr := c.Workers[0].lhr
-	lhw := c.Workers[0].lhw
-	return fmt.Sprintf("Read 25: %v\nRead 50: %v\nRead 75: %v\nRead 99: %v\nRead Avg: %v\n", lhr.GetPercentile(25), lhr.GetPercentile(50), lhr.GetPercentile(75), lhr.GetPercentile(99), lhr.Avg()), fmt.Sprintf("Write 25: %v\nWrite 50: %v\nWrite 75: %v\nWrite 99: %v\n Write Avg: %v\n", lhw.GetPercentile(25), lhw.GetPercentile(50), lhw.GetPercentile(75), lhw.GetPercentile(99), lhw.Avg())
+	x, y := compute(c.Workers[0], D_BUY)
+	x2, y2 := compute(c.Workers[0], D_READ_TWO)
+	return fmt.Sprintf("Read 99: %v\nRead Avg: %v\n", y2, x2), fmt.Sprintf("Write 99: %v\nWrite Avg: %v\n", y, x)
 
 }
