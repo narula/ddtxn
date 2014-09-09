@@ -1036,6 +1036,7 @@ func GetTxns(skewed bool, oldmode bool) []float64 {
 				5.47: RUBIS_SEARCHREG,
 				4.97: RUBIS_PUTBID,
 				40.0: RUBIS_BID,
+				//3.7:  RUBIS_BID,
 				2.13: RUBIS_VIEWUSER,
 				1.81: RUBIS_NEWITEM,
 				1.8:  RUBIS_REGISTER,
