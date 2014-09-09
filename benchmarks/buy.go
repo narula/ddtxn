@@ -29,6 +29,7 @@ var readrate = flag.Int("rr", 0, "Read rate %.  Rest are buys")
 var notcontended_readrate = flag.Float64("ncrr", .8, "Uncontended read rate %.  Default to .8")
 var dataFile = flag.String("out", "xdata.out", "Filename for output")
 var atomicIncr = flag.Bool("atomic", false, "NOT USED")
+var ZipfDist = flag.Float64("zipf", 1, "Zipfian distribution theta. -1 means use -contention instead")
 
 func main() {
 	flag.Parse()
@@ -54,7 +55,7 @@ func main() {
 	}
 	s := ddtxn.NewStore()
 	buy_app := &apps.Buy{}
-	buy_app.Init(nproducts, *nbidders, *nworkers, *readrate, *clientGoRoutines, *notcontended_readrate)
+	buy_app.Init(nproducts, *nbidders, *nworkers, *readrate, *clientGoRoutines, *notcontended_readrate, *ZipfDist)
 	dlog.Printf("Starting to initialize buy\n")
 	buy_app.Populate(s, nil)
 

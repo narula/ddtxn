@@ -167,7 +167,14 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 
 func (c *Coordinator) IncrementEpoch(force bool) {
 	c.PotentialPhaseChanges++
-	move_dd, remove_dd := c.Stats()
+	s := c.Workers[0].store
+	var move_dd, remove_dd map[Key]bool
+	if *AlwaysSplit {
+		c.Coordinate = true
+		s.any_dd = true
+	} else {
+		move_dd, remove_dd = c.Stats()
+	}
 	if !c.Coordinate && !force {
 		return
 	}
@@ -195,23 +202,23 @@ func (c *Coordinator) IncrementEpoch(force bool) {
 		}
 
 	}
-
-	s := c.Workers[0].store
 	// Merge dd
-	if move_dd != nil {
-		for k, _ := range move_dd {
-			br, _ := s.getKey(k)
-			br.dd = true
-			s.dd[k] = true
-			WMoved += 1
+	if !*AlwaysSplit {
+		if move_dd != nil {
+			for k, _ := range move_dd {
+				br, _ := s.getKey(k)
+				br.dd = true
+				s.dd[k] = true
+				WMoved += 1
+			}
 		}
-	}
-	if remove_dd != nil {
-		for k, _ := range remove_dd {
-			br, _ := s.getKey(k)
-			br.dd = false
-			s.dd[k] = false
-			RMoved += 1
+		if remove_dd != nil {
+			for k, _ := range remove_dd {
+				br, _ := s.getKey(k)
+				br.dd = false
+				s.dd[k] = false
+				RMoved += 1
+			}
 		}
 	}
 

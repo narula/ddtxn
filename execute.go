@@ -8,6 +8,8 @@ import (
 
 var SampleRate = flag.Int64("sr", 1000, "Sample every sr transactions\n")
 
+var AlwaysSplit = flag.Bool("split", false, "Split every piece of data\n")
+
 // Phases
 const (
 	SPLIT = iota
@@ -109,6 +111,9 @@ func (tx *OTransaction) Reset() {
 }
 
 func (tx *OTransaction) isSplit(br *BRecord) bool {
+	if *SysType == DOPPEL && tx.phase == SPLIT && *AlwaysSplit {
+		return true
+	}
 	return *SysType == DOPPEL && tx.phase == SPLIT && tx.s.any_dd && br != nil && br.dd
 }
 

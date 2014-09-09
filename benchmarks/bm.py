@@ -10,6 +10,7 @@ parser.add_option("--exp", action="store", type="string", dest="exp", default="c
 parser.add_option("--short", action="store_true", dest="short", default=False)
 parser.add_option("--allocate", action="store_true", dest="allocate", default=False)
 parser.add_option("--ncores", action="store", type="int", dest="default_ncores", default=-1)
+parser.add_option("--nsec", action="store", type="int", dest="nsec", default=10)
 parser.add_option("--contention", action="store", type="float", dest="default_contention", default=100000)
 parser.add_option("--rr", action="store", type="int", dest="read_rate", default=0)
 parser.add_option("--latency", action="store_true", dest="latency", default=False)
@@ -23,6 +24,7 @@ parser.add_option("--zipf", action="store", type="float", dest="zipf", default=-
 parser.add_option("--skew", action="store_true", dest="skew", default=False)
 parser.add_option("--partition", action="store_true", dest="partition", default=False)
 parser.add_option("--ncrr", action="store", type="float", dest="not_contended_read_rate", default=.8)
+parser.add_option("--cw", action="store", type="float", dest="conflict_weight", default=1.0)
 
 (options, args) = parser.parse_args()
 
@@ -30,10 +32,10 @@ ben_list_cpus = "socket@0,1,2,7,3-6"
 
 LATENCY_PART = " -latency=%s" % options.latency
 
-BASE_CMD = "GOGC=off numactl -C `list-cpus seq -n %d %s` ./%s -nprocs=%d -ngo=%d -nw=%d -nsec=%d -contention=%s -rr=%d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -atomic=%s -zipf=%s -out=data.out -ncrr=%s" + LATENCY_PART
+BASE_CMD = "GOGC=off numactl -C `list-cpus seq -n %d %s` ./%s -nprocs=%d -ngo=%d -nw=%d -nsec=%d -contention=%s -rr=%d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -atomic=%s -zipf=%s -out=data.out -ncrr=%s -cw=%.2f -split=%s" + LATENCY_PART
 
-def do_param(fn, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=options.phase, atomic=False, zipf=-1, ncrr=options.not_contended_read_rate, yval="total/sec"):
-    cmd = fill_cmd(rr, contention, ncpu, sys, list_cpus, wratio, phase, atomic, zipf, ncrr)
+def do_param(fn, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=options.phase, atomic=False, zipf=-1, ncrr=options.not_contended_read_rate, yval="total/sec", cw=options.conflict_weight, split=False):
+    cmd = fill_cmd(rr, contention, ncpu, sys, list_cpus, wratio, phase, atomic, zipf, ncrr, cw, split)
 
     if options.dprint:
         print cmd
@@ -82,27 +84,27 @@ def get_cpus(host):
         ncpus=[2, 4]
     return ncpus
 
-def fill_cmd(rr, contention, ncpus, systype, cpus_arg, wratio, phase, atomic, zipf, ncrr):
-    nsec = 10
+def fill_cmd(rr, contention, ncpus, systype, cpus_arg, wratio, phase, atomic, zipf, ncrr, cw, split):
+    nsec = options.nsec
     if options.short:
         nsec = 1
     bn = "buy"
     print bn
     if options.exp == "rubis":
         bn = "rubis"
-    if options.exp == "single" or options.exp == "zipf" or options.exp == "singlescale":
+    if options.exp == "zipf" or options.exp.find("single") == 0:
         bn = "single"
     xncpus = ncpus
-    cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr, atomic, zipf, ncrr)
+    cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr, atomic, zipf, ncrr, cw, split)
     if options.exp == "rubis":
         cmd = cmd + " -skew=%s" % options.skew
-    if options.exp == "single" or options.exp == "singlescale" :
+    if options.exp.find("single") == 0:
         # Zipf experiments are already not partitioned.
         cmd = cmd + " -partition=%s" % options.partition
     return cmd
 
-def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=options.phase, atomic=False, zipf=-1, ncrr=options.not_contended_read_rate):
-    cmd = fill_cmd(rr, contention, ncpu, sys, list_cpus, wratio, phase, atomic, zipf, ncrr)
+def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=options.phase, atomic=False, zipf=-1, ncrr=options.not_contended_read_rate, cw=options.conflict_weight, split=False):
+    cmd = fill_cmd(rr, contention, ncpu, sys, list_cpus, wratio, phase, atomic, zipf, ncrr, cw, split)
     run_one(f, cmd)
     f.write("\t")
 
@@ -168,6 +170,55 @@ def ncrr_exp(fnpath, host, rr, ncores):
         do(f, rr, -1, ncores, cpu_args, 0, zipf=1.4, ncrr=i)
         do(f, rr, -1, ncores, cpu_args, 1, zipf=1.4, ncrr=i)
         do(f, rr, -1, ncores, cpu_args, 2, zipf=1.4, ncrr=i)
+        f.write("\n")
+    f.close()
+    if options.scp:
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
+
+def single_reads_exp(fnpath, host, ncores):
+    fnn = '%s-singler.data' % (host)
+    filename=os.path.join(fnpath, fnn)
+    f = open(filename, 'w')
+    cpus = get_cpus(host)
+    f.write("#Doppel\tOCC\t2PL\n")
+    cpu_args = ""
+    if host == "ben":
+        cpu_args = ben_list_cpus
+    rr = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    if options.short:
+        rr = [0, 50, 100]
+    for i in rr:
+        f.write("%d"% i)
+        f.write("\t")
+        do(f, 50, i, ncores, cpu_args, 0)
+        do(f, 50, i, ncores, cpu_args, 1)
+        do(f, 50, i, ncores, cpu_args, 2)
+        f.write("\n")
+    f.close()
+    if options.scp:
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
+
+def single_rw_exp(fnpath, host, ncores):
+    fnn = '%s-singleh.data' % (host)
+    filename=os.path.join(fnpath, fnn)
+    f = open(filename, 'w')
+    cpus = get_cpus(host)
+    f.write("#Doppel\tOCC\t2PL\n")
+    cpu_args = ""
+    if host == "ben":
+        cpu_args = ben_list_cpus
+    rr = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    if options.short:
+        rr = [0, 50]
+    for i in rr:
+        f.write("%d"% i)
+#        f.write("\t")
+#        do(f, i, 100, ncores, cpu_args, 0)
+#        do(f, i, 100, ncores, cpu_args, 1)
+#        do(f, i, 100, ncores, cpu_args, 2)
+        do(f, i, 100, ncores, cpu_args, 0, wratio=.5, cw=100.0, split=True)
         f.write("\n")
     f.close()
     if options.scp:
@@ -345,7 +396,7 @@ def phase_exp(fnpath, host, ncores):
     fnn = '%s-phase-%d.data' % (host, ncores)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
-    phase_len = [5, 10, 15, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    phase_len = [1, 2, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
     if options.short:
         phase_len = [20, 160]
     cpu_args = ""
@@ -356,9 +407,33 @@ def phase_exp(fnpath, host, ncores):
     for i in phase_len:
         f.write("%d"% i)
         f.write("\t")
-        do_param(f, 10, -1, ncores, cpu_args, 0, phase=i, zipf=1.4, yval="Read Avg")
-        do_param(f, 50, -1, ncores, cpu_args, 0, phase=i, zipf=1.4, yval="Read Avg")
-        do_param(f, 50, 1, ncores, cpu_args, 0, phase=i, zipf=-1, yval="Read Avg")
+        do_param(f, 10, -1, ncores, cpu_args, 0, phase=i, zipf=1.4, yval="Read Avg", ncrr=0)
+        do_param(f, 50, -1, ncores, cpu_args, 0, phase=i, zipf=1.4, yval="Read Avg", ncrr=0)
+        do_param(f, 50, 1, ncores, cpu_args, 0, phase=i, zipf=-1, yval="Read Avg", ncrr=0)
+        f.write("\n")
+    f.close()
+    if options.scp:
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
+
+def phase_tps_exp(fnpath, host, ncores):
+    fnn = '%s-phase-tps-%d.data' % (host, ncores)
+    filename=os.path.join(fnpath, fnn)
+    f = open(filename, 'w')
+    phase_len = [1, 2, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    if options.short:
+        phase_len = [20, 160]
+    cpu_args = ""
+    if host == "ben":
+        cpu_args = ben_list_cpus
+
+    f.write("#Doppel\n")
+    for i in phase_len:
+        f.write("%d"% i)
+        f.write("\t")
+        do(f, 10, -1, ncores, cpu_args, 0, phase=i, zipf=1.4, ncrr=0)
+        do(f, 50, -1, ncores, cpu_args, 0, phase=i, zipf=1.4, ncrr=0)
+        do(f, 50, 1, ncores, cpu_args, 0, phase=i, zipf=-1, ncrr=0)
         f.write("\n")
     f.close()
     if options.scp:
@@ -450,10 +525,16 @@ if __name__ == "__main__":
         rw_exp(fnpath, host, options.default_contention, options.default_ncores)
     elif options.exp == "phase":
         phase_exp(fnpath, host, options.default_ncores)
+    elif options.exp == "phasetps":
+        phase_tps_exp(fnpath, host, options.default_ncores)
     elif options.exp == "products":
         products_exp(fnpath, host, options.read_rate, options.default_ncores)
     elif options.exp == "single":
         single_exp(fnpath, host, 0, options.default_ncores)
+    elif options.exp == "singlereads":
+        single_reads_exp(fnpath, host, options.default_ncores)
+    elif options.exp == "singlerw":
+        single_rw_exp(fnpath, host, options.default_ncores)
     elif options.exp == "singlescale":
         single_scale_exp(fnpath, host, options.default_contention, options.read_rate)
     elif options.exp == "zipf":
