@@ -528,6 +528,7 @@ type Rec struct {
 	ve     Entry
 	kt     KeyType
 	noset  bool
+	key    Key
 }
 
 // Not threadsafe.  Tracks execution of transaction.
@@ -588,6 +589,7 @@ func (tx *LTransaction) Read(k Key) (*BRecord, error) {
 	tx.keys[n].br = br
 	tx.keys[n].read = true
 	tx.keys[n].noset = false
+	tx.keys[n].key = k
 	return br, nil
 }
 
@@ -616,12 +618,13 @@ func (tx *LTransaction) MaybeWrite(k Key) {
 	tx.keys[n].br = br
 	tx.keys[n].read = false
 	tx.keys[n].noset = true
+	tx.keys[n].key = k
 }
 
 func (tx *LTransaction) already_exists(k Key) (bool, int) {
 	n := len(tx.keys)
 	for i := 0; i < len(tx.keys); i++ {
-		if tx.keys[i].br.key == k {
+		if tx.keys[i].key == k {
 			return true, i
 		}
 	}
@@ -677,6 +680,7 @@ func (tx *LTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 		tx.keys[n].vint32 = a
 		tx.keys[n].kt = op
 		tx.keys[n].noset = false
+		tx.keys[n].key = k
 		return nil
 	}
 	br := tx.make_or_get_key(k, op)
@@ -686,6 +690,7 @@ func (tx *LTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 	tx.keys[n].vint32 = a
 	tx.keys[n].kt = op
 	tx.keys[n].noset = false
+	tx.keys[n].key = k
 	return nil
 }
 
@@ -702,6 +707,7 @@ func (tx *LTransaction) Write(k Key, v Value, op KeyType) {
 		// Already locked.
 		tx.keys[n].v = v
 		tx.keys[n].kt = op
+		tx.keys[n].key = k
 		return
 	}
 	br := tx.make_or_get_key(k, op)
@@ -711,6 +717,7 @@ func (tx *LTransaction) Write(k Key, v Value, op KeyType) {
 	tx.keys[n].v = v
 	tx.keys[n].kt = op
 	tx.keys[n].noset = false
+	tx.keys[n].key = k
 }
 
 func (tx *LTransaction) WriteList(k Key, l Entry, op KeyType) error {
@@ -725,6 +732,7 @@ func (tx *LTransaction) WriteList(k Key, l Entry, op KeyType) error {
 		// Already locked.  TODO: append
 		tx.keys[n].ve = l
 		tx.keys[n].kt = op
+		tx.keys[n].key = k
 		return nil
 	}
 	br := tx.make_or_get_key(k, op)
@@ -734,6 +742,7 @@ func (tx *LTransaction) WriteList(k Key, l Entry, op KeyType) error {
 	tx.keys[n].ve = l
 	tx.keys[n].kt = op
 	tx.keys[n].noset = false
+	tx.keys[n].key = k
 	return nil
 }
 
@@ -751,6 +760,7 @@ func (tx *LTransaction) WriteOO(k Key, a int32, v Value, op KeyType) error {
 			tx.keys[n].v = v
 			tx.keys[n].vint32 = a
 			tx.keys[n].kt = op
+			tx.keys[n].key = k
 		}
 		return nil
 	}
@@ -762,6 +772,7 @@ func (tx *LTransaction) WriteOO(k Key, a int32, v Value, op KeyType) error {
 	tx.keys[n].v = v
 	tx.keys[n].kt = op
 	tx.keys[n].noset = false
+	tx.keys[n].key = k
 	return nil
 }
 
