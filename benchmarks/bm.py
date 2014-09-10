@@ -21,18 +21,19 @@ parser.add_option("--wratio", action="store", type="float", dest="wratio", defau
 parser.add_option("--sr", action="store", type="int", dest="sr", default=800)
 parser.add_option("--phase", action="store", type="int", dest="phase", default=20)
 parser.add_option("--zipf", action="store", type="float", dest="zipf", default=-1)
-parser.add_option("--skew", action="store_true", dest="skew", default=False)
 parser.add_option("--partition", action="store_true", dest="partition", default=False)
 parser.add_option("--ncrr", action="store", type="float", dest="not_contended_read_rate", default=.8)
 parser.add_option("--cw", action="store", type="float", dest="conflict_weight", default=1.0)
+parser.add_option("--version", action="store", type="int", dest="version", default=0)
 
 (options, args) = parser.parse_args()
 
 ben_list_cpus = "socket@0,1,2,7,3-6"
 
 LATENCY_PART = " -latency=%s" % options.latency
+VERSION_PART = " -v=%d" % options.version
 
-BASE_CMD = "GOGC=off numactl -C `list-cpus seq -n %d %s` ./%s -nprocs=%d -ngo=%d -nw=%d -nsec=%d -contention=%s -rr=%d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -atomic=%s -zipf=%s -out=data.out -ncrr=%s -cw=%.2f -split=%s" + LATENCY_PART
+BASE_CMD = "GOGC=off numactl -C `list-cpus seq -n %d %s` ./%s -nprocs=%d -ngo=%d -nw=%d -nsec=%d -contention=%s -rr=%d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -atomic=%s -zipf=%s -out=data.out -ncrr=%s -cw=%.2f -split=%s" + LATENCY_PART + VERSION_PART
 
 def do_param(fn, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=options.phase, atomic=False, zipf=-1, ncrr=options.not_contended_read_rate, yval="total/sec", cw=options.conflict_weight, split=False):
     cmd = fill_cmd(rr, contention, ncpu, sys, list_cpus, wratio, phase, atomic, zipf, ncrr, cw, split)
@@ -90,14 +91,12 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg, wratio, phase, atomic, zi
         nsec = 1
     bn = "buy"
     print bn
-    if options.exp == "rubis":
+    if options.exp.find("rubis") == 0:
         bn = "rubis"
     if options.exp == "zipf" or options.exp.find("single") == 0:
         bn = "single"
     xncpus = ncpus
     cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr, atomic, zipf, ncrr, cw, split)
-    if options.exp == "rubis":
-        cmd = cmd + " -skew=%s" % options.skew
     if options.exp.find("single") == 0:
         # Zipf experiments are already not partitioned.
         cmd = cmd + " -partition=%s" % options.partition
@@ -250,7 +249,7 @@ def zipf_scale_exp(fnpath, host, zipf, rr):
         f.write("\n")
     f.close()
 
-def rw_exp(fnpath, host, contention, ncores):
+def rw_exp(fnpath, host, contention, ncores, zipf, ncrr):
     fnn = '%s-rw-%d-%d-%.2f.data' % (host, contention, ncores, options.zipf)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
@@ -264,9 +263,9 @@ def rw_exp(fnpath, host, contention, ncores):
     for i in rr:
         f.write("%d"% i)
         f.write("\t")
-        do(f, i, contention, ncores, cpu_args, 0, zipf=options.zipf)
-        do(f, i, contention, ncores, cpu_args, 1, zipf=options.zipf)
-        do(f, i, contention, ncores, cpu_args, 2, zipf=options.zipf)
+        do(f, i, contention, ncores, cpu_args, 0, zipf=zipf, ncrr=ncrr)
+        do(f, i, contention, ncores, cpu_args, 1, zipf=zipf, ncrr=ncrr)
+        do(f, i, contention, ncores, cpu_args, 2, zipf=zipf, ncrr=ncrr)
         f.write("\n")
     f.close()
 
@@ -429,9 +428,31 @@ def run_latency(cmd, prefix, sys):
 def latency():
     pass
 
-def rubis_exp(fnpath, host, contention, rr):
+def rubis_exp(fnpath, host, contention, ncores):
     contention = int(contention)
-    fnn = '%s-rubis-%d-%s.data' % (host, contention, options.skew)
+    fnn = '%s-rubis-%d.data' % (host, contention)
+    filename=os.path.join(fnpath, fnn)
+    f = open(filename, 'w')
+    f.write("#\tDoppel\tOCC\t2PL\n")
+    cpu_args = ""
+    if host == "ben":
+        cpu_args = ben_list_cpus
+#    ncrr = [3.7, 20, 60, 80]
+    ncrr = [3.7, 20, 40, 60, 80]
+    for i in ncrr:
+        f.write("%d"% i)
+        f.write("\t")
+        do(f, 0, contention, ncores, cpu_args, 0, zipf=1.4, ncrr=i)
+        do(f, 0, contention, ncores, cpu_args, 1, zipf=1.4, ncrr=i)
+#        do(f, 0, contention, ncores, cpu_args, 2, zipf=-1, ncrr=i)
+        f.write("\n")
+    f.close()
+    if options.scp:
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
+        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
+
+def rubisz_exp(fnpath, host, ncores, ncrr):
+    fnn = '%s-rubis.data' % (host,)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     cpus = get_cpus(host)
@@ -439,18 +460,16 @@ def rubis_exp(fnpath, host, contention, rr):
     cpu_args = ""
     if host == "ben":
         cpu_args = ben_list_cpus
-    for i in cpus:
+    theta = [.00001, .2, .4, .6, .8, 1.00001, 1.2, 1.4]#, 1.6, 1.8, 2.0]
+#    theta = [1.6, 1.8, 2.0]
+    for i in theta:
         f.write("%d"% i)
         f.write("\t")
-        do(f, rr, contention, i, cpu_args, 0, zipf=-1)
-        do(f, rr, contention, i, cpu_args, 1, zipf=-1)
-        do(f, rr, contention, i, cpu_args, 2, zipf=-1)
+        do(f, 0, 30, ncores, cpu_args, 0, zipf=i, ncrr=ncrr)
+        do(f, 0, 30, ncores, cpu_args, 1, zipf=i, ncrr=ncrr)
+        do(f, 0, 30, ncores, cpu_args, 2, zipf=i, ncrr=ncrr)
         f.write("\n")
     f.close()
-    if options.scp:
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/src/txn/src/txn/data/" % filename)
-        system("scp %s tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/graphs/" % filename)
-
 
 if __name__ == "__main__":
     host = socket.gethostname()
@@ -480,7 +499,9 @@ if __name__ == "__main__":
         else:
             contention_exp(fnpath, host, options.default_contention, options.read_rate, options.zipf)
     elif options.exp == "rw":
-        rw_exp(fnpath, host, options.default_contention, options.default_ncores)
+        zipf = 1.4
+        ncrr = 0.0
+        rw_exp(fnpath, host, options.default_contention, options.default_ncores, zipf, ncrr)
     elif options.exp == "phase":
         phase_exp(fnpath, host, options.default_ncores)
     elif options.exp == "phasetps":
@@ -498,12 +519,9 @@ if __name__ == "__main__":
     elif options.exp == "zipf":
         zipf_exp(fnpath, host, 0, options.default_ncores)
     elif options.exp == "rubis":
-        if options.read_rate == -1:
-            rubis_exp(fnpath, host, 3, 0)
-            options.skew = True
-            rubis_exp(fnpath, host, 100000, 0)
-        else:
-            rubis_exp(fnpath, host, options.default_contention, options.read_rate)
+        rubis_exp(fnpath, host, 3, options.default_ncores)
+    elif options.exp == "rubisz":
+        rubisz_exp(fnpath, host, options.default_ncores, options.not_contended_read_rate)
     elif options.exp == "all":
         options.exp = "single"
         single_exp(fnpath, host, 0, options.default_ncores)
@@ -514,9 +532,6 @@ if __name__ == "__main__":
         options.exp="zipf"
         zipf_exp(fnpath, host, 0, options.default_ncores)
         options.exp="rubis"
-        options.skew = False
-        rubis_exp(fnpath, host, 3, 0)
-        options.skew = True
         rubis_exp(fnpath, host, 100000, 0)
     elif options.exp == "wratio":
         wratio_exp(fnpath, host, options.default_contention, options.read_rate)

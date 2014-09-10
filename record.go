@@ -20,9 +20,13 @@ const (
 	MAX
 	WRITE
 	LIST
-	ORDERED_PAIR
+	OOWRITE
 )
 
+type Overwrite struct {
+	v Value
+	i int32
+}
 type BRecord struct {
 	padding   [128]byte
 	key       Key
@@ -58,6 +62,13 @@ func MakeBR(k Key, val Value, kt KeyType) *BRecord {
 		if val != nil {
 			b.value = val
 		}
+	case OOWRITE:
+		if val == nil {
+		} else {
+			x := val.(Overwrite)
+			b.value = x.v
+			b.int_value = x.i
+		}
 	case LIST:
 		if val == nil {
 			b.entries = make([]Entry, 0)
@@ -65,8 +76,6 @@ func MakeBR(k Key, val Value, kt KeyType) *BRecord {
 			b.entries = make([]Entry, 1)
 			b.entries[0] = val.(Entry)
 		}
-	case ORDERED_PAIR:
-		return nil
 	}
 	return b
 }
@@ -113,6 +122,11 @@ func (br *BRecord) Value() Value {
 		return br.value
 	case LIST:
 		return br.entries
+	case OOWRITE:
+		if br.value == nil {
+			log.Fatalf("How %v\n", br.key)
+		}
+		return Overwrite{v: br.value, i: br.int_value}
 	}
 	return nil
 }
@@ -195,10 +209,15 @@ func (br *BRecord) Apply(val Value) {
 		defer br.mu.Unlock()
 		entries := val.([]Entry)
 		br.listApply(entries)
+	case OOWRITE:
+		br.mu.Lock()
+		defer br.mu.Unlock()
+		x := val.(Overwrite)
+		if br.int_value < x.i {
+			br.int_value = x.i
+			br.value = x.v
+		}
 	}
-	// if *Conflicts {
-	// 	br.conflict = 0
-	// }
 }
 
 type Entry struct {

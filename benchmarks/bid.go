@@ -26,7 +26,7 @@ var doValidate = flag.Bool("validate", false, "Validate")
 var contention = flag.Int("contention", 3, "Amount of contention, higher is more")
 var nbidders = flag.Int("nb", 1000000, "Bidders in store, default is 1M")
 var readrate = flag.Int("rr", 0, "NOT USED")
-var notcontended_readrate = flag.Float64("ncrr", 40.0, "BID RATE")
+var notcontended_readrate = flag.Float64("ncrr", 40.0, "NOT USED")
 var dataFile = flag.String("out", "xdata.out", "Filename for output")
 var atomicIncr = flag.Bool("atomic", false, "NOT USED")
 var rounds = flag.Bool("rounds", true, "Preallocate keys in rounds instead of entirely in parallel")
@@ -49,8 +49,6 @@ func main() {
 		}
 	}
 
-	bidrate := *notcontended_readrate
-
 	var nproducts int
 	if *contention > 0 {
 		nproducts = *nbidders / int(*contention)
@@ -68,9 +66,9 @@ func main() {
 	}
 
 	rubis := &apps.Rubis{}
-	rubis.Init(nproducts, *nbidders, *nworkers, *clientGoRoutines, *ZipfDist, bidrate)
-	rubis.Populate(s, coord)
-	fmt.Printf("Done populating rubis\n")
+	rubis.Init(nproducts, *nbidders, *nworkers, *clientGoRoutines, *ZipfDist, 0)
+	rubis.PopulateBids(s, coord) // Just creates items to bid on
+	fmt.Printf("Done populating bids\n")
 
 	if !*ddtxn.Allocate {
 		prealloc := time.Now()
@@ -80,24 +78,8 @@ func main() {
 
 		users_per_worker := 100000.0
 		bids_per_worker := 200000.0
-		if bidrate > 20 {
-			users_per_worker = 100000
-			bids_per_worker = 1500000
-		}
-
-		if *nworkers <= 4 {
-			users_per_worker = users_per_worker * 1.5
-			bids_per_worker = bids_per_worker * 1.5
-		}
-		if *nworkers >= 70 {
-			users_per_worker = users_per_worker * .75
-			bids_per_worker = bids_per_worker * .75
-		} else if *nworkers >= 50 {
-			users_per_worker = users_per_worker * .75
-			bids_per_worker = bids_per_worker * .75
-		}
 		if *nworkers == 20 {
-			bids_per_worker *= 5
+			bids_per_worker *= 10
 			users_per_worker *= 2
 		}
 
@@ -116,7 +98,7 @@ func main() {
 					}
 					wg.Add(1)
 					go func(i int) {
-						coord.Workers[i].PreallocateRubis(int(users_per_worker), int(bids_per_worker), *nbidders)
+						coord.Workers[i].PreallocateRubis(0, int(bids_per_worker), ddtxn.NUM_ITEMS)
 						wg.Done()
 					}(i)
 				}
@@ -127,7 +109,7 @@ func main() {
 			for i := 0; i < *nworkers; i++ {
 				wg.Add(1)
 				go func(i int) {
-					coord.Workers[i].PreallocateRubis(int(users_per_worker), int(bids_per_worker), *nbidders)
+					coord.Workers[i].PreallocateRubis(0, int(bids_per_worker), ddtxn.NUM_ITEMS)
 					wg.Done()
 				}(i)
 			}
@@ -161,7 +143,7 @@ func main() {
 				if len(retries) > 0 && retries[0].TS.Before(tm) {
 					t = heap.Pop(&retries).(ddtxn.Query)
 				} else {
-					rubis.MakeOne(w.ID, &local_seed, &t)
+					rubis.MakeBid(w.ID, &local_seed, &t)
 					if *ddtxn.Latency {
 						t.S = time.Now()
 					}
@@ -236,6 +218,8 @@ func main() {
 	out := fmt.Sprintf("  nworkers: %v, nwmoved: %v, nrmoved: %v, sys: %v, total/sec: %v, abortrate: %.2f, stashrate: %.2f, nbidders: %v, nitems: %v, contention: %v, done: %v, actual time: %v, throughput: ns/txn: %v, naborts: %v, coord time: %v, coord stats time: %v, total worker time transitioning: %v, nstashed: %v, rlock: %v, wrratio: %v, nsamples: %v, getkeys: %v, ddwrites: %v, nolock: %v, failv: %v, stashdone: %v, nfast: %v, gaveup: %v,  epoch changes: %v, potential: %v  ", *nworkers, ddtxn.WMoved, ddtxn.RMoved, *ddtxn.SysType, float64(nitr)/end.Seconds(), 100*float64(stats[ddtxn.NABORTS])/float64(nitr+stats[ddtxn.NABORTS]), 100*float64(stats[ddtxn.NSTASHED])/float64(nitr+stats[ddtxn.NABORTS]), *nbidders, nproducts, *contention, nitr, end, end.Nanoseconds()/nitr, stats[ddtxn.NABORTS], ddtxn.Time_in_IE, ddtxn.Time_in_IE1, nwait, stats[ddtxn.NSTASHED], *ddtxn.UseRLocks, *ddtxn.WRRatio, stats[ddtxn.NSAMPLES], stats[ddtxn.NGETKEYCALLS], stats[ddtxn.NDDWRITES], stats[ddtxn.NO_LOCK], stats[ddtxn.NFAIL_VERIFY], stats[ddtxn.NDIDSTASHED], ddtxn.Nfast, gave_up[0], ddtxn.NextEpoch, coord.PotentialPhaseChanges)
 	fmt.Printf(out)
 	fmt.Printf("\n")
+
+	fmt.Printf("DD: %v\n", coord.Workers[0].Store().DD())
 	f, err := os.OpenFile(*dataFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
 		panic(err)

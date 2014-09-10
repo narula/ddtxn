@@ -253,6 +253,14 @@ func WriteCountKeyStats(coord *Coordinator, nb int, f *os.File) {
 	f.WriteString(fmt.Sprintf("next key (%v): %v\n", second_idx, float64(second)/float64(sum)))
 }
 
+func CollectOne(w *Worker) int64 {
+	var nitr int64
+	for j := 0; j < LAST_TXN; j++ {
+		nitr = nitr + w.Nstats[j]
+	}
+	return nitr
+}
+
 func CollectCounts(coord *Coordinator, stats []int64) (int64, time.Duration, time.Duration) {
 	var nitr int64
 	var nwait time.Duration

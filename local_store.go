@@ -15,6 +15,7 @@ type LocalStore struct {
 	max        map[Key]int32
 	bw         map[Key]Value
 	lists      map[Key][]Entry
+	oos        map[Key]Overwrite
 	s          *Store
 	Ncopy      int64
 	candidates *Candidates
@@ -29,6 +30,7 @@ func NewLocalStore(s *Store) *LocalStore {
 		max:        make(map[Key]int32),
 		bw:         make(map[Key]Value),
 		lists:      make(map[Key][]Entry),
+		oos:        make(map[Key]Overwrite),
 		s:          s,
 		candidates: &Candidates{make(map[Key]*OneStat), &sh},
 	}
@@ -46,6 +48,18 @@ func (ls *LocalStore) ApplyList(key Key, entry Entry) {
 	ls.lists[key] = append(l, entry)
 }
 
+func (ls *LocalStore) ApplyOO(key Key, a int32, v Value) {
+	y, ok := ls.oos[key]
+	if !ok {
+		y = Overwrite{v: v, i: a}
+	}
+	if y.i < a {
+		y.i = a
+		y.v = v
+		ls.oos[key] = y
+	}
+}
+
 func (ls *LocalStore) Apply(key Key, key_type KeyType, v Value, op KeyType) {
 	if op != key_type {
 		// Perhaps do something.  When is this set?
@@ -61,6 +75,9 @@ func (ls *LocalStore) Apply(key Key, key_type KeyType, v Value, op KeyType) {
 		}
 	case WRITE:
 		ls.bw[key] = v
+	case OOWRITE:
+		x := v.(Overwrite)
+		ls.ApplyOO(key, x.i, x.v)
 	case LIST:
 		ls.ApplyList(key, v.(Entry))
 	}
@@ -121,6 +138,17 @@ func (ls *LocalStore) Merge() {
 		d := ls.s.getOrCreateTypedKey(k, nil, LIST)
 		d.Apply(v)
 		delete(ls.lists, k)
+		ls.Ncopy++
+	}
+
+	for k, v := range ls.oos {
+		if *SysType == OCC {
+			debug.PrintStack()
+			log.Fatalf("Why is there derived data %v %v\n", k, v)
+		}
+		d := ls.s.getOrCreateTypedKey(k, nil, OOWRITE)
+		d.Apply(v)
+		delete(ls.oos, k)
 		ls.Ncopy++
 	}
 }

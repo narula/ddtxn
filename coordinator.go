@@ -101,23 +101,22 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 		o := heap.Pop(s.cand.h).(*OneStat)
 		br, _ := s.getKey(o.k)
 		if !br.dd {
-			if o.ratio() > *WRRatio && (o.writes > 1 || o.conflicts > 1) {
-				if len(s.dd) == 0 { // Higher threshold for the first one, since it kicks off phases
-					if o.ratio() > 1.33*(*WRRatio) && (o.writes > 1 || o.conflicts > 2) {
-						potential_dd_keys[o.k] = true
-						dlog.Printf("Moving %v to split r:%v w:%v c:%v s:%v ratio:%v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
-					} else {
-						dlog.Printf("Key %v didn't pass higher ratio threshold; len(s.dd)==0  r:%v w:%v c:%v s:%v ratio:%v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
-					}
-				} else {
+			if len(s.dd) == 0 {
+				// Higher threshold for the first one, since it kicks off phases
+				if o.ratio() > 1.33*(*WRRatio) && (o.writes > 1 || o.conflicts > 5) {
 					potential_dd_keys[o.k] = true
-					dlog.Printf("Moving %v to split r:%v w:%v c:%v s:%v ratio:%v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
+					dlog.Printf("move %v to split1 r:%v w:%v c:%v s:%v ra:%v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
+				} else {
+					dlog.Printf("%v no move inertia r:%v w:%v c:%v s:%v ra:%v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
 				}
-			} else {
-				dlog.Printf("Not enough writes or conflicts or high enough ratio yet for key : %v; r:%v w:%v c:%v s:%v ratio:%v; wr: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), *WRRatio)
+				continue
 			}
-		} else if br.dd {
-			// Key is split; might potentially move back
+			if o.ratio() > *WRRatio && (o.writes > 1 || o.conflicts > 1) {
+				potential_dd_keys[o.k] = true
+				dlog.Printf("move %v to split2 r:%v w:%v c:%v s:%v ra:%v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
+			} else {
+				dlog.Printf("too low; no move :%v; r:%v w:%v c:%v s:%v ra:%v; wr: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), *WRRatio)
+			}
 		}
 	}
 	// Check to see if we need to remove anything from dd
@@ -137,7 +136,7 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 			} else {
 				c.to_remove[k] = true
 			}
-			dlog.Printf("Moved %v from split r:%v w:%v c:%v s:%v ratio:%v\n", k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
+			dlog.Printf("move %v from split r:%v w:%v c:%v s:%v ratio:%v\n", k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
 		}
 	}
 	if len(s.dd) == 0 && len(potential_dd_keys) == 0 {

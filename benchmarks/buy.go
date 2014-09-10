@@ -23,13 +23,13 @@ var clientGoRoutines = flag.Int("ngo", 0, "Number of goroutines/workers generati
 var nworkers = flag.Int("nw", 0, "Number of workers")
 var doValidate = flag.Bool("validate", false, "Validate")
 
-var contention = flag.Float64("contention", 1000, "Amount of contention, higher is more")
+var contention = flag.Float64("contention", -1, "Amount of contention, higher is more")
 var nbidders = flag.Int("nb", 1000000, "Bidders in store, default is 1M")
 var readrate = flag.Int("rr", 0, "Read rate %.  Rest are buys")
 var notcontended_readrate = flag.Float64("ncrr", .8, "Uncontended read rate %.  Default to .8")
 var dataFile = flag.String("out", "xdata.out", "Filename for output")
 var atomicIncr = flag.Bool("atomic", false, "NOT USED")
-var ZipfDist = flag.Float64("zipf", 1, "Zipfian distribution theta. -1 means use -contention instead")
+var ZipfDist = flag.Float64("zipf", -1, "Zipfian distribution theta. -1 means use -contention instead")
 
 func main() {
 	flag.Parse()
@@ -47,8 +47,14 @@ func main() {
 			log.Fatalf("Cannot correctly validate without waiting for results; add -allocate\n")
 		}
 	}
+	if *contention == -1.0 && *ZipfDist == -1.0 {
+		log.Fatalf("Should use zipf or contention")
+	}
 	var nproducts int
 	if *contention > 0 {
+		if *ZipfDist > 0 {
+			log.Fatalf("can't use both")
+		}
 		nproducts = *nbidders / int(*contention)
 	} else {
 		nproducts = *nbidders

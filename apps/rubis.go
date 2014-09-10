@@ -3,7 +3,6 @@ package apps
 import (
 	"ddtxn"
 	"ddtxn/dlog"
-	"flag"
 	"fmt"
 	"log"
 	"math/rand"
@@ -11,10 +10,6 @@ import (
 	"sync/atomic"
 	"time"
 )
-
-var Skewed = flag.Bool("skew", false, "Rubis-C (skewed workload) or not, default Rubis-B")
-var Cont = flag.Float64("ccont", 1.04, "\"theta\" parameter for zipf")
-var Oldmode = flag.Bool("oldskew", false, "specify Rubis txn probs via \"skew\"")
 
 type Rubis struct {
 	sync.Mutex
@@ -31,12 +26,13 @@ type Rubis struct {
 	products   []uint64
 	sp         uint32
 	rates      []float64
-	padding1   [128]byte
 	pidIdx     map[uint64]int
 	zip        []*ddtxn.Zipf
+	zipfd      float64
+	padding1   [128]byte
 }
 
-func (b *Rubis) Init(np, nb, nw, ngo int) {
+func (b *Rubis) Init(np, nb, nw, ngo int, zipfd, bidrate float64) {
 	if ddtxn.NUM_ITEMS > np {
 		b.nproducts = np
 		b.products = make([]uint64, ddtxn.NUM_ITEMS)
@@ -52,8 +48,9 @@ func (b *Rubis) Init(np, nb, nw, ngo int) {
 	b.pidIdx = make(map[uint64]int, b.nproducts)
 	b.ratings = make(map[uint64]int32)
 	b.sp = uint32(nb / nw)
-	b.rates = ddtxn.GetTxns(*Skewed, *Oldmode)
+	b.rates = ddtxn.GetTxns(bidrate)
 	b.users = make([]uint64, nb)
+	b.zipfd = zipfd
 	b.zip = make([]*ddtxn.Zipf, nw)
 }
 
@@ -82,7 +79,7 @@ func (b *Rubis) Populate(s *ddtxn.Store, c *ddtxn.Coordinator) {
 		}
 
 		r := rand.New(rand.NewSource(time.Now().UnixNano()))
-		b.zip[wi] = ddtxn.NewZipf(r, *Cont, 1, uint64(len(b.products)))
+		b.zip[wi] = ddtxn.NewZipf(r, b.zipfd, 1, uint64(b.nproducts-1))
 	}
 	chunk := ddtxn.NUM_ITEMS / b.nworkers
 	for wi := 0; wi < b.nworkers; wi++ {
@@ -119,6 +116,82 @@ func (b *Rubis) Populate(s *ddtxn.Store, c *ddtxn.Coordinator) {
 	*dlog.Debug = tmp2
 }
 
+func (b *Rubis) PopulateBids(s *ddtxn.Store, c *ddtxn.Coordinator) {
+	tmp := *ddtxn.Allocate
+	tmp2 := *dlog.Debug
+	*ddtxn.Allocate = true
+	*dlog.Debug = false
+	chunk := ddtxn.NUM_ITEMS / b.nworkers
+	b.nbidders = 1
+	b.users = make([]uint64, 1)
+	ex := c.Workers[0].E
+	q := ddtxn.Query{
+		U1: uint64(rand.Intn(ddtxn.NUM_REGIONS)),
+		U2: 0,
+	}
+	r, err := ddtxn.RegisterUserTxn(q, ex)
+	if err != nil {
+		log.Fatalf("Could not create user; err:%v\n", err)
+	}
+	b.users[0] = r.V.(uint64)
+	if b.users[0] == 0 {
+		fmt.Printf("Created user 0; index;\n")
+	}
+	ex.Reset()
+
+	for wi := 0; wi < b.nworkers; wi++ {
+		w := c.Workers[wi]
+		ex := w.E
+		nx := rand.Intn(b.nbidders)
+		for i := chunk * wi; i < chunk*(wi+1); i++ {
+			q := ddtxn.Query{
+				T:  ddtxn.TID(i + 1),
+				S1: "xxx",
+				S2: "lovely",
+				U1: b.users[nx],
+				U2: 100,
+				U3: 100,
+				U4: 1000,
+				U5: 1000,
+				U6: 1,
+				U7: uint64(rand.Intn(ddtxn.NUM_CATEGORIES)),
+			}
+			r, err := ddtxn.NewItemTxn(q, ex)
+			if err != nil {
+				fmt.Printf("%v Could not create item index %v error: %v user_id: %v user index: %v nb: %v\n", wi, i, err, q.U1, nx, b.nbidders)
+				continue
+			}
+			v := r.V.(uint64)
+			b.products[i] = v
+			b.pidIdx[v] = i
+			k := ddtxn.BidsPerItemKey(v)
+			w.Store().CreateKey(k, nil, ddtxn.LIST)
+			ex.Reset()
+		}
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		b.zip[wi] = ddtxn.NewZipf(r, b.zipfd, 1, uint64(b.nproducts-1))
+	}
+	*ddtxn.Allocate = tmp
+	*dlog.Debug = tmp2
+}
+
+func (b *Rubis) MakeBid(w int, local_seed *uint32, txn *ddtxn.Query) {
+	txn.TXN = ddtxn.RUBIS_BID
+	bidder := b.users[0]
+	x := b.zip[w].Uint64()
+	//x := ddtxn.RandN(local_seed, uint32(b.nproducts))
+	if x >= uint64(len(b.products)) {
+		log.Fatalf("Huh %v %v %v\n", x, len(b.products), b.nproducts)
+	}
+	product := b.products[x]
+	txn.U1 = uint64(bidder)
+	if product == 0 {
+		log.Fatalf("store bid ID 0? %v %v", x, b.products[x])
+	}
+	txn.U2 = uint64(product)
+	txn.U3 = uint64(time.Now().UnixNano())
+}
+
 func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 	x := float64(ddtxn.RandN(local_seed, 100))
 	if x < b.rates[0] {
@@ -132,7 +205,8 @@ func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 			log.Fatalf("store bid ID 0? %v %v", x, b.products[x])
 		}
 		txn.U2 = uint64(product)
-		txn.A = int32(ddtxn.RandN(local_seed, 10))
+		//txn.U3 = uint64(ddtxn.RandN(local_seed, 10))
+		txn.U3 = uint64(time.Now().UnixNano())
 	} else if x < b.rates[1] {
 		txn.TXN = ddtxn.RUBIS_VIEWBIDHIST
 		x := ddtxn.RandN(local_seed, uint32(b.nproducts))
@@ -231,9 +305,9 @@ func (b *Rubis) Add(t ddtxn.Query) {
 	if t.TXN == ddtxn.RUBIS_BID {
 		x := b.pidIdx[t.U2]
 		atomic.AddInt32(&b.num_bids[x], 1)
-		for t.A > b.maxes[x] {
+		for int32(t.U3) > b.maxes[x] {
 			v := atomic.LoadInt32(&b.maxes[x])
-			done := atomic.CompareAndSwapInt32(&b.maxes[x], v, t.A)
+			done := atomic.CompareAndSwapInt32(&b.maxes[x], v, int32(t.U3))
 			if done {
 				break
 			}

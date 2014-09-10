@@ -132,7 +132,7 @@ func TestAuction(t *testing.T) {
 	jaid := r.V.(uint64)
 
 	tx = Query{TXN: RUBIS_NEWITEM, U1: jaid, S1: "burrito", S2: "slightly used burrito",
-		T:  -1,
+		T:  0,
 		U2: 1,   // initial price
 		U3: 2,   // reserve price
 		U4: 5,   // buy now price
@@ -147,7 +147,7 @@ func TestAuction(t *testing.T) {
 	}
 	burrito := r.V.(uint64)
 
-	tx = Query{TXN: RUBIS_BID, U1: jaid, U2: burrito, A: 20}
+	tx = Query{TXN: RUBIS_BID, U1: jaid, U2: burrito, U3: 20}
 	r, err = w.One(tx)
 	if err != nil {
 		t.Fatalf("Bid %v\n", err)

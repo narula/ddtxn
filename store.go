@@ -45,6 +45,10 @@ type Store struct {
 	padding2        [128]byte
 }
 
+func (s *Store) DD() map[Key]bool {
+	return s.dd
+}
+
 func NewStore() *Store {
 	x := make([]*OneStat, 0)
 	sh := StatsHeap(x)
@@ -145,6 +149,15 @@ func (s *Store) SetList(br *BRecord, ve Entry, op KeyType) {
 	br.AddOneToRecord(ve)
 }
 
+func (s *Store) SetOO(br *BRecord, a int32, v Value, op KeyType) {
+	if v != nil {
+		if a > br.int_value || br.value == nil {
+			br.int_value = a
+			br.value = v
+		}
+	}
+}
+
 func (s *Store) Set(br *BRecord, v Value, op KeyType) {
 	switch op {
 	case SUM:
@@ -159,6 +172,11 @@ func (s *Store) Set(br *BRecord, v Value, op KeyType) {
 	case LIST:
 		if v != nil {
 			br.AddOneToRecord(v.(Entry))
+		}
+	case OOWRITE:
+		if v != nil {
+			x := v.(Overwrite)
+			s.SetOO(br, x.i, x.v, OOWRITE)
 		}
 	}
 }

@@ -20,6 +20,7 @@ const (
 var SysType = flag.Int("sys", DOPPEL, "Type of system to run\n")
 var CountKeys = flag.Bool("ck", false, "Count keys accessed")
 var Latency = flag.Bool("latency", false, "Measure latency")
+var Version = flag.Int("v", 0, "Version counter to help distinguish runs\n")
 
 type TransactionFunc func(Query, ETransaction) (*Result, error)
 
@@ -351,7 +352,7 @@ func (w *Worker) PreallocateRubis(nx, nb, start int) {
 		k = MaxBidKey(uint64(x))
 		w.store.CreateKey(k, int32(0), MAX)
 		k = MaxBidBidderKey(uint64(x))
-		w.store.CreateKey(k, uint64(0), WRITE)
+		w.store.CreateKey(k, Overwrite{uint64(0), 0}, OOWRITE)
 		k = NumBidsKey(uint64(x))
 		w.store.CreateKey(k, int32(0), SUM)
 		k = BidsPerItemKey(uint64(x))

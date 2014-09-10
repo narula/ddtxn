@@ -41,6 +41,9 @@ func NewZipf(r *rand.Rand, s float64, v float64, imax uint64) *Zipf {
 	// if s <= 1.0 || v < 1 {
 	// 	return nil
 	// }
+	if s == 1.0 {
+		return nil
+	}
 	z.r = r
 	z.imax = float64(imax)
 	z.v = v
@@ -60,7 +63,6 @@ func (z *Zipf) Uint64() uint64 {
 		panic("rand: nil Zipf")
 	}
 	k := 0.0
-
 	for {
 		r := z.r.Float64() // r on [0,1]
 		ur := z.hxm + r*z.hx0minusHxm

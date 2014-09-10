@@ -9,3 +9,5 @@ benchmarks/bench
 benchmarks/big
 benchmarks/single
 *.out.?
+benchmarks/time-single
+benchmarks/bid

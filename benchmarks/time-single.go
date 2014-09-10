@@ -22,9 +22,9 @@ var nworkers = flag.Int("nw", 0, "Number of workers")
 var nbidders = flag.Int("nb", 1000000, "Keys in store, default is 1M")
 var prob = flag.Float64("contention", 100.0, "Probability contended key is in txn. -1 means zipfian distribution and we use ZipfDist")
 var readrate = flag.Int("rr", 0, "Read rate %.  Rest are writes")
-var dataFile = flag.String("out", "xdata.out", "Filename for output")
+var dataFile = flag.String("out", "time-data.out", "Filename for output")
 var atomicIncr = flag.Bool("atomic", false, "Workload of just atomic increments")
-var notcontended_readrate = flag.Float64("ncrr", .8, "NOT USED")
+var notcontended_readrate = flag.Float64("ncrr", 5.0, "Time to change hot key")
 
 var ZipfDist = flag.Float64("zipf", 1, "Zipfian distribution theta.  1 means only 1 hot key and we'll vary the percentage (single exp)")
 var partition = flag.Bool("partition", false, "Whether or not to partition the non-contended keys amongst the cores")
@@ -62,10 +62,10 @@ func main() {
 		}
 	}
 
+	changeDelta := *notcontended_readrate
 	dlog.Printf("Done initializing single\n")
 
 	p := prof.StartProfile()
-	start := time.Now()
 	sp := uint32(*nbidders / *nworkers)
 	var wg sync.WaitGroup
 	pkey := int(sp - 1)
@@ -89,7 +89,7 @@ func main() {
 			}
 		}
 	}
-
+	start := time.Now()
 	for i := 0; i < *clientGoRoutines; i++ {
 		wg.Add(1)
 		go func(n int) {
@@ -101,12 +101,35 @@ func main() {
 			w := coord.Workers[wi]
 			top := (wi + 1) * int(sp)
 			bottom := wi * int(sp)
+			delta := 0
+			xval := 0
 			dlog.Printf("%v: Noncontended section: %v to %v\n", n, bottom, top)
 			end_time := time.Now().Add(time.Duration(*nsec) * time.Second)
+			change_time := time.Now().Add(time.Duration(changeDelta) * time.Second)
+			log_time := time.Now().Add(time.Duration(1000) * time.Millisecond)
+			start2 := time.Now()
+			var ndone int64
 			for {
 				tm := time.Now()
 				if !end_time.After(tm) {
 					break
+				}
+				if changeDelta > 0 && tm.After(change_time) {
+					pkey = (int(sp) * (delta % *nworkers))
+					delta++
+					change_time = time.Now().Add(time.Duration(changeDelta) * time.Second)
+				}
+				if tm.After(log_time) && wi == 0 {
+					end2 := time.Since(start2)
+					var total int64
+					for i := 0; i < *nworkers; i++ {
+						total = total + ddtxn.CollectOne(coord.Workers[i])
+					}
+					fmt.Printf("%v:%v:%v:%v\n", *ddtxn.SysType, xval, n, float64(total-ndone)/end2.Seconds())
+					ndone = total
+					start2 = time.Now()
+					log_time = time.Now().Add(time.Duration(1000) * time.Millisecond)
+					xval++
 				}
 				var t ddtxn.Query
 				if len(retries) > 0 && retries[0].TS.Before(tm) {
@@ -161,15 +184,7 @@ func main() {
 				}
 				t.I++
 				if !committed {
-					e := exp.Exp(t.I)
-					if e <= 0 {
-						e = 1
-					}
-					rnd := ddtxn.RandN(&local_seed, e)
-					if rnd <= 0 {
-						rnd = 1
-					}
-					t.TS = tm.Add(time.Duration(rnd) * time.Microsecond)
+					t.TS = tm.Add(time.Duration(ddtxn.RandN(&local_seed, exp.Exp(t.I))) * time.Microsecond)
 					if t.TS.Before(end_time) {
 						heap.Push(&retries, t)
 					} else {
@@ -200,8 +215,8 @@ func main() {
 	// stashed transaction eventually executes and contributes to
 	// nitr.
 	out := fmt.Sprintf(" nworkers: %v, nwmoved: %v, nrmoved: %v, sys: %v, total/sec: %v, abortrate: %.2f, stashrate: %.2f, rr: %v, nkeys: %v, contention: %v, zipf: %v, done: %v, actual time: %v, nreads: %v, nincrs: %v, epoch changes: %v, throughput ns/txn: %v, naborts: %v, coord time: %v, coord stats time: %v, total worker time transitioning: %v, nstashed: %v, rlock: %v, wrratio: %v, nsamples: %v, getkeys: %v, ddwrites: %v, nolock: %v, failv: %v, nlocked: %v, stashdone: %v, nfast: %v, gaveup: %v, potential: %v ", *nworkers, ddtxn.WMoved, ddtxn.RMoved, *ddtxn.SysType, float64(nitr)/end.Seconds(), 100*float64(stats[ddtxn.NABORTS])/float64(nitr+stats[ddtxn.NABORTS]), 100*float64(stats[ddtxn.NSTASHED])/float64(nitr+stats[ddtxn.NABORTS]), *readrate, *nbidders, *prob, *ZipfDist, nitr, end, stats[ddtxn.D_READ_ONE], stats[ddtxn.D_INCR_ONE], ddtxn.NextEpoch, end.Nanoseconds()/nitr, stats[ddtxn.NABORTS], ddtxn.Time_in_IE, ddtxn.Time_in_IE1, nwait, stats[ddtxn.NSTASHED], *ddtxn.UseRLocks, *ddtxn.WRRatio, stats[ddtxn.NSAMPLES], stats[ddtxn.NGETKEYCALLS], stats[ddtxn.NDDWRITES], stats[ddtxn.NO_LOCK], stats[ddtxn.NFAIL_VERIFY], stats[ddtxn.NLOCKED], stats[ddtxn.NDIDSTASHED], ddtxn.Nfast, gave_up[0], coord.PotentialPhaseChanges)
-	fmt.Printf(out)
-	fmt.Printf("\n")
+	//	fmt.Printf(out)
+	//	fmt.Printf("\n")
 
 	f, err := os.OpenFile(*dataFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
