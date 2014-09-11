@@ -78,8 +78,10 @@ func (b *Rubis) Populate(s *ddtxn.Store, c *ddtxn.Coordinator) {
 			ex.Reset()
 		}
 
-		r := rand.New(rand.NewSource(time.Now().UnixNano()))
-		b.zip[wi] = ddtxn.NewZipf(r, b.zipfd, 1, uint64(b.nproducts-1))
+		if b.zipfd > 0 {
+			r := rand.New(rand.NewSource(time.Now().UnixNano()))
+			b.zip[wi] = ddtxn.NewZipf(r, b.zipfd, 1, uint64(b.nproducts-1))
+		}
 	}
 	chunk := ddtxn.NUM_ITEMS / b.nworkers
 	for wi := 0; wi < b.nworkers; wi++ {
@@ -168,8 +170,10 @@ func (b *Rubis) PopulateBids(s *ddtxn.Store, c *ddtxn.Coordinator) {
 			w.Store().CreateKey(k, nil, ddtxn.LIST)
 			ex.Reset()
 		}
-		r := rand.New(rand.NewSource(time.Now().UnixNano()))
-		b.zip[wi] = ddtxn.NewZipf(r, b.zipfd, 1, uint64(b.nproducts-1))
+		if b.zipfd > 0 {
+			r := rand.New(rand.NewSource(time.Now().UnixNano()))
+			b.zip[wi] = ddtxn.NewZipf(r, b.zipfd, 1, uint64(b.nproducts-1))
+		}
 	}
 	*ddtxn.Allocate = tmp
 	*dlog.Debug = tmp2
@@ -178,9 +182,13 @@ func (b *Rubis) PopulateBids(s *ddtxn.Store, c *ddtxn.Coordinator) {
 func (b *Rubis) MakeBid(w int, local_seed *uint32, txn *ddtxn.Query) {
 	txn.TXN = ddtxn.RUBIS_BID
 	bidder := b.users[0]
-	x := b.zip[w].Uint64()
-	//x := ddtxn.RandN(local_seed, uint32(b.nproducts))
-	if x >= uint64(len(b.products)) {
+	var x uint32
+	if b.zipfd > 0 {
+		x = uint32(b.zip[w].Uint64())
+	} else {
+		x = ddtxn.RandN(local_seed, uint32(b.nproducts))
+	}
+	if x >= uint32(len(b.products)) {
 		log.Fatalf("Huh %v %v %v\n", x, len(b.products), b.nproducts)
 	}
 	product := b.products[x]
@@ -199,7 +207,12 @@ func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 		//bidder := b.users[int(ddtxn.RandN(local_seed, b.sp))+w*int(b.sp)]
 		bidder := b.users[int(ddtxn.RandN(local_seed, uint32(b.nbidders)))]
 		//product := b.products[ddtxn.RandN(local_seed, uint32(b.nproducts))]
-		x := b.zip[w].Uint64()
+		var x uint32
+		if b.zipfd > 0 {
+			x = uint32(b.zip[w].Uint64())
+		} else {
+			x = ddtxn.RandN(local_seed, uint32(b.nproducts))
+		}
 		product := b.products[x]
 		txn.U1 = uint64(bidder)
 		if product == 0 {

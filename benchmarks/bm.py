@@ -357,7 +357,7 @@ def phase_exp(fnpath, host, ncores):
     fnn = '%s-phase-%d.data' % (host, ncores)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
-    phase_len = [1, 2, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    phase_len = [1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
     if options.short:
         phase_len = [20, 160]
     cpu_args = ""

@@ -306,6 +306,9 @@ func compute(w *Worker, txn int) (int64, int64) {
 			break
 		}
 	}
+	if total == 0 {
+		log.Fatalf("No latency recorded\n")
+	}
 	dlog.Printf("%v avg: %v us; 99: %v us, x99: %v, sum: %v, total: %v \n", txn, sum/total, v99, x99, sum, total)
 	return sum / total, v99
 }

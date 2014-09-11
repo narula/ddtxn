@@ -51,12 +51,12 @@ func (b *Buy) Populate(s *ddtxn.Store, ex *ddtxn.ETransaction) {
 		k := ddtxn.ProductKey(i)
 		s.CreateKey(k, int32(0), ddtxn.SUM)
 	}
-	dlog.Printf("Created products")
+	dlog.Printf("Created %v products; np: %v\n", b.nbidders, b.nproducts)
 	for i := 0; i < b.nbidders; i++ {
 		k := ddtxn.UserKey(uint64(i))
 		s.CreateKey(k, "x", ddtxn.WRITE)
 	}
-	dlog.Printf("Created bidders")
+	dlog.Printf("Created %v bidders\n", b.nbidders)
 	dlog.Printf("Done with Populate")
 }
 

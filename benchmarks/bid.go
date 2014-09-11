@@ -76,11 +76,9 @@ func main() {
 		*ddtxn.UseRLocks = true
 		// Preallocate keys
 
-		users_per_worker := 100000.0
 		bids_per_worker := 200000.0
 		if *nworkers == 20 {
-			bids_per_worker *= 10
-			users_per_worker *= 2
+			bids_per_worker *= 20
 		}
 
 		if *rounds {
