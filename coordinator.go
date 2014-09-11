@@ -36,6 +36,11 @@ type Coordinator struct {
 	Accelerate            chan bool
 	trigger               int32
 	to_remove             map[Key]bool
+
+	TotalCoordTime time.Duration
+	GoTime         time.Duration
+	ReadTime       time.Duration
+	MergeTime      time.Duration
 }
 
 func NewCoordinator(n int, s *Store) *Coordinator {
@@ -165,6 +170,7 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 }
 
 func (c *Coordinator) IncrementEpoch(force bool) {
+	start1 := time.Now()
 	c.PotentialPhaseChanges++
 	s := c.Workers[0].store
 	var move_dd, remove_dd map[Key]bool
@@ -175,21 +181,24 @@ func (c *Coordinator) IncrementEpoch(force bool) {
 		move_dd, remove_dd = c.Stats()
 	}
 	if !c.Coordinate && !force {
+		c.TotalCoordTime += time.Since(start1)
 		return
 	}
-	start := time.Now()
 	next_epoch := c.NextGlobalTID()
 
 	// Wait for everyone to merge the previous epoch
+	sx := time.Now()
 	for i := 0; i < c.n; i++ {
 		e := <-c.wepoch[i]
 		if e != next_epoch {
 			log.Fatalf("Out of alignment in epoch ack; I expected %v, got %v\n", next_epoch, e)
 		}
 	}
+	c.MergeTime += time.Since(sx)
 
 	// All merged.  The previous epoch is now safe; tell everyone to
 	// do their reads.
+	sx = time.Now()
 	atomic.StoreInt32(&c.trigger, 0)
 	for i := 0; i < c.n; i++ {
 		c.wsafe[i] <- next_epoch
@@ -201,6 +210,7 @@ func (c *Coordinator) IncrementEpoch(force bool) {
 		}
 
 	}
+	c.ReadTime += time.Since(sx)
 	// Merge dd
 	if !*AlwaysSplit {
 		if move_dd != nil {
@@ -221,11 +231,12 @@ func (c *Coordinator) IncrementEpoch(force bool) {
 		}
 	}
 
+	sx = time.Now()
 	for i := 0; i < c.n; i++ {
 		c.wgo[i] <- next_epoch
 	}
-	end := time.Since(start)
-	Time_in_IE += end
+	c.GoTime += time.Since(sx)
+	c.TotalCoordTime += time.Since(start1)
 }
 
 func (c *Coordinator) Finish() {

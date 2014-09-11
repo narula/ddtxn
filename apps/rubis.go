@@ -196,7 +196,8 @@ func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 	x := float64(ddtxn.RandN(local_seed, 100))
 	if x < b.rates[0] {
 		txn.TXN = ddtxn.RUBIS_BID
-		bidder := b.users[int(ddtxn.RandN(local_seed, b.sp))+w*int(b.sp)]
+		//bidder := b.users[int(ddtxn.RandN(local_seed, b.sp))+w*int(b.sp)]
+		bidder := b.users[int(ddtxn.RandN(local_seed, uint32(b.nbidders)))]
 		//product := b.products[ddtxn.RandN(local_seed, uint32(b.nproducts))]
 		x := b.zip[w].Uint64()
 		product := b.products[x]
@@ -217,7 +218,8 @@ func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 		txn.U1 = uint64(product)
 	} else if x < b.rates[2] {
 		txn.TXN = ddtxn.RUBIS_BUYNOW
-		bidder := b.users[int(ddtxn.RandN(local_seed, b.sp))+w*int(b.sp)]
+		//bidder := b.users[int(ddtxn.RandN(local_seed, b.sp))+w*int(b.sp)]
+		bidder := b.users[int(ddtxn.RandN(local_seed, uint32(b.nbidders)))]
 		x := ddtxn.RandN(local_seed, uint32(b.nproducts))
 		product := b.products[x]
 		if product == 0 {
@@ -228,8 +230,10 @@ func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 		txn.A = int32(ddtxn.RandN(local_seed, 10))
 	} else if x < b.rates[3] {
 		txn.TXN = ddtxn.RUBIS_COMMENT
-		u1 := b.users[int(ddtxn.RandN(local_seed, b.sp))+w*int(b.sp)]
-		u2 := b.users[int(ddtxn.RandN(local_seed, b.sp))+w*int(b.sp)]
+		//		u1 := b.users[int(ddtxn.RandN(local_seed, b.sp))+w*int(b.sp)]
+		u1 := b.users[int(ddtxn.RandN(local_seed, uint32(b.nbidders)))]
+		//		u2 := b.users[int(ddtxn.RandN(local_seed, b.sp))+w*int(b.sp)]
+		u2 := b.users[int(ddtxn.RandN(local_seed, uint32(b.nbidders)))]
 		x := ddtxn.RandN(local_seed, uint32(b.nproducts))
 		product := b.products[x]
 		if product == 0 {
@@ -242,7 +246,8 @@ func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 		txn.U4 = 1
 	} else if x < b.rates[4] {
 		txn.TXN = ddtxn.RUBIS_NEWITEM
-		bidder := b.users[int(ddtxn.RandN(local_seed, b.sp))+w*int(b.sp)]
+		//		bidder := b.users[int(ddtxn.RandN(local_seed, b.sp))+w*int(b.sp)]
+		bidder := b.users[int(ddtxn.RandN(local_seed, uint32(b.nbidders)))]
 		amt := uint64(ddtxn.RandN(local_seed, 10))
 		txn.U1 = uint64(bidder)
 		txn.S1 = "yyyy"
@@ -268,7 +273,8 @@ func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 		if product == 0 {
 			log.Fatalf("put comment ID 0? %v %v", x, b.products[x])
 		}
-		bidder := b.users[int(ddtxn.RandN(local_seed, b.sp))+w*int(b.sp)]
+		//		bidder := b.users[int(ddtxn.RandN(local_seed, b.sp))+w*int(b.sp)]
+		bidder := b.users[int(ddtxn.RandN(local_seed, uint32(b.nbidders)))]
 		txn.U1 = uint64(bidder)
 		txn.U2 = uint64(product)
 	} else if x < b.rates[7] {
@@ -294,7 +300,8 @@ func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 		txn.U1 = uint64(product)
 	} else if x < b.rates[11] {
 		txn.TXN = ddtxn.RUBIS_VIEWUSER
-		bidder := b.users[int(ddtxn.RandN(local_seed, b.sp))+w*int(b.sp)]
+		//		bidder := b.users[int(ddtxn.RandN(local_seed, b.sp))+w*int(b.sp)]
+		bidder := b.users[int(ddtxn.RandN(local_seed, uint32(b.nbidders)))]
 		txn.U1 = uint64(bidder)
 	} else {
 		log.Fatalf("No such transaction\n")

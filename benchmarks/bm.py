@@ -460,7 +460,7 @@ def rubisz_exp(fnpath, host, ncores, ncrr):
     cpu_args = ""
     if host == "ben":
         cpu_args = ben_list_cpus
-    theta = [.00001, .2, .4, .6, .8, 1.00001, 1.2, 1.4]#, 1.6, 1.8, 2.0]
+    theta = [.00001, .2, .4, .6, .8, 1.00001, 1.2, 1.4, 1.6, 1.8, 2.0]
 #    theta = [1.6, 1.8, 2.0]
     for i in theta:
         f.write("%d"% i)

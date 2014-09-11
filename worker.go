@@ -316,7 +316,7 @@ func (w *Worker) run() {
 
 func (w *Worker) One(t Query) (*Result, error) {
 	w.RLock()
-	if *SysType == DOPPEL && w.next%1000 == 0 {
+	if *SysType == DOPPEL && w.next%100 == 0 {
 		e := w.coordinator.GetEpoch()
 		if w.epoch != e {
 			w.RUnlock()
