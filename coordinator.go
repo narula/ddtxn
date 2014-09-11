@@ -323,6 +323,5 @@ func (c *Coordinator) Latency() (string, string) {
 	}
 	x, y := compute(c.Workers[0], D_BUY)
 	x2, y2 := compute(c.Workers[0], D_READ_TWO)
-	return fmt.Sprintf("Read/Write Avg: %v/%v\n", x2, x), fmt.Sprintf("Read/Write 99: %v/%v\n", y2, y)
-
+	return fmt.Sprintf("Read Avg: %v\nWrite Avg: %v\n", x2, x), fmt.Sprintf("Read 99: %v\nWrite 99: %v\n", y2, y)
 }
