@@ -90,7 +90,6 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg, wratio, phase, atomic, zi
     if options.short:
         nsec = 1
     bn = "buy"
-    print bn
     if options.exp.find("rubis") == 0:
         bn = "rubis"
     if options.exp == "zipf" or options.exp.find("single") == 0:
@@ -231,7 +230,6 @@ def contention_exp(fnpath, host, contention, rr, zipf=-1):
 
 def zipf_scale_exp(fnpath, host, zipf, rr):
     fnn = '%s-zipf-scale-%.02f-%d-%s.data' % (host, zipf, rr, True)
-    print fnn
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
     cpus = get_cpus(host)
