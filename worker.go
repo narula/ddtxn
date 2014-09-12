@@ -2,7 +2,6 @@ package ddtxn
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"runtime/debug"
 	"strconv"
@@ -28,6 +27,8 @@ const (
 	BUFFER     = 100000
 	START_SIZE = 1000000
 	TIMES      = 10
+
+//	TIMES = 10000000
 )
 
 const (
@@ -66,6 +67,7 @@ const (
 	NFAIL_VERIFY
 	NLOCKED
 	NDIDSTASHED
+	NREADABORTS
 	LAST_STAT
 )
 
@@ -96,7 +98,8 @@ type Worker struct {
 	PreAllocated bool
 	start        int
 
-	times [4][TIMES]int64
+	times   [4][TIMES]int64
+	tooLong [4]int64
 }
 
 func (w *Worker) Register(fn int, transaction TransactionFunc) {
@@ -167,6 +170,9 @@ func (w *Worker) doTxn(t Query) (*Result, error) {
 	w.E.Reset()
 	x, err := w.txns[t.TXN](t, w.E)
 	if err == ESTASH {
+		if w.E.GetPhase() != SPLIT {
+			log.Fatalf("Cannot stash a transaction outside of split phase")
+		}
 		w.Nstats[NSTASHED]++
 		w.stashTxn(t)
 		return nil, err
@@ -175,15 +181,27 @@ func (w *Worker) doTxn(t Query) (*Result, error) {
 		if *Latency {
 			x := time.Since(t.S)
 			if t.TXN < 4 {
-				y := x.Nanoseconds() / 1000
+				y := x.Nanoseconds() / 1000 // microseconds
 				if y >= TIMES {
-					fmt.Printf("(doTxn): Too big: %v\n", x)
+					w.tooLong[t.TXN]++
 				} else {
 					w.times[t.TXN][y]++
 				}
 			}
 		}
 	} else if err == EABORT {
+		if *Latency {
+			if t.TXN == D_READ_TWO {
+				w.Nstats[NREADABORTS]++
+			}
+			x := time.Since(t.S)
+			if t.TXN < 4 {
+				y := x.Nanoseconds() / 1000 // microseconds
+				if y >= TIMES {
+					w.tooLong[t.TXN]++
+				}
+			}
+		}
 		w.Nstats[NABORTS]++
 	} else if err == ENOKEY {
 		w.Nstats[NENOKEY]++
@@ -209,13 +227,16 @@ func (w *Worker) doTxn2(t Query) (*Result, error) {
 			if t.TXN < 4 {
 				y := x.Nanoseconds() / 1000
 				if y >= TIMES {
-					fmt.Printf("(doTxn2) Too big: %v\n", x)
+					w.tooLong[t.TXN]++
 				} else {
 					w.times[t.TXN][y]++
 				}
 			}
 		}
 	} else if err == EABORT {
+		if *Latency && t.TXN == D_READ_TWO {
+			w.Nstats[NREADABORTS]++
+		}
 		w.Nstats[NABORTS]++
 	} else if err == ENOKEY {
 		w.Nstats[NENOKEY]++

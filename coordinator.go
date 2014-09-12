@@ -110,15 +110,15 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 				// Higher threshold for the first one, since it kicks off phases
 				if o.ratio() > 1.33*(*WRRatio) && (o.writes > 1 || o.conflicts > 5) {
 					potential_dd_keys[o.k] = true
-					dlog.Printf("move %v to split1 r:%v w:%v c:%v s:%v ra:%v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
+					dlog.Printf("move %v to split1 r:%v w:%v c:%v s:%v ra:%v after: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), c.PotentialPhaseChanges)
 				} else {
-					dlog.Printf("%v no move inertia r:%v w:%v c:%v s:%v ra:%v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
+					dlog.Printf("%v no move inertia r:%v w:%v c:%v s:%v ra:%v after: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), c.PotentialPhaseChanges)
 				}
 				continue
 			}
 			if o.ratio() > *WRRatio && (o.writes > 1 || o.conflicts > 1) {
 				potential_dd_keys[o.k] = true
-				dlog.Printf("move %v to split2 r:%v w:%v c:%v s:%v ra:%v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
+				dlog.Printf("move %v to split2 r:%v w:%v c:%v s:%v ra:%v after: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), c.PotentialPhaseChanges)
 			} else {
 				dlog.Printf("too low; no move :%v; r:%v w:%v c:%v s:%v ra:%v; wr: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), *WRRatio)
 			}
@@ -296,10 +296,14 @@ func compute(w *Worker, txn int) (int64, int64) {
 		total = total + w.times[txn][i]
 		sum = sum + (w.times[txn][i] * i)
 	}
+	total = total + w.tooLong[txn]
+	sum = sum + w.tooLong[txn]*10000000
 	var x99 int64 = int64(float64(total) * .99)
 	var y99 int64
 	var v99 int64
+	var buckets [TIMES / 1000]int64
 	for i = 0; i < TIMES; i++ {
+		buckets[i/1000] += w.times[txn][i]
 		y99 = y99 + w.times[txn][i]
 		if y99 >= x99 {
 			v99 = i
@@ -310,6 +314,26 @@ func compute(w *Worker, txn int) (int64, int64) {
 		log.Fatalf("No latency recorded\n")
 	}
 	dlog.Printf("%v avg: %v us; 99: %v us, x99: %v, sum: %v, total: %v \n", txn, sum/total, v99, x99, sum, total)
+
+	var one int64
+	var ten int64
+	var hundred int64
+	var more int64
+	for i = 0; i < TIMES/1000; i++ {
+		if i == 0 {
+			one += buckets[i]
+		} else if i < 10 {
+			ten += buckets[i]
+		} else if i < 100 {
+			hundred += buckets[i]
+		} else {
+			more += buckets[i]
+		}
+	}
+
+	fmt.Printf("Txn %v\n Less than 1ms: %v\n 1-10ms: %v\n 10-100ms: %v\n 100ms-10s: %v\n Greater than 10s: %v\n", txn, one, ten, hundred, more, w.tooLong[txn])
+	total_time_in_ms := (one/2 + 5*ten + 55*100 + 15000*more)
+	fmt.Printf("Rough total time in ms: %v\n", total_time_in_ms)
 	return sum / total, v99
 }
 
@@ -322,6 +346,7 @@ func (c *Coordinator) Latency() (string, string) {
 			for k := 0; k < TIMES; k++ {
 				c.Workers[0].times[j][k] = c.Workers[0].times[j][k] + c.Workers[i].times[j][k]
 			}
+			c.Workers[0].tooLong[j] = c.Workers[0].tooLong[j] + c.Workers[i].tooLong[j]
 		}
 	}
 	x, y := compute(c.Workers[0], D_BUY)

@@ -156,36 +156,41 @@ func (tx *OTransaction) Read(k Key) (*BRecord, error) {
 			tx.w.NKeyAccesses[p]++
 		}
 	}
-	if tx.isSplit(br) {
-		if tx.count {
-			tx.ls.candidates.Stash(k)
-		}
-		return nil, ESTASH
-	}
-	if tx.count {
-		tx.ls.candidates.Read(k, br)
-	}
+
 	if err == ENOKEY {
+		// Can't be stashed, right?
 		n := len(tx.read)
 		tx.read = tx.read[0 : n+1]
 		tx.read[n].key = k
 		tx.read[n].br = nil
 		tx.read[n].last = 0
 		return nil, err
+	} else {
+		if tx.isSplit(br) {
+			if tx.count {
+				tx.ls.candidates.Stash(k)
+			}
+			return nil, ESTASH
+		}
+		if tx.count {
+			tx.ls.candidates.Read(k, br)
+		}
+		ok, last := br.IsUnlocked()
+		// if locked abort
+		// else note the last timestamp, save it, return value
+		if !ok {
+			tx.w.Nstats[NLOCKED]++
+			return nil, EABORT
+		}
+		n := len(tx.read)
+		tx.read = tx.read[0 : n+1]
+		tx.read[n].key = k
+		tx.read[n].br = br
+		tx.read[n].last = last
+		return br, nil
 	}
-	ok, last := br.IsUnlocked()
-	// if locked abort
-	// else note the last timestamp, save it, return value
-	if !ok {
-		tx.w.Nstats[NLOCKED]++
-		return nil, EABORT
-	}
-	n := len(tx.read)
-	tx.read = tx.read[0 : n+1]
-	tx.read[n].key = k
-	tx.read[n].br = br
-	tx.read[n].last = last
-	return br, nil
+	log.Fatalf("What")
+	return nil, nil
 }
 
 func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
