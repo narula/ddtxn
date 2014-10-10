@@ -18,7 +18,7 @@ const (
 )
 
 // TODO: Handle writing more than once to a key in one transaction
-type Write struct {
+type WriteKey struct {
 	key    Key
 	br     *BRecord
 	v      Value
@@ -67,7 +67,7 @@ type OTransaction struct {
 	s        *Store
 	ls       *LocalStore
 	phase    int
-	writes   []Write
+	writes   []WriteKey
 	t        int64 // Used just as a rough count
 	count    bool
 	sr_rate  int64
@@ -89,7 +89,7 @@ func (tx *OTransaction) NoCount() {
 func StartOTransaction(w *Worker) *OTransaction {
 	tx := &OTransaction{
 		read:    make([]ReadKey, 0, 100),
-		writes:  make([]Write, 0, 100),
+		writes:  make([]WriteKey, 0, 100),
 		w:       w,
 		s:       w.store,
 		ls:      w.local_store,

@@ -32,6 +32,7 @@ const (
 )
 
 const (
+	// Transactions
 	D_BUY = iota
 	D_BUY_AND_READ
 	D_READ_ONE
@@ -56,6 +57,7 @@ const (
 	BIG_RW
 	LAST_TXN
 
+	// Stats
 	NABORTS
 	NENOKEY
 	NSTASHED
@@ -98,6 +100,7 @@ type Worker struct {
 	PreAllocated bool
 	start        int
 
+	// Tracking latency
 	times   [4][TIMES]int64
 	tooLong [4]int64
 }
@@ -136,7 +139,6 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 	w.Register(D_READ_TWO, ReadTxn)
 	w.Register(D_INCR_ONE, IncrTxn)
 	w.Register(D_ATOMIC_INCR_ONE, AtomicIncr)
-
 	w.Register(RUBIS_BID, StoreBidTxn)
 	w.Register(RUBIS_VIEWBIDHIST, ViewBidHistoryTxn)
 	w.Register(RUBIS_BUYNOW, StoreBuyNowTxn)
@@ -149,7 +151,6 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 	w.Register(RUBIS_SEARCHREG, SearchItemsRegionTxn)
 	w.Register(RUBIS_VIEW, ViewItemTxn)
 	w.Register(RUBIS_VIEWUSER, ViewUserInfoTxn)
-
 	w.Register(BIG_INCR, BigIncrTxn)
 	w.Register(BIG_RW, BigRWTxn)
 	go w.run()
@@ -257,15 +258,12 @@ func (w *Worker) transition() {
 		start := time.Now()
 		w.E.SetPhase(MERGE)
 		w.local_store.Merge()
-		//dlog.Printf("[%v] Sending ack for epoch change %v\n", w.ID, e)
 		w.coordinator.wepoch[w.ID] <- e
-		//dlog.Printf("[%v] Waiting for safe for epoch change %v\n", w.ID, e)
 		x := <-w.coordinator.wsafe[w.ID]
 		if x != e {
 			log.Fatalf("Worker %v out of alignment; acked %v, got safe for %v\n", w.ID, e, x)
 		}
 		w.E.SetPhase(JOIN)
-		//dlog.Printf("[%v] Entering join phase %v\n", w.ID, e)
 		for i := 0; i < len(w.waiters.t); i++ {
 			committed := false
 			// TODO: On abort this transaction really should be
@@ -290,14 +288,11 @@ func (w *Worker) transition() {
 		}
 		w.waiters.clear()
 		w.E.SetPhase(SPLIT)
-		//dlog.Printf("[%v] Sending done %v\n", w.ID, e)
 		w.coordinator.wdone[w.ID] <- e
-		//dlog.Printf("[%v] Awaiting go %v\n", w.ID, e)
 		x = <-w.coordinator.wgo[w.ID]
 		if x != e {
 			log.Fatalf("Worker %v out of alignment; said done for %v, got go for %v\n", w.ID, e, x)
 		}
-		//dlog.Printf("[%v] Done transitioning %v\n", w.ID, e)
 		end := time.Since(start)
 		w.Nwait += end
 		w.epoch = e

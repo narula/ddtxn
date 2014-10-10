@@ -11,32 +11,6 @@ var WRRatio = flag.Float64("wr", 3, "Ratio of sampled write conflicts and sample
 
 var ConflictWeight = flag.Float64("cw", 1, "Weight given to conflicts over writes\n")
 
-var TriggerCount = flag.Int("trigger", 10000, "How long the queue can get before triggering a phase change\n")
-
-type TStore struct {
-	t []Query
-	n int
-}
-
-func TSInit(n int) *TStore {
-	ts := &TStore{t: make([]Query, 0, n)}
-	return ts
-}
-
-func (ts *TStore) Add(t Query) bool {
-	ts.t = append(ts.t, t)
-	ts.n += 1
-	if ts.n == *TriggerCount {
-		return true
-	}
-	return false
-}
-
-func (ts *TStore) clear() {
-	ts.t = ts.t[:0]
-	ts.n = 0
-}
-
 type OneStat struct {
 	k         Key
 	reads     float64
@@ -57,7 +31,7 @@ func (o *OneStat) ratio() float64 {
 // their statistics changes to the heap to be merged in on the next
 // stats computation.
 //
-// Since we limit what we had to h, it doesn't really have to be a
+// Since we limit what we add to h, it doesn't really have to be a
 // heap.  But one could imagine only looking at the top set of things
 // in the heap later on.
 type Candidates struct {
@@ -212,26 +186,4 @@ func (h *StatsHeap) update(o *OneStat) {
 		heap.Remove(h, o.index)
 	}
 	heap.Push(h, o)
-}
-
-type RetryHeap []Query
-
-func (h RetryHeap) Len() int           { return len(h) }
-func (h RetryHeap) Less(i, j int) bool { return h[j].TS.After(h[i].TS) }
-func (h RetryHeap) Swap(i, j int) {
-	h[i], h[j] = h[j], h[i]
-}
-
-func (h *RetryHeap) Push(x interface{}) {
-	// Push and Pop use pointer receivers because they modify the slice's length,
-	// not just its contents.
-	*h = append(*h, x.(Query))
-}
-
-func (h *RetryHeap) Pop() interface{} {
-	old := *h
-	n := len(old)
-	x := old[n-1]
-	*h = old[0 : n-1]
-	return x
 }

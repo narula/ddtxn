@@ -12,11 +12,10 @@ const (
 	NUM_CATEGORIES = 20
 	NUM_REGIONS    = 62
 	NUM_ITEMS      = 533000
-	//	NUM_ITEMS     = 100
-	BIDS_PER_ITEM = 10
-	NUM_COMMENTS  = 506000
-	BUY_NOW       = .1 * NUM_ITEMS
-	FEEDBACK      = .95 * NUM_ITEMS
+	BIDS_PER_ITEM  = 10
+	NUM_COMMENTS   = 506000
+	BUY_NOW        = .1 * NUM_ITEMS
+	FEEDBACK       = .95 * NUM_ITEMS
 )
 
 type User struct {
@@ -217,41 +216,6 @@ func StoreBidTxn(t Query, tx ETransaction) (*Result, error) {
 		Price:  price,
 	}
 	tx.Write(bid_key, bid, WRITE)
-	//tx.MaybeWrite(high)
-
-	// var max *BRecord
-	// max, err = tx.Read(high)
-	// if err != nil {
-	// 	if err == ESTASH {
-	// 		dlog.Printf("Max bid key for item %v stashed\n", item)
-	// 		tx.RelinquishKey(n, 'b')
-	// 		return nil, ESTASH
-	// 	} else if err == EABORT {
-	// 		tx.RelinquishKey(n, 'b')
-	// 		return nil, EABORT
-	// 	} else if err == ENOKEY {
-	// 		tx.RelinquishKey(n, 'b')
-	// 		dlog.Printf("StoreBidTxn(): No max key for item? %v\n", item)
-	// 		if tx.Commit() == 0 {
-	// 			return nil, EABORT
-	// 		} else {
-	// 			return nil, ENORETRY
-	// 		}
-	// 	} else {
-	// 		log.Fatalf("err: %v\n", err)
-	// 	}
-	// }
-	// if price > max.int_value {
-	// 	err = tx.WriteInt32(high, price, MAX)
-	// 	if err != nil {
-	// 		tx.RelinquishKey(n, 'b')
-	// 		fmt.Println("Aborting because of max")
-	// 		tx.Abort()
-	// 		dlog.Printf("StoreBidTxn(): Couldn't write maxbid for item %v; %v\n", item, err)
-	// 		return nil, err
-	// 	}
-	// 	tx.Write(bidder, user, WRITE)
-	// }
 
 	// update # bids per item
 	err := tx.WriteInt32(NumBidsKey(item), 1, SUM)
@@ -264,6 +228,7 @@ func StoreBidTxn(t Query, tx ETransaction) (*Result, error) {
 
 	// update max bid?
 	high := MaxBidKey(item)
+	tx.MaybeWrite(high)
 	err = tx.WriteInt32(high, price, MAX)
 	if err != nil {
 		tx.RelinquishKey(n, 'b')
@@ -1044,7 +1009,7 @@ func GetTxns(bidrate float64) []float64 {
 			10.5: RUBIS_VIEW,
 			5.47: RUBIS_SEARCHREG,
 			4.97: RUBIS_PUTBID,
-			//			40.0: RUBIS_BID,
+			// RUBIS_BID,
 			2.13: RUBIS_VIEWUSER,
 			1.81: RUBIS_NEWITEM,
 			1.8:  RUBIS_REGISTER,
@@ -1059,7 +1024,7 @@ func GetTxns(bidrate float64) []float64 {
 			11.3: RUBIS_VIEW,
 			5.47: RUBIS_SEARCHREG,
 			4.97: RUBIS_PUTBID,
-			//			3.7:  RUBIS_BID,
+			// RUBIS_BID,
 			2.13: RUBIS_VIEWUSER,
 			1.81: RUBIS_NEWITEM,
 			1.8:  RUBIS_REGISTER,

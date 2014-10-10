@@ -10,7 +10,6 @@ import (
 )
 
 var Conflicts = flag.Bool("conflicts", false, "Measure conflicts\n")
-
 var Spinlock = flag.Bool("spinlock", false, "Use spinlocks for 2PL\n")
 
 type KeyType int

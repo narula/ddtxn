@@ -17,7 +17,7 @@ const (
 	CLEAR_TID     = 0xffffffff00000000
 )
 
-var PhaseLength = flag.Int("phase", 80, "Phase length in milliseconds, default 80")
+var PhaseLength = flag.Int("phase", 20, "Phase length in milliseconds, default 20")
 
 type Coordinator struct {
 	n        int
