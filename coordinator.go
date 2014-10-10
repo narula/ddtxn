@@ -258,7 +258,7 @@ func (c *Coordinator) Process() {
 	for {
 		select {
 		case x := <-c.Done:
-			if *SysType == DOPPEL && c.n > 1 {
+			if *SysType == DOPPEL && c.n > 1 && c.Workers[0].store.any_dd {
 				c.IncrementEpoch(true)
 			}
 			for i := 0; i < c.n; i++ {

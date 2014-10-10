@@ -92,7 +92,7 @@ def fill_cmd(rr, contention, ncpus, systype, cpus_arg, wratio, phase, atomic, zi
     bn = "buy"
     if options.exp.find("rubis") == 0:
         bn = "rubis"
-    if options.exp == "zipf" or options.exp.find("single") == 0:
+    if options.exp == "zipf" or options.exp.find("single") == 0 or options.exp.find("numkeys") == 0:
         bn = "single"
     xncpus = ncpus
     cmd = BASE_CMD % (xncpus, cpus_arg, bn, xncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr, atomic, zipf, ncrr, cw, split)
@@ -105,6 +105,19 @@ def do(f, rr, contention, ncpu, list_cpus, sys, wratio=options.wratio, phase=opt
     cmd = fill_cmd(rr, contention, ncpu, sys, list_cpus, wratio, phase, atomic, zipf, ncrr, cw, split)
     run_one(f, cmd)
     f.write("\t")
+
+
+def num_keys_exp():
+    f = open('blah', 'w')
+    cpu_args = ben_list_cpus
+    keys = [1, 10, 20, 50, 70, 100, 110]
+    for k in keys:
+     cmd = fill_cmd(0, 0, 20, 0, cpu_args, options.wratio, options.phase, False, -1, 0, options.conflict_weight, False)
+     cmd = cmd + " -nb=%d" % k
+     run_one(f, cmd)
+     cmd = fill_cmd(0, 0, 20, 1, cpu_args, options.wratio, options.phase, False, -1, 0, options.conflict_weight, False)
+     cmd = cmd + " -nb=%d" % k
+     run_one(f, cmd)
 
 def wratio_exp(fnpath, host, contention, rr):
     fnn = '%s-wratio-%d-%d-%s.data' % (host, contention, rr, True)
@@ -310,7 +323,27 @@ def single_exp(fnpath, host, rr, ncores):
         f.write("\n")
     f.close()
 
-def single_scale_exp(fnpath, host, contention, rr):
+def buy_exp(fnpath, host):
+    fnn = '%s-buy.data' % (host,)
+    filename=os.path.join(fnpath, fnn)
+    f = open(filename, 'w')
+    cpu_args = ""
+    if host == "ben":
+        cpu_args = ben_list_cpus
+    cpus = get_cpus(host)
+    f.write("#Doppel\tOCC\t2PL\n")
+    for i in cpus:
+        if i < 30:
+            continue
+        f.write("%0.2f"% i)
+        f.write("\t")
+        do(f, 0, -1, i, cpu_args, 0, zipf=1.4)
+        do(f, 0, -1, i, cpu_args, 1, zipf=1.4)
+        do(f, 0, -1, i, cpu_args, 2, zipf=1.4)
+        f.write("\n")
+    f.close()
+
+def single_scale_exp(fnpath, host, contention, rr, zipf):
     fnn = '%s-single-scale-%d-%d-X.data' % (host, contention, rr)
     filename=os.path.join(fnpath, fnn)
     f = open(filename, 'w')
@@ -319,14 +352,16 @@ def single_scale_exp(fnpath, host, contention, rr):
     if host == "ben":
         cpu_args = ben_list_cpus
 
+    if zipf != -1:
+        contention = -1
     f.write("#Doppel\tOCC\t2PL\tAtomic\n")
     for i in cpus:
         f.write("%d"% i)
         f.write("\t")
-        do(f, rr, contention, i, cpu_args, 0, zipf=-1)
-        do(f, rr, contention, i, cpu_args, 1, zipf=-1)
-        do(f, rr, contention, i, cpu_args, 2, zipf=-1)
-        do(f, rr, contention, i, cpu_args, 2, zipf=-1, atomic=True)
+        do(f, rr, contention, i, cpu_args, 0, zipf=zipf)
+        do(f, rr, contention, i, cpu_args, 1, zipf=zipf)
+#        do(f, rr, contention, i, cpu_args, 2, zipf=zipf)
+#        do(f, rr, contention, i, cpu_args, 2, zipf=-1, atomic=True)
         f.write("\n")
     f.close()
 
@@ -513,13 +548,15 @@ if __name__ == "__main__":
     elif options.exp == "singlerw":
         single_rw_exp(fnpath, host, options.default_ncores)
     elif options.exp == "singlescale":
-        single_scale_exp(fnpath, host, options.default_contention, options.read_rate)
+        single_scale_exp(fnpath, host, options.default_contention, options.read_rate, options.zipf)
     elif options.exp == "zipf":
         zipf_exp(fnpath, host, 0, options.default_ncores)
     elif options.exp == "rubis":
         rubis_exp(fnpath, host, 3, options.default_ncores)
     elif options.exp == "rubisz":
         rubisz_exp(fnpath, host, options.default_ncores, options.not_contended_read_rate)
+    elif options.exp == "numkeys":
+        num_keys_exp()
     elif options.exp == "all":
         options.exp = "single"
         single_exp(fnpath, host, 0, options.default_ncores)
@@ -541,5 +578,7 @@ if __name__ == "__main__":
         zipf_scale_exp(fnpath, host, 0.6, 50)
         zipf_scale_exp(fnpath, host, 1.001, 50)
         zipf_scale_exp(fnpath, host, 1.4, 50)
+    elif options.exp == "buy":
+        buy_exp(fnpath, host)
     if options.scp and not options.short:
         system("scp data.out tbilisi.csail.mit.edu:/home/neha/doc/ddtxn-doc/data/")
