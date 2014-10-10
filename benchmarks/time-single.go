@@ -28,7 +28,6 @@ var notcontended_readrate = flag.Float64("ncrr", 5.0, "Time to change hot key")
 
 var ZipfDist = flag.Float64("zipf", 1, "Zipfian distribution theta.  1 means only 1 hot key and we'll vary the percentage (single exp)")
 var partition = flag.Bool("partition", false, "Whether or not to partition the non-contended keys amongst the cores")
-var GoZipf = flag.Bool("gozipf", true, "Use Go's Zipf function")
 
 func main() {
 	flag.Parse()
@@ -72,20 +71,13 @@ func main() {
 	dlog.Printf("Partition size: %v; Contended key %v\n", sp/2, pkey)
 	gave_up := make([]int64, *clientGoRoutines)
 
-	myZipf := make([]*ddtxn.MyZipf, *clientGoRoutines)
 	goZipf := make([]*ddtxn.Zipf, *clientGoRoutines)
 	if *prob == -1 && *ZipfDist >= 0 {
-		if *GoZipf {
-			for i := 0; i < *clientGoRoutines; i++ {
-				rnd := rand.New(rand.NewSource(int64(i * 12467)))
-				goZipf[i] = ddtxn.NewZipf(rnd, *ZipfDist, 1, uint64(*nbidders)-1)
-				if goZipf[i] == nil {
-					panic("nil zipf")
-				}
-			}
-		} else {
-			for i := 0; i < *clientGoRoutines; i++ {
-				myZipf[i] = ddtxn.NewMyZipf(int64(*nbidders), *ZipfDist)
+		for i := 0; i < *clientGoRoutines; i++ {
+			rnd := rand.New(rand.NewSource(int64(i * 12467)))
+			goZipf[i] = ddtxn.NewZipf(rnd, *ZipfDist, 1, uint64(*nbidders)-1)
+			if goZipf[i] == nil {
+				panic("nil zipf")
 			}
 		}
 	}
@@ -137,15 +129,11 @@ func main() {
 				} else {
 					x := float64(ddtxn.RandN(&local_seed, 100))
 					if *prob == -1 {
-						if *GoZipf {
-							x := goZipf[n].Uint64()
-							if x >= uint64(*nbidders) || x < 0 {
-								log.Fatalf("x not in bounds: %v\n", x)
-							}
-							t.K1 = ddtxn.ProductKey(int(x))
-						} else {
-							t.K1 = ddtxn.ProductKey(int(myZipf[n].Next(&local_seed) - 1))
+						x := goZipf[n].Uint64()
+						if x >= uint64(*nbidders) || x < 0 {
+							log.Fatalf("x not in bounds: %v\n", x)
 						}
+						t.K1 = ddtxn.ProductKey(int(x))
 					} else if x < *prob {
 						// contended txn
 						t.K1 = ddtxn.ProductKey(pkey)
