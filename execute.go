@@ -6,7 +6,7 @@ import (
 	"math/rand"
 )
 
-var SampleRate = flag.Int64("sr", 1000, "Sample every sr transactions\n")
+var SampleRate = flag.Int64("sr", 500, "Sample every sr transactions\n")
 var AlwaysSplit = flag.Bool("split", false, "Split every piece of data\n")
 var NoConflictType = flag.Int("noconflict", -1, "Type of operation NOT to record conflicts on")
 
@@ -51,7 +51,8 @@ type ETransaction interface {
 	// This is because I don't know how to upgrade locks.
 	MaybeWrite(k Key)
 
-	// Tell Doppel not to count this transaction's reads and writes.
+	// Tell Doppel not to count this transaction's reads and writes
+	// when deciding if records should be split.
 	NoCount()
 
 	// Get a unique key; give it up
@@ -59,7 +60,7 @@ type ETransaction interface {
 	RelinquishKey(uint64, rune)
 }
 
-// Not threadsafe.  Tracks execution of transaction.
+// Tracks execution of transaction.
 type OTransaction struct {
 	padding0 [128]byte
 	read     []ReadKey
@@ -468,7 +469,6 @@ func (tx *OTransaction) Commit() TID {
 				continue
 			}
 			tx.w.Nstats[NFAIL_VERIFY]++
-			//dlog.Printf("Fail verify2 key %v\n", rk.br.key)
 			return tx.Abort()
 		}
 		if rk.br.Verify(rk.last) {
@@ -587,7 +587,6 @@ func (tx *LTransaction) Read(k Key) (*BRecord, error) {
 		// TODO: Create and read lock for an empty key?
 		return nil, err
 	}
-	//dlog.Printf("%v Read() Rlocking %v\n", tx.w.ID, k)
 	br.SRLock()
 	n := len(tx.keys)
 	tx.keys = tx.keys[0 : n+1]
@@ -613,10 +612,8 @@ func (tx *LTransaction) MaybeWrite(k Key) {
 	}
 	if br == nil || err != nil {
 		// Will acquire lock when I do the write and create the key.
-		//dlog.Printf("Key doesn't exist? %v %v\n", k, err)
 		return
 	}
-	//dlog.Printf("%v Locking %v in MaybeWrite\n", tx.w.ID, br.key)
 	br.SLock()
 	n := len(tx.keys)
 	tx.keys = tx.keys[0 : n+1]
@@ -649,13 +646,10 @@ func (tx *LTransaction) make_or_get_key(k Key, op KeyType) *BRecord {
 		}
 	}
 	if br != nil && err == nil {
-		//dlog.Printf("%v Locking %v in make_or_get_key\n", tx.w.ID, k)
 		br.SLock()
 		return br
 	}
-	//dlog.Printf("Error %v %v %v\n", k, err)
 	var err2 error
-	//dlog.Printf("%v Perhaps locking %v in make_or_get_key, Create\n", tx.w.ID, k)
 	br, err2 = tx.s.CreateMuLockedKey(k, op)
 	if *CountKeys {
 		p, r := UndoCKey(k)
@@ -664,7 +658,6 @@ func (tx *LTransaction) make_or_get_key(k Key, op KeyType) *BRecord {
 		}
 	}
 	if br == nil || err2 != nil {
-		//dlog.Printf("%v Error creating key: %v %v\n", tx.w.ID, k, err2)
 		br, err = tx.s.getKey(k)
 		if err != nil {
 			log.Fatalf("Should exist\n")
@@ -681,7 +674,6 @@ func (tx *LTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 			log.Fatalf("Already have read lock on this key; cannot upgrade %v\n", k)
 		}
 		// Already locked.  TODO: aggregate
-		//dlog.Printf("%v Double write?\n", tx.w.ID, tx.keys[n].vint32)
 		tx.keys[n].vint32 = a
 		tx.keys[n].kt = op
 		tx.keys[n].noset = false
@@ -796,10 +788,8 @@ func (tx *LTransaction) Store() *Store {
 func (tx *LTransaction) Abort() TID {
 	for i := len(tx.keys) - 1; i >= 0; i-- {
 		if tx.keys[i].read {
-			//dlog.Printf("%v Abort() RUnlocking %v\n", tx.w.ID, tx.keys[i].br.key)
 			tx.keys[i].br.SRUnlock()
 		} else {
-			//dlog.Printf("%v Abort() Unlocking %v\n", tx.w.ID, tx.keys[i].br.key)
 			tx.keys[i].br.SUnlock()
 		}
 	}
@@ -817,7 +807,6 @@ func (tx *LTransaction) Commit() TID {
 			if tx.keys[i].noset {
 				// No changes, we write-locked it because we thought
 				// we *might* write
-				//dlog.Printf("%v Commit() Unlocking %v (noset)\n", tx.w.ID, tx.keys[i].br.key)
 				tx.keys[i].br.SUnlock()
 				continue
 			}
@@ -833,10 +822,8 @@ func (tx *LTransaction) Commit() TID {
 			default:
 				tx.s.Set(tx.keys[i].br, tx.keys[i].v, tx.keys[i].kt)
 			}
-			//dlog.Printf("%v Commit() Unlocking %v\n", tx.w.ID, tx.keys[i].br.key)
 			tx.keys[i].br.SUnlock()
 		} else {
-			//dlog.Printf("%v Commit() RUnlocking %v\n", tx.w.ID, tx.keys[i].br.key)
 			tx.keys[i].br.SRUnlock()
 		}
 	}

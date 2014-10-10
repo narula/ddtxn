@@ -9,7 +9,6 @@ import (
 
 // I tried keeping a slice of interfaces; the reflection was costly.
 // Hard code in random parameter types to re-use for now.
-// TODO: clean this up.
 type Query struct {
 	TXN int
 	W   chan struct {
@@ -64,7 +63,7 @@ func BuyTxn(t Query, tx ETransaction) (*Result, error) {
 }
 
 func BuyAndReadTxn(t Query, tx ETransaction) (*Result, error) {
-	tx.NoCount() // Hacky McHackyhack
+	tx.NoCount()
 	var r *Result = nil
 	err := tx.WriteInt32(t.K1, 1, SUM)
 	if err != nil {

@@ -201,6 +201,7 @@ func NewItemTxn(t Query, tx ETransaction) (*Result, error) {
 	return r, nil
 }
 
+// TODO: Check and see if I need more tx.MaybeWrite()s
 func StoreBidTxn(t Query, tx ETransaction) (*Result, error) {
 	var r *Result = nil
 	user := t.U1
@@ -263,7 +264,7 @@ func StoreBidTxn(t Query, tx ETransaction) (*Result, error) {
 
 	if *Allocate {
 		r = &Result{uint64(n)}
-		//dlog.Printf("User %v Bid on item %v for %v dollars\n", user, item, price)
+		dlog.Printf("User %v Bid on item %v for %v dollars\n", user, item, price)
 	}
 	return r, nil
 }
@@ -303,7 +304,7 @@ func StoreCommentTxn(t Query, tx ETransaction) (*Result, error) {
 	var r *Result = nil
 	if *Allocate {
 		r = &Result{uint64(n)}
-		//dlog.Printf("%v Comment %v %v\n", touser, fromuser, item)
+		dlog.Printf("%v Comment %v %v\n", touser, fromuser, item)
 	}
 	return r, nil
 }
@@ -386,7 +387,6 @@ func StoreBuyNowTxn(t Query, tx ETransaction) (*Result, error) {
 	var r *Result = nil
 	if *Allocate {
 		r = &Result{qty}
-		//dlog.Printf("StoreBuyNowTxn()\n")
 	}
 	return r, nil
 }

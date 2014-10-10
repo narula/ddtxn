@@ -7,9 +7,9 @@ import (
 	"fmt"
 )
 
-var WRRatio = flag.Float64("wr", 3, "Ratio of sampled write conflicts and sampled writes to sampled reads at which to move a piece of data to split.  Default 3")
+var WRRatio = flag.Float64("wr", 2.0, "Ratio of sampled write conflicts and sampled writes to sampled reads at which to move a piece of data to split.  Default 3")
 
-var ConflictWeight = flag.Float64("cw", 1, "Weight given to conflicts over writes\n")
+var ConflictWeight = flag.Float64("cw", 1.0, "Weight given to conflicts over writes\n")
 
 type OneStat struct {
 	k         Key
