@@ -1,3 +1,6 @@
+# To run the paper experiments, where N=# of cores for the not-scalability experiments:
+#  python bm.py --exp=all --rlock --ncores=N
+
 from optparse import OptionParser
 import commands
 import os
@@ -11,7 +14,7 @@ parser.add_option("--short", action="store_true", dest="short", default=False)
 parser.add_option("--allocate", action="store_true", dest="allocate", default=False)
 parser.add_option("--ncores", action="store", type="int", dest="default_ncores", default=-1)
 parser.add_option("--nsec", action="store", type="int", dest="nsec", default=10)
-parser.add_option("--contention", action="store", type="float", dest="default_contention", default=100000)
+parser.add_option("--contention", action="store", type="float", dest="default_contention", default=1)
 parser.add_option("--rr", action="store", type="int", dest="read_rate", default=0)
 parser.add_option("--latency", action="store_true", dest="latency", default=False)
 parser.add_option("--rlock", action="store_false", dest="rlock", default=True)
@@ -262,21 +265,27 @@ if __name__ == "__main__":
 
     if host == "ben":
         CPU_ARGS = ben_list_cpus
-        
-    if options.exp == "zipfscale" or options.exp == "all":
-        zipf_scale_exp(host, options.zipf, options.read_rate)
-    if options.exp == "rw" or options.exp == "all":
-        rw_exp(-1, options.default_ncores, 1.4, 0.0)
-    if options.exp == "phase" or options.exp == "all":
-        phase_exp(options.default_ncores)
-    if options.exp == "phasetps" or options.exp == "all":
-        phase_tps_exp(options.default_ncores)
+
+    # figure 8
     if options.exp == "single" or options.exp == "all":
-        single_exp(0, options.default_ncores)
+        single_exp(0, options.default_ncores)        
+    # figure 9
     if options.exp == "singlescale" or options.exp == "all":
         single_scale_exp(host, options.default_contention, options.read_rate, options.zipf)
+    # figure 10
+    # figure 11
     if options.exp == "zipf" or options.exp == "all":
         zipf_exp(0, options.default_ncores)
+    # figure 12
+    if options.exp == "rw" or options.exp == "all":
+        rw_exp(-1, options.default_ncores, 1.4, 0.0)
+    # figure 13
+    if options.exp == "phase" or options.exp == "all":
+        phase_exp(options.default_ncores)
+    # figure 14
+    if options.exp == "phasetps" or options.exp == "all":
+        phase_tps_exp(options.default_ncores)
+    # figure 15
     if options.exp == "rubisz" or options.exp == "all":
         rubisz_exp(options.default_ncores, options.not_contended_read_rate)
 
@@ -284,13 +293,13 @@ if __name__ == "__main__":
         exit()
 
     # not in the paper or talk
-    if options.exp == "bad" or options.exp == "all":
+    if options.exp == "bad":
         bad_exp(options.read_rate)
-    if options.exp == "singlereads" or options.exp == "all":
+    if options.exp == "singlereads":
         single_reads_exp(options.default_ncores)
-    if options.exp == "singlerw" or options.exp == "all":
+    if options.exp == "singlerw":
         single_rw_exp(options.default_ncores)
-    if options.exp == "buy" or options.exp == "all":
+    if options.exp == "buy":
         buy_exp(host)
     if options.exp == "contention":
         if options.read_rate == -1:
@@ -301,15 +310,17 @@ if __name__ == "__main__":
             contention_exp(host, options.default_contention, options.read_rate, options.zipf)
     if options.exp == "products":
         products_exp(options.read_rate, options.default_ncores)
-    if options.exp == "numkeys" or options.exp == "all":
+    if options.exp == "numkeys":
         num_keys_exp()
-    if options.exp == "wratio" or options.exp == "all":
+    if options.exp == "wratio":
         wratio_exp(host, options.default_contention, options.read_rate)
-    if options.exp == "ncrr" or options.exp == "all":
+    if options.exp == "ncrr":
         ncrr_exp(options.read_rate, options.default_ncores)
-    if options.exp == "likescale" or options.exp == "all":
+    if options.exp == "likescale":
         zipf_scale_exp(host, 0.6, 50)
         zipf_scale_exp(host, 1.001, 50)
         zipf_scale_exp(host, 1.4, 50)
-    if options.exp == "rubis" or options.exp == "all":
+    if options.exp == "rubis":
         rubis_exp(host, 3, options.default_ncores)
+    if options.exp == "zipfscale":
+        zipf_scale_exp(host, options.zipf, options.read_rate)
