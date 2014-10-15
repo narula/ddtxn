@@ -30,7 +30,7 @@ parser.add_option("--version", action="store", type="int", dest="version", defau
 (options, args) = parser.parse_args()
 
 CPU_ARGS = ""
-ben_list_cpus = "socket@0,1,2,7,3-6"
+ben_list_cpus = "thread==0 socket@0,1,2,7,3-6"
 
 LATENCY_PART = " -latency=%s" % options.latency
 VERSION_PART = " -v=%d" % options.version
@@ -271,7 +271,7 @@ if __name__ == "__main__":
         single_exp(0, options.default_ncores)        
     # figure 9
     if options.exp == "singlescale" or options.exp == "all":
-        single_scale_exp(host, options.default_contention, options.read_rate, options.zipf)
+        single_scale_exp(host, 100, 0, -1)
     # figure 10
     # figure 11
     if options.exp == "zipf" or options.exp == "all":
@@ -287,6 +287,8 @@ if __name__ == "__main__":
         phase_tps_exp(options.default_ncores)
     # figure 15
     if options.exp == "rubisz" or options.exp == "all":
+        if options.not_contended_read_rate == 0:
+            options.not_contended_read_rate = 3.7
         rubisz_exp(options.default_ncores, options.not_contended_read_rate)
 
     if options.exp == "all":
