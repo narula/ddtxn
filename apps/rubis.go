@@ -220,7 +220,7 @@ func (b *Rubis) MakeOne(w int, local_seed *uint32, txn *ddtxn.Query) {
 		}
 		txn.U2 = uint64(product)
 		//txn.U3 = uint64(ddtxn.RandN(local_seed, 10))
-		txn.U3 = uint64(time.Now().UnixNano())
+		txn.U3 = uint64(time.Now().UnixNano()) & 0x000efff
 	} else if x < b.rates[1] {
 		txn.TXN = ddtxn.RUBIS_VIEWBIDHIST
 		x := ddtxn.RandN(local_seed, uint32(b.nproducts))
