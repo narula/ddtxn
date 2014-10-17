@@ -62,17 +62,19 @@ type ETransaction interface {
 
 // Tracks execution of transaction.
 type OTransaction struct {
-	padding0 [128]byte
-	read     []ReadKey
-	w        *Worker
-	s        *Store
-	ls       *LocalStore
-	phase    int
-	writes   []WriteKey
-	t        int64 // Used just as a rough count
-	count    bool
-	sr_rate  int64
-	padding  [128]byte
+	padding0    [128]byte
+	read        []ReadKey
+	w           *Worker
+	s           *Store
+	ls          *LocalStore
+	phase       int
+	writes      []WriteKey
+	maxSeen     uint64
+	t           int64 // Used just as a rough count
+	count       bool
+	sr_rate     int64
+	dummyRecord *BRecord
+	padding     [128]byte
 }
 
 func (tx *OTransaction) UID(f rune) uint64 {
@@ -89,12 +91,13 @@ func (tx *OTransaction) NoCount() {
 
 func StartOTransaction(w *Worker) *OTransaction {
 	tx := &OTransaction{
-		read:    make([]ReadKey, 0, 100),
-		writes:  make([]WriteKey, 0, 100),
-		w:       w,
-		s:       w.store,
-		ls:      w.local_store,
-		sr_rate: int64(w.ID),
+		read:        make([]ReadKey, 0, 100),
+		writes:      make([]WriteKey, 0, 100),
+		w:           w,
+		s:           w.store,
+		ls:          w.local_store,
+		sr_rate:     int64(w.ID),
+		dummyRecord: &BRecord{},
 	}
 	return tx
 }
@@ -128,25 +131,33 @@ func (tx *OTransaction) isSplit(br *BRecord) bool {
 		}
 	}
 	return false
-	//	return *SysType == DOPPEL && tx.phase == SPLIT && tx.s.any_dd && br != nil && br.dd
 }
 
 func (tx *OTransaction) Read(k Key) (*BRecord, error) {
-	if len(tx.read) > 0 {
+	if len(tx.writes) > 0 {
 		for i := 0; i < len(tx.writes); i++ {
-			r := &tx.writes[i]
-			if r.key == k {
+			w := &tx.writes[i]
+			if w.key == k {
 				// I wrote and read the same piece of data in one
 				// transaction.  This is a strong signal this
-				// shouldn't be dd.
+				// shouldn't be dd.  Also I should return this value.
+				// But I return a pointer to a record (sigh) so use a
+				// dummy record.
 				if tx.count {
-					tx.ls.candidates.ReadWrite(k, r.br)
+					tx.ls.candidates.ReadWrite(k, w.br)
 				}
-				if tx.isSplit(r.br) {
+				if tx.isSplit(w.br) {
 					return nil, ESTASH
 				}
-				// TODO: Return the value I wrote instead!
-				return r.br, nil
+				tx.dummyRecord.key_type = w.op
+				tx.dummyRecord.int_value = w.vint32
+				tx.dummyRecord.value = w.v
+				if w.op == LIST {
+					tx.dummyRecord.entries = tx.dummyRecord.entries[0 : len(w.br.entries)+1]
+					copy(tx.dummyRecord.entries, w.br.entries)
+					tx.dummyRecord.entries = append(tx.dummyRecord.entries, w.ve)
+				}
+				return tx.dummyRecord, nil
 			}
 		}
 	}
@@ -188,6 +199,9 @@ func (tx *OTransaction) Read(k Key) (*BRecord, error) {
 		tx.read[n].key = k
 		tx.read[n].br = br
 		tx.read[n].last = last
+		if last > tx.maxSeen {
+			tx.maxSeen = last
+		}
 		return br, nil
 	}
 	log.Fatalf("What")
@@ -232,6 +246,9 @@ func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 		tx.read[n].key = k
 		tx.read[n].br = br
 		tx.read[n].last = last
+		if last > tx.maxSeen {
+			tx.maxSeen = last
+		}
 	}
 	n := len(tx.writes)
 	tx.writes = tx.writes[0 : n+1]
@@ -301,6 +318,9 @@ func (tx *OTransaction) WriteList(k Key, l Entry, kt KeyType) error {
 		tx.read[n].key = k
 		tx.read[n].br = br
 		tx.read[n].last = last
+		if last > tx.maxSeen {
+			tx.maxSeen = last
+		}
 	}
 
 	n := len(tx.writes)
@@ -358,6 +378,9 @@ func (tx *OTransaction) WriteOO(k Key, a int32, v Value, kt KeyType) error {
 		tx.read[n].key = k
 		tx.read[n].br = br
 		tx.read[n].last = last
+		if last > tx.maxSeen {
+			tx.maxSeen = last
+		}
 	}
 
 	n := len(tx.writes)
@@ -437,7 +460,10 @@ func (tx *OTransaction) Commit() TID {
 		if tx.isSplit(w.br) {
 			continue
 		}
-		if !w.br.Lock() {
+		// Check last TID
+		var former uint64
+		var ok bool
+		if ok, former = w.br.Lock(); !ok {
 			tx.w.Nstats[NO_LOCK]++
 			if tx.count && w.op != KeyType(*NoConflictType) {
 				tx.ls.candidates.Conflict(w.key, w.br)
@@ -445,10 +471,16 @@ func (tx *OTransaction) Commit() TID {
 			return tx.Abort()
 		}
 		w.locked = true
+		if former > tx.maxSeen {
+			tx.maxSeen = former
+		}
 	}
-	// TODO: acquire timestamp higher than anything i've read or am
-	// writing
+
+	// Get TID higher than anything I've seen
 	tid := tx.w.commitTID()
+	for uint64(tid) <= tx.maxSeen {
+		tid = tx.w.commitTID()
+	}
 
 	// for each read key
 	//  verify
@@ -583,17 +615,30 @@ func (tx *LTransaction) Read(k Key) (*BRecord, error) {
 			tx.w.NKeyAccesses[p]++
 		}
 	}
-	if err != nil {
-		// TODO: Create and read lock for an empty key?
-		return nil, err
-	}
-	br.SRLock()
 	n := len(tx.keys)
 	tx.keys = tx.keys[0 : n+1]
-	tx.keys[n].br = br
 	tx.keys[n].read = true
 	tx.keys[n].noset = false
 	tx.keys[n].key = k
+	tx.keys[n].br = br
+	if err == nil {
+		br.SRLock()
+		return br, nil
+	}
+	if br, err = tx.s.CreateMuLockedKey(k, WRITE); err == nil {
+		tx.keys[n].noset = true
+		tx.keys[n].read = false
+		tx.keys[n].br = br
+		br.exists = false
+		return nil, ENOKEY
+	}
+	// Perhaps someone snuck in and created this key already.
+	if br, err = tx.s.getKey(k); err == nil {
+		br.SRLock()
+		tx.keys[n].br = br
+		return br, nil
+	}
+	log.Fatalf("Can't create key %v and it's not there now\n", k)
 	return br, nil
 }
 
@@ -611,10 +656,17 @@ func (tx *LTransaction) MaybeWrite(k Key) {
 		}
 	}
 	if br == nil || err != nil {
-		// Will acquire lock when I do the write and create the key.
-		return
+		if br, err = tx.s.CreateMuLockedKey(k, WRITE); err != nil {
+			// Perhaps someone snuck in and created this key already.
+			if br, err = tx.s.getKey(k); err != nil {
+				log.Fatalf("Can't create key %v and it's not there now\n", k)
+			}
+			br.SLock()
+		} // Created and Locked
+		br.exists = false
+	} else {
+		br.SLock()
 	}
-	br.SLock()
 	n := len(tx.keys)
 	tx.keys = tx.keys[0 : n+1]
 	tx.keys[n].br = br
@@ -800,9 +852,6 @@ func (tx *LTransaction) Commit() TID {
 	tid := tx.w.commitTID()
 	for i := len(tx.keys) - 1; i >= 0; i-- {
 		// Apply and unlock
-		//
-		// TODO: Phantom reads!!  Right now if I read ENOKEY, it is
-		// not read locked.
 		if tx.keys[i].read == false {
 			if tx.keys[i].noset {
 				// No changes, we write-locked it because we thought
@@ -824,6 +873,7 @@ func (tx *LTransaction) Commit() TID {
 			}
 			tx.keys[i].br.SUnlock()
 		} else {
+			//fmt.Printf("k: %v\n", tx.keys[i].br.key)
 			tx.keys[i].br.SRUnlock()
 		}
 	}

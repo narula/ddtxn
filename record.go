@@ -38,6 +38,7 @@ type BRecord struct {
 	entries   []Entry
 	mu        sync.RWMutex
 	conflict  int32 // how many times was the lock already held when someone wanted it
+	exists    bool
 	padding1  [128]byte
 }
 
@@ -47,6 +48,7 @@ func MakeBR(k Key, val Value, kt KeyType) *BRecord {
 		key:      k,
 		last:     wfmutex.WFMutex{},
 		key_type: kt,
+		exists:   true,
 	}
 	switch kt {
 	case SUM:
@@ -130,15 +132,14 @@ func (br *BRecord) Value() Value {
 	return nil
 }
 
-// Used during "normal" phase
-func (br *BRecord) Lock() bool {
-	x := br.last.Lock()
+func (br *BRecord) Lock() (bool, uint64) {
+	x, last := br.last.Lock()
 	if *Conflicts {
 		if !x {
 			atomic.AddInt32(&br.conflict, 1)
 		}
 	}
-	return x
+	return x, last
 }
 
 func (br *BRecord) Unlock(tid TID) {

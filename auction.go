@@ -90,7 +90,7 @@ func RegisterUserTxn(t Query, tx ETransaction) (*Result, error) {
 	tx.MaybeWrite(nick)
 	br, err := tx.Read(nick)
 	var val uint64 = 0
-	if br != nil {
+	if br != nil && br.exists {
 		val = br.Value().(uint64)
 	}
 
@@ -207,6 +207,9 @@ func StoreBidTxn(t Query, tx ETransaction) (*Result, error) {
 	user := t.U1
 	item := t.U2
 	price := int32(t.U3)
+	if price < 0 {
+		log.Fatalf("price %v %v", price, t.U3)
+	}
 	// insert bid
 	n := tx.UID('b')
 	bid_key := BidKey(n)

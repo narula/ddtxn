@@ -134,6 +134,22 @@ func (s *Store) CreateMuLockedKey(k Key, kt KeyType) (*BRecord, error) {
 	return br, nil
 }
 
+func (s *Store) CreateMuRLockedKey(k Key, kt KeyType) (*BRecord, error) {
+	chunk := s.store[k[0]]
+	br := MakeBR(k, nil, kt)
+	br.SRLock()
+	chunk.Lock()
+	_, ok := chunk.rows[k]
+	if ok {
+		chunk.Unlock()
+		dlog.Printf("Key already exists %v\n", k)
+		return nil, EEXISTS
+	}
+	chunk.rows[k] = br
+	chunk.Unlock()
+	return br, nil
+}
+
 func (s *Store) SetInt32(br *BRecord, v int32, op KeyType) {
 	switch op {
 	case SUM:

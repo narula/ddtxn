@@ -17,12 +17,12 @@ type WFMutex struct {
 // Lock locks rw for writing.  If the record is already locked it
 // returns false, if I successfully obtained the lock it returns true.
 // Lock never blocks.
-func (rw *WFMutex) Lock() bool {
+func (rw *WFMutex) Lock() (bool, uint64) {
 	// First, check if it's locked
 	locked_q := atomic.LoadUint64(&rw.w)
 	high_bit := locked_q >> 63
 	if high_bit&1 != 0 {
-		return false
+		return false, 0
 	}
 	// Not locked, try to compare and swap to get it.  We
 	// compare-and-swap in the last value to preserve the version in
@@ -33,9 +33,9 @@ func (rw *WFMutex) Lock() bool {
 	var locked_t uint64 = LOCKED | locked_q
 	done := atomic.CompareAndSwapUint64(&rw.w, locked_q, locked_t)
 	if !done {
-		return false
+		return false, 0
 	}
-	return true
+	return true, locked_q
 }
 
 func (rw *WFMutex) Read() uint64 {
