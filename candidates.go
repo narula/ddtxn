@@ -32,8 +32,8 @@ func (o *OneStat) ratio() float64 {
 // stats computation.
 //
 // Since we limit what we add to h, it doesn't really have to be a
-// heap.  But one could imagine only looking at the top set of things
-// in the heap later on.
+// heap.  But one could imagine eliminating m and only looking at the
+// top set of things in the heap instead.
 type Candidates struct {
 	m map[Key]*OneStat
 	h *StatsHeap
