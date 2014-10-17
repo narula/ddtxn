@@ -1,6 +1,7 @@
 package ddtxn
 
 import (
+	"ddtxn/dlog"
 	"flag"
 	"log"
 	"math/rand"
@@ -570,22 +571,24 @@ type Rec struct {
 
 // Not threadsafe.  Tracks execution of transaction.
 type LTransaction struct {
-	padding0 [128]byte
-	keys     []Rec
-	w        *Worker
-	s        *Store
-	t        int64 // Used just as a rough count
-	ls       *LocalStore
-	phase    int
-	padding  [128]byte
+	padding0    [128]byte
+	keys        []Rec
+	w           *Worker
+	s           *Store
+	t           int64 // Used just as a rough count
+	ls          *LocalStore
+	phase       int
+	dummyRecord *BRecord
+	padding     [128]byte
 }
 
 func StartLTransaction(w *Worker) *LTransaction {
 	tx := &LTransaction{
-		keys: make([]Rec, 0, 100),
-		w:    w,
-		s:    w.store,
-		ls:   w.local_store,
+		keys:        make([]Rec, 0, 100),
+		w:           w,
+		s:           w.store,
+		ls:          w.local_store,
+		dummyRecord: &BRecord{},
 	}
 	return tx
 }
@@ -604,9 +607,32 @@ func (tx *LTransaction) RelinquishKey(n uint64, r rune) {
 }
 
 func (tx *LTransaction) Read(k Key) (*BRecord, error) {
-	// TODO: If I wrote the key, return that value instead
 	if exists, n := tx.already_exists(k); exists {
-		return tx.keys[n].br, nil
+		if tx.keys[n].noset == true && tx.keys[n].br.exists {
+			// MaybeWrite(); if the key exists.
+			return tx.keys[n].br, nil
+		}
+		if tx.keys[n].noset == true && tx.keys[n].br.exists == false {
+			// Doesn't really exist yet; created to lock for read or MaybeWrite()
+			return nil, ENOKEY
+		}
+		if tx.keys[n].br.exists && tx.keys[n].noset == false && tx.keys[n].read == false {
+			tx.dummyRecord.key_type = tx.keys[n].kt
+			tx.dummyRecord.int_value = tx.keys[n].vint32
+			tx.dummyRecord.value = tx.keys[n].v
+			dlog.Printf("Creating dummy record for key %v %v %v %v\n", k, tx.dummyRecord.key_type, tx.dummyRecord.int_value, tx.dummyRecord.value)
+			if tx.keys[n].kt == LIST {
+				tx.dummyRecord.entries = tx.dummyRecord.entries[0 : len(tx.keys[n].br.entries)+1]
+				copy(tx.dummyRecord.entries, tx.keys[n].br.entries)
+				tx.dummyRecord.entries = append(tx.dummyRecord.entries, tx.keys[n].ve)
+			}
+			return tx.dummyRecord, nil
+		}
+		if tx.keys[n].br.exists && tx.keys[n].noset == false && tx.keys[n].read == true {
+			return tx.keys[n].br, nil
+		}
+		dlog.Printf("Returning ENOKEY for key %v supposedly at slot %v. %v\n", k, n, tx.keys[n])
+		return nil, ENOKEY
 	}
 	br, err := tx.s.getKey(k)
 	if *CountKeys {

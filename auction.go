@@ -109,7 +109,7 @@ func RegisterUserTxn(t Query, tx ETransaction) (*Result, error) {
 	}
 	if *Allocate {
 		r = &Result{uint64(n)}
-		//dlog.Printf("Registered user %v %v\n", nickname, n)
+		// dlog.Printf("Registered user %v %v\n", nickname, n)
 	}
 	return r, nil
 }
@@ -267,7 +267,7 @@ func StoreBidTxn(t Query, tx ETransaction) (*Result, error) {
 
 	if *Allocate {
 		r = &Result{uint64(n)}
-		dlog.Printf("User %v Bid on item %v for %v dollars\n", user, item, price)
+		// dlog.Printf("User %v Bid on item %v for %v dollars\n", user, item, price)
 	}
 	return r, nil
 }
@@ -478,7 +478,7 @@ func ViewBidHistoryTxn(t Query, tx ETransaction) (*Result, error) {
 			} else if err == EABORT {
 				return nil, EABORT
 			} else if err == ENOKEY {
-				dlog.Printf("Viewing bid and user doesn't exist?! %v\n", uk)
+				dlog.Printf("ViewBidHist() Viewing bid %v and user doesn't exist?! %v\n", listy[i].key, uk)
 				if tx.Commit() == 0 {
 					return nil, EABORT
 				} else {
