@@ -408,3 +408,65 @@ func (b *Rubis) Validate(s *ddtxn.Store, nitr int) bool {
 	}
 	return good
 }
+
+func (b *Rubis) PreAllocate(coord *ddtxn.Coordinator, bidrate float64, rounds bool) {
+	prealloc := time.Now()
+	users_per_worker := 100000.0
+	bids_per_worker := 200000.0
+	if bidrate > 20 {
+		users_per_worker = 100000
+		bids_per_worker = 1500000
+	} else if b.nworkers <= 4 {
+		users_per_worker = users_per_worker * 1.5
+		bids_per_worker = bids_per_worker * 1.5
+	} else if b.nworkers == 10 {
+		users_per_worker = 1000
+		bids_per_worker = 1000
+	} else if b.nworkers >= 70 {
+		users_per_worker = users_per_worker * 1.5
+		bids_per_worker = bids_per_worker * 1.5
+	} else if b.nworkers >= 50 {
+		//			users_per_worker = users_per_worker * .75
+		//			bids_per_worker = bids_per_worker * .75
+	} else if b.nworkers == 20 {
+		// want to be same sized map as 80 to test hypothesis
+		//			bids_per_worker *= 5
+		//			users_per_worker *= 2
+		users_per_worker = users_per_worker * 4 * 1.5
+		bids_per_worker = bids_per_worker * 4 * 1.5
+	}
+	fmt.Printf("%v bids, %v users\n", bids_per_worker*float64(b.nworkers), users_per_worker*float64(b.nworkers))
+	if rounds {
+		parallelism := 10
+		rounds := b.nworkers / parallelism
+		if rounds == 0 {
+			rounds = 1
+		}
+		for j := 0; j < rounds; j++ {
+			fmt.Printf("Doing round %v\n", j)
+			var wg sync.WaitGroup
+			for i := j * parallelism; i < (j+1)*parallelism; i++ {
+				if i >= b.nworkers {
+					break
+				}
+				wg.Add(1)
+				go func(i int) {
+					coord.Workers[i].PreallocateRubis(int(users_per_worker), int(bids_per_worker), b.nbidders)
+					wg.Done()
+				}(i)
+			}
+			wg.Wait()
+		}
+	} else {
+		var wg sync.WaitGroup
+		for i := 0; i < b.nworkers; i++ {
+			wg.Add(1)
+			go func(i int) {
+				coord.Workers[i].PreallocateRubis(int(users_per_worker), int(bids_per_worker), b.nbidders)
+				wg.Done()
+			}(i)
+		}
+		wg.Wait()
+	}
+	fmt.Printf("Allocation took %v\n", time.Since(prealloc))
+}

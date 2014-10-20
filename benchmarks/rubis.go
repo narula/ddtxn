@@ -73,68 +73,10 @@ func main() {
 	fmt.Printf("Done populating rubis\n")
 
 	if !*ddtxn.Allocate {
-		prealloc := time.Now()
 		tmp := *ddtxn.UseRLocks
 		*ddtxn.UseRLocks = true
-		// Preallocate keys
-
-		users_per_worker := 100000.0
-		bids_per_worker := 200000.0
-		if bidrate > 20 {
-			users_per_worker = 100000
-			bids_per_worker = 1500000
-		}
-
-		if *nworkers <= 4 {
-			users_per_worker = users_per_worker * 1.5
-			bids_per_worker = bids_per_worker * 1.5
-		}
-		if *nworkers >= 70 {
-			users_per_worker = users_per_worker * .75
-			bids_per_worker = bids_per_worker * .75
-		} else if *nworkers >= 50 {
-			users_per_worker = users_per_worker * .75
-			bids_per_worker = bids_per_worker * .75
-		}
-		if *nworkers == 20 {
-			bids_per_worker *= 5
-			users_per_worker *= 2
-		}
-
-		if *rounds {
-			parallelism := 10
-			rounds := *nworkers / parallelism
-			if rounds == 0 {
-				rounds = 1
-			}
-			for j := 0; j < rounds; j++ {
-				fmt.Printf("Doing round %v\n", j)
-				var wg sync.WaitGroup
-				for i := j * parallelism; i < (j+1)*parallelism; i++ {
-					if i >= *nworkers {
-						break
-					}
-					wg.Add(1)
-					go func(i int) {
-						coord.Workers[i].PreallocateRubis(int(users_per_worker), int(bids_per_worker), *nbidders)
-						wg.Done()
-					}(i)
-				}
-				wg.Wait()
-			}
-		} else {
-			var wg sync.WaitGroup
-			for i := 0; i < *nworkers; i++ {
-				wg.Add(1)
-				go func(i int) {
-					coord.Workers[i].PreallocateRubis(int(users_per_worker), int(bids_per_worker), *nbidders)
-					wg.Done()
-				}(i)
-			}
-			wg.Wait()
-		}
+		rubis.PreAllocate(coord, bidrate, *rounds)
 		*ddtxn.UseRLocks = tmp
-		fmt.Printf("Allocation took %v\n", time.Since(prealloc))
 	}
 	fmt.Printf("Done initializing rubis\n")
 
