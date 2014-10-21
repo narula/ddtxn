@@ -106,11 +106,12 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 		o := heap.Pop(s.cand.h).(*OneStat)
 		br, _ := s.getKey(o.k)
 		if !br.dd {
-			if len(s.dd) == 0 {
+			if !s.any_dd {
 				// Higher threshold for the first one, since it kicks off phases
 				if o.ratio() > 1.33*(*WRRatio) && (o.writes > 1 || o.conflicts > 5) {
 					potential_dd_keys[o.k] = true
 					dlog.Printf("move %v to split1 r:%v w:%v c:%v s:%v ra:%v after: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), c.PotentialPhaseChanges)
+					s.any_dd = true
 				} else {
 					dlog.Printf("%v no move inertia r:%v w:%v c:%v s:%v ra:%v after: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), c.PotentialPhaseChanges)
 				}
@@ -119,6 +120,7 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 			if o.ratio() > *WRRatio && (o.writes > 1 || o.conflicts > 1) {
 				potential_dd_keys[o.k] = true
 				dlog.Printf("move %v to split2 r:%v w:%v c:%v s:%v ra:%v after: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), c.PotentialPhaseChanges)
+				s.any_dd = true
 			} else {
 				dlog.Printf("too low; no move :%v; r:%v w:%v c:%v s:%v ra:%v; wr: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), *WRRatio)
 			}
@@ -132,6 +134,13 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 		o, ok := s.cand.m[k]
 		if !ok {
 			dlog.Printf("Key %v was split but now is not in store candidates\n", k)
+			// if x, ok := c.to_remove[k]; x && ok {
+			// 	c.to_remove[k] = false
+			// 	to_remove[k] = true
+			// } else {
+			// 	c.to_remove[k] = true
+			// }
+			// dlog.Printf("move %v from split2 \n", k)
 			continue
 		}
 		if o.ratio() < (*WRRatio)/2 {
@@ -145,9 +154,15 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 		}
 	}
 	if len(s.dd) == 0 && len(potential_dd_keys) == 0 {
+		if c.Coordinate {
+			dlog.Printf("Do not have to coordinate! after: %v\n", c.PotentialPhaseChanges)
+		}
 		s.any_dd = false
 		c.Coordinate = false
 	} else {
+		if !c.Coordinate {
+			dlog.Printf("Have to coordinate after: %v\n", c.PotentialPhaseChanges)
+		}
 		c.Coordinate = true
 		s.any_dd = true
 	}
