@@ -134,13 +134,13 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 		o, ok := s.cand.m[k]
 		if !ok {
 			dlog.Printf("Key %v was split but now is not in store candidates\n", k)
-			// if x, ok := c.to_remove[k]; x && ok {
-			// 	c.to_remove[k] = false
-			// 	to_remove[k] = true
-			// } else {
-			// 	c.to_remove[k] = true
-			// }
-			// dlog.Printf("move %v from split2 \n", k)
+			if x, ok := c.to_remove[k]; x && ok {
+				c.to_remove[k] = false
+				to_remove[k] = true
+			} else {
+				c.to_remove[k] = true
+			}
+			dlog.Printf("move %v from split2 \n", k)
 			continue
 		}
 		if o.ratio() < (*WRRatio)/2 {
@@ -155,13 +155,13 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 	}
 	if len(s.dd) == 0 && len(potential_dd_keys) == 0 {
 		if c.Coordinate {
-			dlog.Printf("Do not have to coordinate! after: %v\n", c.PotentialPhaseChanges)
+			fmt.Printf("Do not have to coordinate! after %v phases\n", c.PotentialPhaseChanges)
 		}
 		s.any_dd = false
 		c.Coordinate = false
 	} else {
 		if !c.Coordinate {
-			dlog.Printf("Have to coordinate after: %v\n", c.PotentialPhaseChanges)
+			fmt.Printf("Have to coordinate after %v phases\n", c.PotentialPhaseChanges)
 		}
 		c.Coordinate = true
 		s.any_dd = true
