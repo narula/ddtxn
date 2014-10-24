@@ -415,7 +415,7 @@ func (b *Rubis) PreAllocate(coord *ddtxn.Coordinator, bidrate float64, rounds bo
 	bids_per_worker := 200000.0
 	if bidrate > 20 {
 		users_per_worker = 100000
-		bids_per_worker = 1500000
+		bids_per_worker = 2000000
 	} else if b.nworkers <= 4 {
 		users_per_worker = users_per_worker * 1.5
 		bids_per_worker = bids_per_worker * 1.5

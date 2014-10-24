@@ -85,7 +85,7 @@ func main() {
 	for i := 0; i < *clientGoRoutines; i++ {
 		wg.Add(1)
 		go func(n int) {
-			exp := ddtxn.MakeExp(30)
+			exp := ddtxn.MakeExp(50)
 			retries := make(ddtxn.RetryHeap, 0)
 			heap.Init(&retries)
 			var local_seed uint32 = uint32(rand.Intn(10000000))

@@ -1,6 +1,7 @@
 package ddtxn
 
 import (
+	"ddtxn/dlog"
 	"flag"
 	"log"
 	"runtime/debug"
@@ -343,6 +344,11 @@ func (w *Worker) One(t Query) (*Result, error) {
 	r, err := w.doTxn(t)
 	w.RUnlock()
 	return r, err
+}
+
+func (w *Worker) Finished() {
+	dlog.Printf("%v FINISHED (e=%v)\n", w.ID, w.epoch)
+	w.coordinator.Finished[w.ID] = true
 }
 
 func (w *Worker) PreallocateRubis(nx, nb, start int) {

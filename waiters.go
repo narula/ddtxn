@@ -2,7 +2,7 @@ package ddtxn
 
 import "flag"
 
-var TriggerCount = flag.Int("trigger", 10000, "How long the queue can get before triggering a phase change\n")
+var TriggerCount = flag.Int("trigger", 100000, "How long the queue can get before triggering a phase change\n")
 
 type TStore struct {
 	t []Query

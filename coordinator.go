@@ -37,6 +37,8 @@ type Coordinator struct {
 	trigger               int32
 	to_remove             map[Key]bool
 
+	StartTime      time.Time
+	Finished       []bool
 	TotalCoordTime time.Duration
 	GoTime         time.Duration
 	ReadTime       time.Duration
@@ -65,6 +67,7 @@ func NewCoordinator(n int, s *Store) *Coordinator {
 		c.wdone[i] = make(chan TID)
 		c.Workers[i] = NewWorker(i, s, c)
 	}
+	c.Finished = make([]bool, n)
 	dlog.Printf("[coordinator] %v workers\n", n)
 	go c.Process()
 	return c
@@ -89,12 +92,18 @@ var Time_in_IE time.Duration
 var Time_in_IE1 time.Duration
 
 func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
+	for i := 0; i < len(c.Workers); i++ {
+		if c.Finished[i] {
+			dlog.Printf("COORD not computing stats, worker %v finished\n", i)
+			return nil, nil
+		}
+	}
 	if c.PotentialPhaseChanges%(10) != 0 {
 		return nil, nil
 	}
 	start2 := time.Now()
 	s := c.Workers[0].store
-	for i := 0; i < c.n; i++ {
+	for i := 0; i < len(c.Workers); i++ {
 		w := c.Workers[i]
 		c.Workers[i].Lock()
 		s.cand.Merge(w.local_store.candidates)
@@ -171,7 +180,7 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 	sh := StatsHeap(x)
 	s.cand = &Candidates{make(map[Key]*OneStat), &sh}
 
-	for i := 0; i < c.n; i++ {
+	for i := 0; i < len(c.Workers); i++ {
 		// Reset local stores and unlock
 		w := c.Workers[i]
 		x := make([]*OneStat, 0)
@@ -199,21 +208,21 @@ func (c *Coordinator) IncrementEpoch(force bool) {
 		c.TotalCoordTime += time.Since(start1)
 		return
 	}
+	c.StartTime = time.Now()
 	next_epoch := c.NextGlobalTID()
 
 	// Wait for everyone to merge the previous epoch
-	sx := time.Now()
 	for i := 0; i < c.n; i++ {
 		e := <-c.wepoch[i]
 		if e != next_epoch {
 			log.Fatalf("Out of alignment in epoch ack; I expected %v, got %v\n", next_epoch, e)
 		}
 	}
-	c.MergeTime += time.Since(sx)
+	c.MergeTime += time.Since(c.StartTime)
 
 	// All merged.  The previous epoch is now safe; tell everyone to
 	// do their reads.
-	sx = time.Now()
+	sx := time.Now()
 	atomic.StoreInt32(&c.trigger, 0)
 	for i := 0; i < c.n; i++ {
 		c.wsafe[i] <- next_epoch

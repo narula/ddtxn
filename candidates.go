@@ -65,7 +65,7 @@ func (c *Candidates) Read(k Key, br *BRecord) {
 	}
 	x, _ := UndoCKey(k)
 	if x == 3 {
-		dlog.Printf("Read; updating r:%v w:%v c:%v s:%v ratio:%v, %v\n", o.reads, o.writes, o.conflicts, o.stash, o.ratio(), o.k)
+		//dlog.Printf("Read; updating r:%v w:%v c:%v s:%v ratio:%v, %v\n", o.reads, o.writes, o.conflicts, o.stash, o.ratio(), o.k)
 	}
 	if o.ratio() > *WRRatio || (br != nil && br.dd) {
 		c.h.update(o)
@@ -85,7 +85,7 @@ func (c *Candidates) Write(k Key, br *BRecord) {
 	}
 	x, _ := UndoCKey(k)
 	if x == 3 {
-		dlog.Printf("Write; updating r:%v w:%v c:%v s:%v ratio:%v,  %v\n", o.reads, o.writes, o.conflicts, o.stash, o.ratio(), o.k)
+		//dlog.Printf("Write; updating r:%v w:%v c:%v s:%v ratio:%v,  %v\n", o.reads, o.writes, o.conflicts, o.stash, o.ratio(), o.k)
 	}
 	if (o.ratio() > *WRRatio && o.conflicts > 1) || (br != nil && br.dd) {
 		c.h.update(o)
@@ -102,7 +102,7 @@ func (c *Candidates) Conflict(k Key, br *BRecord) {
 	}
 	x, _ := UndoCKey(k)
 	if x == 3 {
-		dlog.Printf("Conflict; updating r:%v w:%v c:%v s:%v ratio:%v, %v\n", o.reads, o.writes, o.conflicts, o.stash, o.ratio(), o.k)
+		//dlog.Printf("Conflict; updating r:%v w:%v c:%v s:%v ratio:%v, %v\n", o.reads, o.writes, o.conflicts, o.stash, o.ratio(), o.k)
 	}
 	if o.ratio() > *WRRatio || (br != nil && br.dd) {
 		c.h.update(o)
@@ -119,7 +119,7 @@ func (c *Candidates) Stash(k Key) {
 	}
 	x, _ := UndoCKey(k)
 	if x == 3 {
-		dlog.Printf("Stash; updating r:%v w:%v c:%v s:%v ratio:%v, %v\n", o.reads, o.writes, o.conflicts, o.stash, o.ratio(), o.k)
+		//dlog.Printf("Stash; updating r:%v w:%v c:%v s:%v ratio:%v, %v\n", o.reads, o.writes, o.conflicts, o.stash, o.ratio(), o.k)
 	}
 	c.h.update(o)
 }

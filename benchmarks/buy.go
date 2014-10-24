@@ -34,7 +34,6 @@ var ZipfDist = flag.Float64("zipf", -1, "Zipfian distribution theta. -1 means us
 func main() {
 	flag.Parse()
 	runtime.GOMAXPROCS(*nprocs)
-
 	if *clientGoRoutines == 0 {
 		*clientGoRoutines = *nprocs
 	}
@@ -52,9 +51,6 @@ func main() {
 	}
 	var nproducts int
 	if *contention > 0 {
-		if *ZipfDist > 0 {
-			log.Fatalf("can't use both")
-		}
 		nproducts = *nbidders / int(*contention)
 	} else {
 		nproducts = *nbidders
@@ -133,7 +129,7 @@ func main() {
 				}
 				t.I++
 				if !committed {
-					e := exp.Exp(t.I)
+					e := uint32(exp.Exp(t.I))
 					if e < 1 {
 						e = 1
 					}
