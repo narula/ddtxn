@@ -87,7 +87,7 @@ func main() {
 	for i := 0; i < *clientGoRoutines; i++ {
 		wg.Add(1)
 		go func(n int) {
-			exp := ddtxn.MakeExp(30)
+			exp := ddtxn.MakeExp(50)
 			retries := make(ddtxn.RetryHeap, 0)
 			heap.Init(&retries)
 			end_time := time.Now().Add(time.Duration(*nsec) * time.Second)
@@ -133,7 +133,18 @@ func main() {
 				}
 				t.I++
 				if !committed {
-					t.TS = tm.Add(time.Duration(ddtxn.RandN(&local_seed, exp.Exp(t.I))) * time.Microsecond)
+					e := exp.Exp(t.I)
+					if e < 1 {
+						e = 1
+					}
+					if local_seed < 1 {
+						local_seed = 1
+					}
+					rnd := ddtxn.RandN(&local_seed, e)
+					if rnd <= 2 {
+						rnd = 2
+					}
+					t.TS = tm.Add(time.Duration(rnd) * time.Microsecond)
 					if t.TS.Before(end_time) {
 						heap.Push(&retries, t)
 					} else {
