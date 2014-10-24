@@ -421,6 +421,14 @@ func (w *Worker) GiveBack(n uint64, r rune) {
 	}
 }
 
+func (w *Worker) resetTID(bigger uint64) {
+	big := bigger >> 16
+	if big < uint64(w.next) {
+		log.Fatalf("%v How is supposedly bigger TID %v smaller than %v\n", w.ID, big, w.next)
+	}
+	w.next = TID(big + 1)
+}
+
 func (w *Worker) nextTID() TID {
 	w.next++
 	x := uint64(w.next<<16) | uint64(w.ID)<<8 | uint64(w.next%CHUNKS)

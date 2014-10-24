@@ -479,9 +479,13 @@ func (tx *OTransaction) Commit() TID {
 
 	// Get TID higher than anything I've seen
 	tid := tx.w.commitTID()
-	//	for uint64(tid) <= tx.maxSeen {
-	//		tid = tx.w.commitTID()
-	//	}
+	if uint64(tid) < tx.maxSeen {
+		tx.w.resetTID(tx.maxSeen)
+		tid = tx.w.commitTID()
+		if uint64(tid) < tx.maxSeen {
+			log.Fatalf("%v MaxSeen %v, reset TID but %v<%v", tx.w.ID, tx.maxSeen, tid, tx.maxSeen)
+		}
+	}
 
 	// for each read key
 	//  verify
