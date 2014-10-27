@@ -2,9 +2,10 @@ package ddtxn
 
 import (
 	"container/heap"
-	"ddtxn/dlog"
 	"flag"
 	"fmt"
+	"log"
+	"runtime/debug"
 )
 
 var WRRatio = flag.Float64("wr", 2.0, "Ratio of sampled write conflicts and sampled writes to sampled reads at which to move a piece of data to split.  Default 3")
@@ -13,6 +14,7 @@ var ConflictWeight = flag.Float64("cw", 1.0, "Weight given to conflicts over wri
 
 type OneStat struct {
 	k         Key
+	op        KeyType
 	reads     float64
 	writes    float64
 	conflicts float64
@@ -44,7 +46,7 @@ func (c *Candidates) Merge(c2 *Candidates) {
 		o2 := heap.Pop(c2.h).(*OneStat)
 		o, ok := c.m[o2.k]
 		if !ok {
-			c.m[o2.k] = &OneStat{k: o2.k, reads: 0, writes: 0, conflicts: 0, stash: 0, index: -1}
+			c.m[o2.k] = &OneStat{k: o2.k, op: o2.op, reads: 0, writes: 0, conflicts: 0, stash: 0, index: -1}
 			o = c.m[o2.k]
 		}
 		o.reads += o2.reads
@@ -58,14 +60,10 @@ func (c *Candidates) Merge(c2 *Candidates) {
 func (c *Candidates) Read(k Key, br *BRecord) {
 	o, ok := c.m[k]
 	if !ok {
-		c.m[k] = &OneStat{k: k, reads: 1, writes: 0, conflicts: 0, stash: 0, index: -1}
+		c.m[k] = &OneStat{k: k, op: -1, reads: 1, writes: 0, conflicts: 0, stash: 0, index: -1}
 		o = c.m[k]
 	} else {
 		o.reads++
-	}
-	x, _ := UndoCKey(k)
-	if x == 3 {
-		//dlog.Printf("Read; updating r:%v w:%v c:%v s:%v ratio:%v, %v\n", o.reads, o.writes, o.conflicts, o.stash, o.ratio(), o.k)
 	}
 	if o.ratio() > *WRRatio || (br != nil && br.dd) {
 		c.h.update(o)
@@ -75,34 +73,40 @@ func (c *Candidates) Read(k Key, br *BRecord) {
 // This is only used when a key is in split mode (can't count
 // conflicts anymore because they don't happen).  Make it count for
 // more.
-func (c *Candidates) Write(k Key, br *BRecord) {
+func (c *Candidates) Write(k Key, br *BRecord, op KeyType) {
 	o, ok := c.m[k]
 	if !ok {
-		c.m[k] = &OneStat{k: k, reads: 1, writes: 1, conflicts: 0, stash: 0, index: -1}
+		c.m[k] = &OneStat{k: k, op: op, reads: 1, writes: 1, conflicts: 0, stash: 0, index: -1}
 		o = c.m[k]
 	} else {
-		o.writes = o.writes + 1
-	}
-	x, _ := UndoCKey(k)
-	if x == 3 {
-		//dlog.Printf("Write; updating r:%v w:%v c:%v s:%v ratio:%v,  %v\n", o.reads, o.writes, o.conflicts, o.stash, o.ratio(), o.k)
+		if o.op == -1 {
+			o.op = op
+		}
+		if op != o.op {
+			debug.PrintStack()
+			log.Fatalf("Do not support multiple types of writes right now key %v, op write: %v op was: %v\n", k, op, o.op)
+		}
+		o.writes++
 	}
 	if (o.ratio() > *WRRatio && o.conflicts > 1) || (br != nil && br.dd) {
 		c.h.update(o)
 	}
 }
 
-func (c *Candidates) Conflict(k Key, br *BRecord) {
+func (c *Candidates) Conflict(k Key, br *BRecord, op KeyType) {
 	o, ok := c.m[k]
 	if !ok {
-		c.m[k] = &OneStat{k: k, reads: 1, writes: 0, conflicts: 1, stash: 0, index: -1}
+		c.m[k] = &OneStat{k: k, op: op, reads: 1, writes: 0, conflicts: 1, stash: 0, index: -1}
 		o = c.m[k]
 	} else {
+		if o.op == -1 {
+			o.op = op
+		}
+		if op != o.op {
+			debug.PrintStack()
+			log.Fatalf("Do not support multiple types of writes right now key %v, op conflict: %v op was: %v\n", k, op, o.op)
+		}
 		o.conflicts++
-	}
-	x, _ := UndoCKey(k)
-	if x == 3 {
-		//dlog.Printf("Conflict; updating r:%v w:%v c:%v s:%v ratio:%v, %v\n", o.reads, o.writes, o.conflicts, o.stash, o.ratio(), o.k)
 	}
 	if o.ratio() > *WRRatio || (br != nil && br.dd) {
 		c.h.update(o)
@@ -112,14 +116,10 @@ func (c *Candidates) Conflict(k Key, br *BRecord) {
 func (c *Candidates) Stash(k Key) {
 	o, ok := c.m[k]
 	if !ok {
-		c.m[k] = &OneStat{k: k, reads: 0, writes: 0, conflicts: 0, stash: 1, index: -1}
+		c.m[k] = &OneStat{k: k, op: -1, reads: 0, writes: 0, conflicts: 0, stash: 1, index: -1}
 		o = c.m[k]
 	} else {
-		o.stash = o.stash + 1
-	}
-	x, _ := UndoCKey(k)
-	if x == 3 {
-		//dlog.Printf("Stash; updating r:%v w:%v c:%v s:%v ratio:%v, %v\n", o.reads, o.writes, o.conflicts, o.stash, o.ratio(), o.k)
+		o.stash++
 	}
 	c.h.update(o)
 }
@@ -127,17 +127,13 @@ func (c *Candidates) Stash(k Key) {
 func (c *Candidates) ReadWrite(k Key, br *BRecord) {
 	o, ok := c.m[k]
 	if !ok {
-		c.m[k] = &OneStat{k: k, reads: 5, writes: 0, conflicts: 0, stash: 0, index: -1}
+		c.m[k] = &OneStat{k: k, op: -1, reads: 5, writes: 0, conflicts: 0, stash: 0, index: -1}
 		o = c.m[k]
 	} else {
 		o.reads = o.reads + 10
 		o.conflicts = o.conflicts - 1
 	}
 	if o.ratio() > *WRRatio || o.index > -1 || br.dd {
-		x, _ := UndoCKey(k)
-		if x == 3 {
-			dlog.Printf("ReadWrite; updating r:%v w:%v c:%v s:%v ratio:%v, %v\n", o.reads, o.writes, o.conflicts, o.stash, o.ratio(), o.k)
-		}
 		c.h.update(o)
 	}
 }

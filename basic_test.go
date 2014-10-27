@@ -210,14 +210,14 @@ func TestCandidates(t *testing.T) {
 	k := ProductKey(1)
 	br := &BRecord{}
 	for i := 0; i < 10; i++ {
-		c.Write(k, br)
+		c.Write(k, br, SUM)
 	}
 	c.Read(k, br)
 	h2 := make([]*OneStat, 0)
 	sh2 := StatsHeap(h2)
 	c2 := Candidates{make(map[Key]*OneStat), &sh2}
 	for i := 0; i < 9; i++ {
-		c2.Write(k, br)
+		c2.Write(k, br, SUM)
 	}
 	c.Merge(&c2)
 }

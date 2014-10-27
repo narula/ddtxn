@@ -39,9 +39,9 @@ type ETransaction interface {
 	Reset()
 	Read(k Key) (*BRecord, error)
 	WriteInt32(k Key, a int32, op KeyType) error
-	WriteList(k Key, l Entry, kt KeyType) error
-	WriteOO(k Key, a int32, v Value, kt KeyType) error
-	Write(k Key, v Value, kt KeyType)
+	WriteList(k Key, l Entry, op KeyType) error
+	WriteOO(k Key, a int32, v Value, op KeyType) error
+	Write(k Key, v Value, op KeyType)
 	Abort() TID
 	Commit() TID
 	SetPhase(int)
@@ -223,7 +223,10 @@ func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 	}
 	if tx.isSplit(br) {
 		if tx.count {
-			tx.ls.candidates.Write(k, br)
+			tx.ls.candidates.Write(k, br, op)
+		}
+		if br.key_type != op {
+			log.Fatalf("%v Doing a write to a non-%v type: %v", k, op, br.key_type)
 		}
 		// Do not need to read-validate
 	} else {
@@ -236,7 +239,7 @@ func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 			if !ok {
 				tx.w.Nstats[NLOCKED]++
 				if tx.count && KeyType(*NoConflictType) != op {
-					tx.ls.candidates.Conflict(k, br)
+					tx.ls.candidates.Conflict(k, br, op)
 				}
 				return EABORT
 			}
@@ -261,7 +264,7 @@ func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 	return nil
 }
 
-func (tx *OTransaction) Write(k Key, v Value, kt KeyType) {
+func (tx *OTransaction) Write(k Key, v Value, op KeyType) {
 	if len(tx.writes) == cap(tx.writes) {
 		log.Fatalf("Ran out of room\n")
 	}
@@ -270,12 +273,12 @@ func (tx *OTransaction) Write(k Key, v Value, kt KeyType) {
 	tx.writes[n].key = k
 	tx.writes[n].br = nil
 	tx.writes[n].v = v
-	tx.writes[n].op = kt
+	tx.writes[n].op = op
 	tx.writes[n].locked = false
 }
 
-func (tx *OTransaction) WriteList(k Key, l Entry, kt KeyType) error {
-	if kt != LIST {
+func (tx *OTransaction) WriteList(k Key, l Entry, op KeyType) error {
+	if op != LIST {
 		log.Fatalf("Not a list\n")
 	}
 	if len(tx.writes) == cap(tx.writes) {
@@ -295,7 +298,10 @@ func (tx *OTransaction) WriteList(k Key, l Entry, kt KeyType) error {
 	}
 	if tx.isSplit(br) {
 		if tx.count {
-			tx.ls.candidates.Write(k, br)
+			tx.ls.candidates.Write(k, br, op)
+		}
+		if br.key_type != LIST {
+			log.Fatalf("%v Doing a write to a non-LIST type: %v", k, br.key_type)
 		}
 		// Do not need to read-validate
 	} else {
@@ -308,7 +314,7 @@ func (tx *OTransaction) WriteList(k Key, l Entry, kt KeyType) error {
 			if !ok {
 				tx.w.Nstats[NLOCKED]++
 				if tx.count && KeyType(*NoConflictType) != LIST {
-					tx.ls.candidates.Conflict(k, br)
+					tx.ls.candidates.Conflict(k, br, LIST)
 				}
 				return EABORT
 			}
@@ -329,14 +335,14 @@ func (tx *OTransaction) WriteList(k Key, l Entry, kt KeyType) error {
 	tx.writes[n].key = k
 	tx.writes[n].br = br
 	tx.writes[n].ve = l
-	tx.writes[n].op = kt
+	tx.writes[n].op = op
 	tx.writes[n].locked = false
 	return nil
 }
 
-func (tx *OTransaction) WriteOO(k Key, a int32, v Value, kt KeyType) error {
-	if kt != OOWRITE {
-		log.Fatalf("Not a list\n")
+func (tx *OTransaction) WriteOO(k Key, a int32, v Value, op KeyType) error {
+	if op != OOWRITE {
+		log.Fatalf("Not an OOWRITE\n")
 	}
 	if len(tx.writes) == cap(tx.writes) {
 		log.Fatalf("Ran out of room\n")
@@ -355,7 +361,10 @@ func (tx *OTransaction) WriteOO(k Key, a int32, v Value, kt KeyType) error {
 	}
 	if tx.isSplit(br) {
 		if tx.count {
-			tx.ls.candidates.Write(k, br)
+			tx.ls.candidates.Write(k, br, op)
+		}
+		if br.key_type != OOWRITE {
+			log.Fatalf("%v Doing a write to a non-OOWRITE type: %v", k, br.key_type)
 		}
 		// Do not need to read-validate
 	} else {
@@ -368,7 +377,7 @@ func (tx *OTransaction) WriteOO(k Key, a int32, v Value, kt KeyType) error {
 			if !ok {
 				tx.w.Nstats[NLOCKED]++
 				if tx.count && KeyType(*NoConflictType) != OOWRITE {
-					tx.ls.candidates.Conflict(k, br)
+					tx.ls.candidates.Conflict(k, br, OOWRITE)
 				}
 				return EABORT
 			}
@@ -390,7 +399,7 @@ func (tx *OTransaction) WriteOO(k Key, a int32, v Value, kt KeyType) error {
 	tx.writes[n].br = nil
 	tx.writes[n].v = v
 	tx.writes[n].vint32 = a
-	tx.writes[n].op = kt
+	tx.writes[n].op = op
 	tx.writes[n].locked = false
 	return nil
 }
@@ -448,7 +457,7 @@ func (tx *OTransaction) Commit() TID {
 				if err2 != nil {
 					// Someone snuck in and created the key
 					if tx.count && w.op != KeyType(*NoConflictType) {
-						tx.ls.candidates.Conflict(w.key, w.br)
+						tx.ls.candidates.Conflict(w.key, w.br, w.op)
 					}
 					tx.w.Nstats[NFAIL_VERIFY]++
 					//dlog.Printf("Fail verify key %v\n", w.key)
@@ -467,7 +476,7 @@ func (tx *OTransaction) Commit() TID {
 		if ok, former = w.br.Lock(); !ok {
 			tx.w.Nstats[NO_LOCK]++
 			if tx.count && w.op != KeyType(*NoConflictType) {
-				tx.ls.candidates.Conflict(w.key, w.br)
+				tx.ls.candidates.Conflict(w.key, w.br, w.op)
 			}
 			return tx.Abort()
 		}
@@ -568,7 +577,7 @@ type Rec struct {
 	v      interface{}
 	vint32 int32
 	ve     Entry
-	kt     KeyType
+	op     KeyType
 	noset  bool
 	key    Key
 }
@@ -621,11 +630,11 @@ func (tx *LTransaction) Read(k Key) (*BRecord, error) {
 			return nil, ENOKEY
 		}
 		if tx.keys[n].br.exists && tx.keys[n].noset == false && tx.keys[n].read == false {
-			tx.dummyRecord.key_type = tx.keys[n].kt
+			tx.dummyRecord.key_type = tx.keys[n].op
 			tx.dummyRecord.int_value = tx.keys[n].vint32
 			tx.dummyRecord.value = tx.keys[n].v
 			dlog.Printf("Creating dummy record for key %v %v %v %v\n", k, tx.dummyRecord.key_type, tx.dummyRecord.int_value, tx.dummyRecord.value)
-			if tx.keys[n].kt == LIST {
+			if tx.keys[n].op == LIST {
 				tx.dummyRecord.entries = tx.dummyRecord.entries[0 : len(tx.keys[n].br.entries)+1]
 				copy(tx.dummyRecord.entries, tx.keys[n].br.entries)
 				tx.dummyRecord.entries = append(tx.dummyRecord.entries, tx.keys[n].ve)
@@ -757,7 +766,7 @@ func (tx *LTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 		}
 		// Already locked.  TODO: aggregate
 		tx.keys[n].vint32 = a
-		tx.keys[n].kt = op
+		tx.keys[n].op = op
 		tx.keys[n].noset = false
 		tx.keys[n].key = k
 		return nil
@@ -767,7 +776,7 @@ func (tx *LTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 	tx.keys[n].br = br
 	tx.keys[n].read = false
 	tx.keys[n].vint32 = a
-	tx.keys[n].kt = op
+	tx.keys[n].op = op
 	tx.keys[n].noset = false
 	tx.keys[n].key = k
 	return nil
@@ -785,7 +794,7 @@ func (tx *LTransaction) Write(k Key, v Value, op KeyType) {
 		}
 		// Already locked.
 		tx.keys[n].v = v
-		tx.keys[n].kt = op
+		tx.keys[n].op = op
 		tx.keys[n].key = k
 		return
 	}
@@ -794,7 +803,7 @@ func (tx *LTransaction) Write(k Key, v Value, op KeyType) {
 	tx.keys[n].br = br
 	tx.keys[n].read = false
 	tx.keys[n].v = v
-	tx.keys[n].kt = op
+	tx.keys[n].op = op
 	tx.keys[n].noset = false
 	tx.keys[n].key = k
 }
@@ -810,7 +819,7 @@ func (tx *LTransaction) WriteList(k Key, l Entry, op KeyType) error {
 		}
 		// Already locked.  TODO: append
 		tx.keys[n].ve = l
-		tx.keys[n].kt = op
+		tx.keys[n].op = op
 		tx.keys[n].key = k
 		return nil
 	}
@@ -819,7 +828,7 @@ func (tx *LTransaction) WriteList(k Key, l Entry, op KeyType) error {
 	tx.keys[n].br = br
 	tx.keys[n].read = false
 	tx.keys[n].ve = l
-	tx.keys[n].kt = op
+	tx.keys[n].op = op
 	tx.keys[n].noset = false
 	tx.keys[n].key = k
 	return nil
@@ -838,7 +847,7 @@ func (tx *LTransaction) WriteOO(k Key, a int32, v Value, op KeyType) error {
 		if a > tx.keys[n].vint32 {
 			tx.keys[n].v = v
 			tx.keys[n].vint32 = a
-			tx.keys[n].kt = op
+			tx.keys[n].op = op
 			tx.keys[n].key = k
 		}
 		return nil
@@ -849,7 +858,7 @@ func (tx *LTransaction) WriteOO(k Key, a int32, v Value, op KeyType) error {
 	tx.keys[n].read = false
 	tx.keys[n].vint32 = a
 	tx.keys[n].v = v
-	tx.keys[n].kt = op
+	tx.keys[n].op = op
 	tx.keys[n].noset = false
 	tx.keys[n].key = k
 	return nil
@@ -889,17 +898,17 @@ func (tx *LTransaction) Commit() TID {
 				tx.keys[i].br.SUnlock()
 				continue
 			}
-			switch tx.keys[i].kt {
+			switch tx.keys[i].op {
 			case SUM:
-				tx.s.SetInt32(tx.keys[i].br, tx.keys[i].vint32, tx.keys[i].kt)
+				tx.s.SetInt32(tx.keys[i].br, tx.keys[i].vint32, tx.keys[i].op)
 			case MAX:
-				tx.s.SetInt32(tx.keys[i].br, tx.keys[i].vint32, tx.keys[i].kt)
+				tx.s.SetInt32(tx.keys[i].br, tx.keys[i].vint32, tx.keys[i].op)
 			case LIST:
-				tx.s.SetList(tx.keys[i].br, tx.keys[i].ve, tx.keys[i].kt)
+				tx.s.SetList(tx.keys[i].br, tx.keys[i].ve, tx.keys[i].op)
 			case OOWRITE:
-				tx.s.SetOO(tx.keys[i].br, tx.keys[i].vint32, tx.keys[i].v, tx.keys[i].kt)
+				tx.s.SetOO(tx.keys[i].br, tx.keys[i].vint32, tx.keys[i].v, tx.keys[i].op)
 			default:
-				tx.s.Set(tx.keys[i].br, tx.keys[i].v, tx.keys[i].kt)
+				tx.s.Set(tx.keys[i].br, tx.keys[i].v, tx.keys[i].op)
 			}
 			tx.keys[i].br.SUnlock()
 		} else {
