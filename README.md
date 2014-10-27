@@ -17,6 +17,5 @@ go test
 
 Run a benchmark:
 cd ddtxn/benchmarks
-go build buy.go
-go build rubis.go
+go build single.go
 python bm.py --exp=single --rlock --ncores=N
