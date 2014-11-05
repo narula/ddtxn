@@ -158,7 +158,9 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 	w.Register(RUBIS_VIEWUSER, ViewUserInfoTxn)
 	w.Register(BIG_INCR, BigIncrTxn)
 	w.Register(BIG_RW, BigRWTxn)
-	go w.run()
+	if !*SpinPhase {
+		go w.run()
+	}
 	return w
 }
 
@@ -252,7 +254,74 @@ func (w *Worker) doTxn2(t Query) (*Result, error) {
 	return x, err
 }
 
+func (w *Worker) joinPhase() {
+	for i := 0; i < len(w.waiters.t); i++ {
+		committed := false
+		// TODO: On abort this transaction really should be
+		// reissued by the client, but in our benchmarks the
+		// client doesn't wait, so here we go.
+		n := 0
+		for !committed && n < 10 {
+			r, err := w.doTxn2(w.waiters.t[i])
+			if err == EABORT {
+				n++
+				committed = false
+			} else {
+				committed = true
+				if w.waiters.t[i].W != nil {
+					w.waiters.t[i].W <- struct {
+						R *Result
+						E error
+					}{r, err}
+				}
+			}
+		}
+	}
+	w.waiters.clear()
+}
+
+func (w *Worker) spinTransition() {
+	if *SysType == DOPPEL {
+		e := w.coordinator.GetEpoch()
+		if e <= w.epoch {
+			return
+		}
+		start := time.Now()
+		tt := time.Since(w.coordinator.StartTime)
+		w.Nnoticed += tt
+		dlog.Printf("%v %v Starting transition %v noticed after %v\n", time.Now().UnixNano(), w.ID, e, tt)
+		w.E.SetPhase(MERGE)
+		w.local_store.Merge()
+		atomic.AddUint64(&w.coordinator.wcepoch, 1)
+		tt = time.Since(start)
+		w.Nmerge += tt
+		dlog.Printf("%v %v Done merge %v, waiting; took %v\n", time.Now().UnixNano(), w.ID, e, tt)
+		ts := time.Now()
+		atomic.SpinLoop(&w.coordinator.gojoin, 1)
+		tt = time.Since(ts)
+		w.Nmergewait += tt
+		dlog.Printf("%v %v Done merge wait %v, entering JOIN phase; took %v\n", time.Now().UnixNano(), w.ID, e, tt)
+		w.E.SetPhase(JOIN)
+		ts = time.Now()
+		w.joinPhase()
+		tt = time.Since(ts)
+		w.Njoin += tt
+
+		w.E.SetPhase(SPLIT)
+		atomic.AddUint64(&w.coordinator.wcdone, 1)
+		dlog.Printf("%v %v Acked wcdone %v, waiting for split; took %v \n", time.Now().UnixNano(), w.ID, e, tt)
+		ts = time.Now()
+		atomic.SpinLoop(&w.coordinator.gosplit, 1)
+		tt = time.Since(ts)
+		w.Njoinwait += tt
+		dlog.Printf("%v %v Coordinator says %v done, moving to split; waited %v\n", time.Now().UnixNano(), w.ID, e, tt)
+	}
+}
+
 func (w *Worker) transition() {
+	if *SpinPhase {
+		panic("Should not call regular transition() when spin is true")
+	}
 	if *SysType == DOPPEL {
 		w.Lock()
 		defer w.Unlock()
@@ -280,29 +349,7 @@ func (w *Worker) transition() {
 		dlog.Printf("%v %v Done merge wait %v, entering JOIN phase; took %v\n", time.Now().UnixNano(), w.ID, e, tt)
 		w.E.SetPhase(JOIN)
 		ts = time.Now()
-		for i := 0; i < len(w.waiters.t); i++ {
-			committed := false
-			// TODO: On abort this transaction really should be
-			// reissued by the client, but in our benchmarks the
-			// client doesn't wait, so here we go.
-			n := 0
-			for !committed && n < 10 {
-				r, err := w.doTxn2(w.waiters.t[i])
-				if err == EABORT {
-					n++
-					committed = false
-				} else {
-					committed = true
-					if w.waiters.t[i].W != nil {
-						w.waiters.t[i].W <- struct {
-							R *Result
-							E error
-						}{r, err}
-					}
-				}
-			}
-		}
-		w.waiters.clear()
+		w.joinPhase()
 		tt = time.Since(ts)
 		w.Njoin += tt
 
@@ -358,9 +405,13 @@ func (w *Worker) One(t Query) (*Result, error) {
 	if *SysType == DOPPEL && w.next%50 == 0 {
 		e := w.coordinator.GetEpoch()
 		if w.epoch != e {
-			w.RUnlock()
-			w.tickle <- e
-			w.RLock()
+			if *SpinPhase {
+				w.spinTransition()
+			} else {
+				w.RUnlock()
+				w.tickle <- e
+				w.RLock()
+			}
 		}
 	}
 	r, err := w.doTxn(t)
