@@ -59,6 +59,7 @@ func NewCoordinator(n int, s *Store) *Coordinator {
 		Coordinate:            false,
 		PotentialPhaseChanges: 0,
 		to_remove:             make(map[Key]bool),
+		Finished:              make([]bool, n),
 	}
 	for i := 0; i < n; i++ {
 		c.wepoch[i] = make(chan TID)
@@ -66,6 +67,7 @@ func NewCoordinator(n int, s *Store) *Coordinator {
 		c.wgo[i] = make(chan TID)
 		c.wdone[i] = make(chan TID)
 		c.Workers[i] = NewWorker(i, s, c)
+		c.Finished[i] = false
 	}
 	c.Finished = make([]bool, n)
 	dlog.Printf("[coordinator] %v workers\n", n)

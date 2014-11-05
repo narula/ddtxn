@@ -165,6 +165,7 @@ func main() {
 					}
 				}
 			}
+			w.Finished()
 			wg.Done()
 			if len(retries) > 0 {
 				dlog.Printf("[%v] Length of retry queue on exit: %v\n", n, len(retries))
@@ -178,7 +179,7 @@ func main() {
 	p.Stop()
 
 	stats := make([]int64, ddtxn.LAST_STAT)
-	nitr, nwait, _ := ddtxn.CollectCounts(coord, stats)
+	nitr, nwait, _, _, _, _, _ := ddtxn.CollectCounts(coord, stats)
 
 	for i := 1; i < *clientGoRoutines; i++ {
 		gave_up[0] = gave_up[0] + gave_up[i]

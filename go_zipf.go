@@ -42,7 +42,7 @@ func NewZipf(r *rand.Rand, s float64, v float64, imax uint64) *Zipf {
 	// 	return nil
 	// }
 	if s == 1.0 {
-		return nil
+		panic("zipf alpha cannot be 1.0")
 	}
 	z.r = r
 	z.imax = float64(imax)

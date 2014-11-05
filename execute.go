@@ -106,6 +106,7 @@ func StartOTransaction(w *Worker) *OTransaction {
 func (tx *OTransaction) Reset() {
 	tx.read = tx.read[:0]
 	tx.writes = tx.writes[:0]
+	tx.t++
 	tx.count = (*SysType == DOPPEL && tx.sr_rate == 0)
 	if tx.count {
 		tx.w.Nstats[NSAMPLES]++
@@ -113,7 +114,6 @@ func (tx *OTransaction) Reset() {
 	} else {
 		tx.sr_rate--
 	}
-	tx.t++
 }
 
 func (tx *OTransaction) isSplit(br *BRecord) bool {

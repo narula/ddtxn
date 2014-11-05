@@ -267,11 +267,15 @@ func CollectOne(w *Worker) int64 {
 	return nitr
 }
 
-func CollectCounts(coord *Coordinator, stats []int64) (int64, time.Duration, time.Duration) {
+func CollectCounts(coord *Coordinator, stats []int64) (int64, time.Duration, time.Duration, time.Duration, time.Duration, time.Duration, time.Duration) {
 	var nitr int64
 	var nwait time.Duration
-	var nwait2 time.Duration
-	for i := 0; i < coord.n; i++ {
+	var nnoticed time.Duration
+	var nmerge time.Duration
+	var njoin time.Duration
+	var njoinwait time.Duration
+	var nmergewait time.Duration
+	for i := 0; i < len(coord.Workers); i++ {
 		for j := 0; j < LAST_STAT; j++ {
 			stats[j] = stats[j] + coord.Workers[i].Nstats[j]
 			if j < LAST_TXN {
@@ -279,7 +283,11 @@ func CollectCounts(coord *Coordinator, stats []int64) (int64, time.Duration, tim
 			}
 		}
 		nwait = nwait + coord.Workers[i].Nwait
-		nwait2 = nwait2 + coord.Workers[i].Nwait2
+		nnoticed = nnoticed + coord.Workers[i].Nnoticed
+		nmerge = nmerge + coord.Workers[i].Nmerge
+		nmergewait = nmerge + coord.Workers[i].Nmergewait
+		njoin = njoin + coord.Workers[i].Njoin
+		njoinwait = njoinwait + coord.Workers[i].Njoinwait
 	}
-	return nitr, nwait, nwait2
+	return nitr, nwait, nnoticed, nmerge, nmergewait, njoin, njoinwait
 }

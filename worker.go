@@ -91,7 +91,11 @@ type Worker struct {
 	// Stats
 	Nstats       []int64
 	Nwait        time.Duration
-	Nwait2       time.Duration
+	Nmerge       time.Duration
+	Nmergewait   time.Duration
+	Njoin        time.Duration
+	Njoinwait    time.Duration
+	Nnoticed     time.Duration
 	NKeyAccesses []int64
 	tickle       chan TID
 
@@ -257,21 +261,32 @@ func (w *Worker) transition() {
 			return
 		}
 		start := time.Now()
+		tt := time.Since(w.coordinator.StartTime)
+		w.Nnoticed += tt
+		dlog.Printf("%v %v Starting transition %v noticed after %v\n", time.Now().UnixNano(), w.ID, e, tt)
 		w.E.SetPhase(MERGE)
 		w.local_store.Merge()
 		w.coordinator.wepoch[w.ID] <- e
+		tt = time.Since(start)
+		w.Nmerge += tt
+		dlog.Printf("%v %v Done merge %v, waiting; took %v\n", time.Now().UnixNano(), w.ID, e, tt)
+		ts := time.Now()
 		x := <-w.coordinator.wsafe[w.ID]
 		if x != e {
 			log.Fatalf("Worker %v out of alignment; acked %v, got safe for %v\n", w.ID, e, x)
 		}
+		tt = time.Since(ts)
+		w.Nmergewait += tt
+		dlog.Printf("%v %v Done merge wait %v, entering JOIN phase; took %v\n", time.Now().UnixNano(), w.ID, e, tt)
 		w.E.SetPhase(JOIN)
+		ts = time.Now()
 		for i := 0; i < len(w.waiters.t); i++ {
 			committed := false
 			// TODO: On abort this transaction really should be
 			// reissued by the client, but in our benchmarks the
 			// client doesn't wait, so here we go.
 			n := 0
-			for !committed && n < 20 {
+			for !committed && n < 10 {
 				r, err := w.doTxn2(w.waiters.t[i])
 				if err == EABORT {
 					n++
@@ -288,12 +303,19 @@ func (w *Worker) transition() {
 			}
 		}
 		w.waiters.clear()
+		tt = time.Since(ts)
+		w.Njoin += tt
+
 		w.E.SetPhase(SPLIT)
 		w.coordinator.wdone[w.ID] <- e
+		ts = time.Now()
 		x = <-w.coordinator.wgo[w.ID]
 		if x != e {
 			log.Fatalf("Worker %v out of alignment; said done for %v, got go for %v\n", w.ID, e, x)
 		}
+		tt = time.Since(ts)
+		w.Njoinwait += tt
+		dlog.Printf("%v %v Coordinator says %v done, moving to split; waited %v\n", time.Now().UnixNano(), w.ID, e, tt)
 		end := time.Since(start)
 		w.Nwait += end
 		w.epoch = e

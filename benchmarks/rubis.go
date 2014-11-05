@@ -30,7 +30,7 @@ var notcontended_readrate = flag.Float64("ncrr", 40.0, "BID RATE")
 var dataFile = flag.String("out", "xdata.out", "Filename for output")
 var atomicIncr = flag.Bool("atomic", false, "NOT USED")
 var rounds = flag.Bool("rounds", true, "Preallocate keys in rounds instead of entirely in parallel")
-var ZipfDist = flag.Float64("zipf", 1, "Zipfian distribution theta. -1 means use -contention instead")
+var ZipfDist = flag.Float64("zipf", 1.01, "Zipfian distribution theta. -1 means use -contention instead")
 
 func main() {
 	flag.Parse()
@@ -141,6 +141,7 @@ func main() {
 					rubis.Add(t)
 				}
 			}
+			w.Finished()
 			wg.Done()
 			if len(retries) > 0 {
 				dlog.Printf("[%v] Length of retry queue on exit: %v\n", n, len(retries))
@@ -153,8 +154,7 @@ func main() {
 	end := time.Since(start)
 	p.Stop()
 	stats := make([]int64, ddtxn.LAST_STAT)
-	nitr, nwait, nwait2 := ddtxn.CollectCounts(coord, stats)
-	_ = nwait2
+	nitr, nwait, nnoticed, nmerge, _, _, _ := ddtxn.CollectCounts(coord, stats)
 
 	if *doValidate {
 		rubis.Validate(s, int(nitr))
@@ -175,7 +175,8 @@ func main() {
 		}
 	}
 
-	out := fmt.Sprintf("  nworkers: %v, nwmoved: %v, nrmoved: %v, sys: %v, total/sec: %v, abortrate: %.2f, stashrate: %.2f, nbidders: %v, nitems: %v, contention: %v, done: %v, actual time: %v, throughput: ns/txn: %v, naborts: %v, coord stats time: %v, total worker time transitioning: %v, nstashed: %v, rlock: %v, wrratio: %v, nsamples: %v, getkeys: %v, ddwrites: %v, nolock: %v, failv: %v, stashdone: %v, nfast: %v, gaveup: %v,  epoch changes: %v, potential: %v, coordtotaltime %v, mergetime: %v, readtime: %v, gotime: %v  ", *nworkers, ddtxn.WMoved, ddtxn.RMoved, *ddtxn.SysType, float64(nitr)/end.Seconds(), 100*float64(stats[ddtxn.NABORTS])/float64(nitr+stats[ddtxn.NABORTS]), 100*float64(stats[ddtxn.NSTASHED])/float64(nitr+stats[ddtxn.NABORTS]), *nbidders, nproducts, *contention, nitr, end, end.Nanoseconds()/nitr, stats[ddtxn.NABORTS], ddtxn.Time_in_IE1, nwait, stats[ddtxn.NSTASHED], *ddtxn.UseRLocks, *ddtxn.WRRatio, stats[ddtxn.NSAMPLES], stats[ddtxn.NGETKEYCALLS], stats[ddtxn.NDDWRITES], stats[ddtxn.NO_LOCK], stats[ddtxn.NFAIL_VERIFY], stats[ddtxn.NDIDSTASHED], ddtxn.Nfast, gave_up[0], ddtxn.NextEpoch, coord.PotentialPhaseChanges, coord.TotalCoordTime, coord.MergeTime, coord.ReadTime, coord.GoTime)
+	out := fmt.Sprintf("  nworkers: %v, nwmoved: %v, nrmoved: %v, sys: %v, total/sec: %v, abortrate: %.2f, stashrate: %.2f, nbidders: %v, nitems: %v, contention: %v, done: %v, actual time: %v, throughput: ns/txn: %v, naborts: %v, coord stats time: %v, nstashed: %v, rlock: %v, wrratio: %v, nsamples: %v, getkeys: %v, ddwrites: %v, nolock: %v, failv: %v, stashdone: %v, nfast: %v, gaveup: %v,  epoch changes: %v, potential: %v, coordtotaltime %v, mergetime: %v, readtime: %v, gotime: %v, workertotaltransitiontime: %v,  workernoticetime: %v, workermergetime: %v ", *nworkers, ddtxn.WMoved, ddtxn.RMoved, *ddtxn.SysType, float64(nitr)/end.Seconds(), 100*float64(stats[ddtxn.NABORTS])/float64(nitr+stats[ddtxn.NABORTS]), 100*float64(stats[ddtxn.NSTASHED])/float64(nitr+stats[ddtxn.NABORTS]), *nbidders, nproducts, *contention, nitr, end, end.Nanoseconds()/nitr, stats[ddtxn.NABORTS], ddtxn.Time_in_IE1, stats[ddtxn.NSTASHED], *ddtxn.UseRLocks, *ddtxn.WRRatio, stats[ddtxn.NSAMPLES], stats[ddtxn.NGETKEYCALLS], stats[ddtxn.NDDWRITES], stats[ddtxn.NO_LOCK], stats[ddtxn.NFAIL_VERIFY], stats[ddtxn.NDIDSTASHED], ddtxn.Nfast, gave_up[0], ddtxn.NextEpoch, coord.PotentialPhaseChanges, coord.TotalCoordTime, coord.MergeTime, coord.ReadTime, coord.GoTime, nwait, nnoticed, nmerge)
+
 	fmt.Printf(out)
 	fmt.Printf("\n")
 	f, err := os.OpenFile(*dataFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
