@@ -24,11 +24,19 @@ type Coordinator struct {
 	Workers  []*Worker
 	epochTID uint64 // Global TID, atomically incremented and read
 
+	padding [128]byte
 	// Notify workers
 	wepoch []chan TID
 	wsafe  []chan TID
 	wgo    []chan TID
 	wdone  []chan TID
+
+	// Used in spin-based phase transitions
+	wcepoch  uint64 // Count of workers who have seen epoch change AND merged
+	gojoin   uint64 // 0 or 1; Tells workers safe to progress to JOIN phase
+	wcdone   uint64 // Count of workers who have finished JOIN phase
+	gosplit  uint64 // 0 or 1; Tells workers safe to progress to SPLIT phase
+	padding1 [128]byte
 
 	Coordinate            bool
 	PotentialPhaseChanges int64
