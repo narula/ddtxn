@@ -402,7 +402,7 @@ func (w *Worker) run() {
 
 func (w *Worker) One(t Query) (*Result, error) {
 	w.RLock()
-	if *SysType == DOPPEL && w.next%50 == 0 {
+	if *SysType == DOPPEL {
 		e := w.coordinator.GetEpoch()
 		if w.epoch != e {
 			if *SpinPhase {
