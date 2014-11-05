@@ -10,7 +10,8 @@ import (
 
 var WRRatio = flag.Float64("wr", 2.0, "Ratio of sampled write conflicts and sampled writes to sampled reads at which to move a piece of data to split.  Default 3")
 
-var ConflictWeight = flag.Float64("cw", 1.0, "Weight given to conflicts over writes\n")
+var ConflictWeight = flag.Float64("cw", 2.0, "Weight given to conflicts over writes\n")
+var ReadWeight = flag.Float64("rw", 0.5, "Weight given to reads over stashes\n")
 
 type OneStat struct {
 	k         Key
@@ -23,7 +24,7 @@ type OneStat struct {
 }
 
 func (o *OneStat) ratio() float64 {
-	return float64((*ConflictWeight)*o.conflicts+o.writes) / (float64(o.reads) + float64(o.stash))
+	return float64((*ConflictWeight)*o.conflicts+o.writes) / (float64((*ReadWeight)*o.reads) + float64(o.stash))
 }
 
 // m is very big; it should have every key the worker sampled.  h is a

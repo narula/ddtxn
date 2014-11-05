@@ -24,7 +24,8 @@ parser.add_option("--phase", action="store", type="int", dest="phase", default=2
 parser.add_option("--zipf", action="store", type="float", dest="zipf", default=-1)
 parser.add_option("--partition", action="store_true", dest="partition", default=False)
 parser.add_option("--ncrr", action="store", type="float", dest="not_contended_read_rate", default=0.0)
-parser.add_option("--cw", action="store", type="float", dest="conflict_weight", default=1.0)
+parser.add_option("--cw", action="store", type="float", dest="conflict_weight", default=2.0)
+parser.add_option("--rw", action="store", type="float", dest="read_weight", default=0.5)
 parser.add_option("--version", action="store", type="int", dest="version", default=0)
 
 (options, args) = parser.parse_args()
@@ -35,10 +36,10 @@ ben_list_cpus = "thread==0 socket@0,1,2,7,3-6"
 LATENCY_PART = " -latency=%s" % options.latency
 VERSION_PART = " -v=%d" % options.version
 
-BASE_CMD = "GOGC=off numactl -C `list-cpus seq -n %d %s` ./%s -nprocs=%d -ngo=%d -nw=%d -nsec=%d -contention=%s -rr=%d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -atomic=%s -zipf=%s -out=data.out -ncrr=%s -cw=%.2f -split=%s" + LATENCY_PART + VERSION_PART
+BASE_CMD = "GOGC=off numactl -C `list-cpus seq -n %d %s` ./%s -nprocs=%d -ngo=%d -nw=%d -nsec=%d -contention=%s -rr=%d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -atomic=%s -zipf=%s -out=data.out -ncrr=%s -cw=%.2f -rw=%.2f -split=%s" + LATENCY_PART + VERSION_PART
 
-def do_param(bn, rr, contention, ncpu, sys, wratio=options.wratio, phase=options.phase, atomic=False, zipf=-1, ncrr=options.not_contended_read_rate, yval="total/sec", cw=options.conflict_weight, split=False):
-    cmd = fill_cmd(bn, rr, contention, ncpu, sys, wratio, phase, atomic, zipf, ncrr, cw, split)
+def do_param(bn, rr, contention, ncpu, sys, wratio=options.wratio, phase=options.phase, atomic=False, zipf=-1, ncrr=options.not_contended_read_rate, yval="total/sec", cw=options.conflict_weight, rw=options.read_weight, split=False):
+    cmd = fill_cmd(bn, rr, contention, ncpu, sys, wratio, phase, atomic, zipf, ncrr, cw, rw, split)
 
     if options.dprint:
         print cmd
@@ -79,27 +80,27 @@ def get_cpus(host):
         ncpus=[2, 4]
     return ncpus
 
-def fill_cmd(bn, rr, contention, ncpus, systype, wratio, phase, atomic, zipf, ncrr, cw, split):
+def fill_cmd(bn, rr, contention, ncpus, systype, wratio, phase, atomic, zipf, ncrr, cw, rw, split):
     nsec = options.nsec
     if options.short:
         nsec = 1
-    cmd = BASE_CMD % (ncpus, CPU_ARGS, bn, ncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr, atomic, zipf, ncrr, cw, split)
+    cmd = BASE_CMD % (ncpus, CPU_ARGS, bn, ncpus, ncpus, ncpus, nsec, contention, rr, options.allocate, systype, options.rlock, wratio, phase, options.sr, atomic, zipf, ncrr, cw, rw, split)
     if options.exp.find("single") == 0:
         # Zipf experiments are already not partitioned.
         cmd = cmd + " -partition=%s" % options.partition
     return cmd
 
-def do(bn, rr, contention, ncpu, sys, wratio=options.wratio, phase=options.phase, atomic=False, zipf=-1, ncrr=options.not_contended_read_rate, cw=options.conflict_weight, split=False):
-    cmd = fill_cmd(bn, rr, contention, ncpu, sys, wratio, phase, atomic, zipf, ncrr, cw, split)
+def do(bn, rr, contention, ncpu, sys, wratio=options.wratio, phase=options.phase, atomic=False, zipf=-1, ncrr=options.not_contended_read_rate, cw=options.conflict_weight, rw=options.read_weight, split=False):
+    cmd = fill_cmd(bn, rr, contention, ncpu, sys, wratio, phase, atomic, zipf, ncrr, cw, rw, split)
     run_one(cmd)
 
 def num_keys_exp():
     keys = [1, 10, 20, 50, 70, 100, 110]
     for k in keys:
-     cmd = fill_cmd("single", 0, 0, 20, 0, options.wratio, options.phase, False, -1, 0, options.conflict_weight, False)
+     cmd = fill_cmd("single", 0, 0, 20, 0, options.wratio, options.phase, False, -1, 0, options.conflict_weight, options.read_weight, False)
      cmd = cmd + " -nb=%d" % k
      run_one(cmd)
-     cmd = fill_cmd("single", 0, 0, 20, 1, options.wratio, options.phase, False, -1, 0, options.conflict_weight, False)
+     cmd = fill_cmd("single", 0, 0, 20, 1, options.wratio, options.phase, False, -1, 0, options.conflict_weight, options.read_weight, False)
      cmd = cmd + " -nb=%d" % k
      run_one(cmd)
 
