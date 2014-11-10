@@ -4,14 +4,30 @@ import (
 	"ddtxn/dlog"
 	"errors"
 	"flag"
+	"hash"
+	"hash/crc32"
 	"log"
 	"runtime/debug"
 	"sync"
+
+	"github.com/zond/gotomic"
 )
 
 type TID uint64
 type Key [16]byte
 type Value interface{}
+
+var hasher hash.Hash32
+
+func (k Key) Equals(t gotomic.Thing) bool {
+	return t.(Key) == k
+}
+
+func (k Key) HashCode() uint32 {
+	hasher.Reset()
+	hasher.Write(k[:])
+	return hasher.Sum32()
+}
 
 type Chunk struct {
 	padding1 [128]byte
@@ -21,6 +37,7 @@ type Chunk struct {
 }
 
 var UseRLocks = flag.Bool("rlock", true, "Use Rlocks\n")
+var GStore = flag.Bool("gstore", false, "Use Gotomic Hash Map instead of Go maps\n")
 
 var (
 	ENOKEY   = errors.New("doppel: no key")
@@ -38,6 +55,7 @@ const (
 type Store struct {
 	padding1        [128]byte
 	store           []*Chunk
+	gstore          *gotomic.Hash
 	NChunksAccessed []int64
 	dd              map[Key]bool
 	any_dd          bool
@@ -50,10 +68,12 @@ func (s *Store) DD() map[Key]bool {
 }
 
 func NewStore() *Store {
+	hasher = crc32.NewIEEE()
 	x := make([]*OneStat, 0)
 	sh := StatsHeap(x)
 	s := &Store{
 		store:           make([]*Chunk, CHUNKS),
+		gstore:          gotomic.NewHash(),
 		NChunksAccessed: make([]int64, CHUNKS),
 		dd:              make(map[Key]bool),
 		cand:            &Candidates{make(map[Key]*OneStat), &sh},
@@ -73,29 +93,47 @@ func NewStore() *Store {
 func (s *Store) getOrCreateTypedKey(k Key, v Value, kt KeyType) *BRecord {
 	br, err := s.getKey(k)
 	if err == ENOKEY {
-		if !*UseRLocks {
-			log.Fatalf("Should have preallocated keys if not locking chunks\n")
+		if *GStore {
+			br, ok := s.gstore.Get(k)
+			if !ok {
+				br = MakeBR(k, v, kt)
+				did := s.gstore.PutIfMissing(k, br)
+				if !did {
+					br, ok = s.gstore.Get(k)
+					if !ok {
+						log.Fatalf("Cannot put new key, but Get() says it isn't there %v\n", k)
+					}
+				}
+			}
+		} else {
+			if !*UseRLocks {
+				log.Fatalf("Should have preallocated keys if not locking chunks\n")
+			}
+			// Create key
+			chunk := s.store[k[0]]
+			var ok bool
+			chunk.Lock()
+			br, ok = chunk.rows[k]
+			if !ok {
+				br = MakeBR(k, v, kt)
+				chunk.rows[k] = br
+			}
+			chunk.Unlock()
 		}
-		// Create key
-		chunk := s.store[k[0]]
-		var ok bool
-		chunk.Lock()
-		br, ok = chunk.rows[k]
-		if !ok {
-			br = MakeBR(k, v, kt)
-			chunk.rows[k] = br
-		}
-		chunk.Unlock()
 	}
 	return br
 }
 
 func (s *Store) CreateKey(k Key, v Value, kt KeyType) *BRecord {
-	chunk := s.store[k[0]]
 	br := MakeBR(k, v, kt)
-	chunk.Lock()
-	chunk.rows[k] = br
-	chunk.Unlock()
+	if *GStore {
+		s.gstore.Put(k, br)
+	} else {
+		chunk := s.store[k[0]]
+		chunk.Lock()
+		chunk.rows[k] = br
+		chunk.Unlock()
+	}
 	return br
 }
 
@@ -103,50 +141,74 @@ func (s *Store) CreateKey(k Key, v Value, kt KeyType) *BRecord {
 // record is locked and inserted while holding the lock on the chunk.
 
 func (s *Store) CreateLockedKey(k Key, kt KeyType) (*BRecord, error) {
-	chunk := s.store[k[0]]
 	br := MakeBR(k, nil, kt)
 	br.Lock()
-	chunk.Lock()
-	_, ok := chunk.rows[k]
-	if ok {
+	if *GStore {
+		ok := s.gstore.PutIfMissing(k, br)
+		if !ok {
+			dlog.Printf("Key already exists %v\n", k)
+			return nil, EEXISTS
+		}
+	} else {
+		chunk := s.store[k[0]]
+		chunk.Lock()
+		_, ok := chunk.rows[k]
+		if ok {
+			chunk.Unlock()
+			dlog.Printf("Key already exists %v\n", k)
+			return nil, EEXISTS
+		}
+		chunk.rows[k] = br
 		chunk.Unlock()
-		dlog.Printf("Key already exists %v\n", k)
-		return nil, EEXISTS
 	}
-	chunk.rows[k] = br
-	chunk.Unlock()
 	return br, nil
 }
 
 func (s *Store) CreateMuLockedKey(k Key, kt KeyType) (*BRecord, error) {
-	chunk := s.store[k[0]]
 	br := MakeBR(k, nil, kt)
 	br.SLock()
-	chunk.Lock()
-	_, ok := chunk.rows[k]
-	if ok {
+	if *GStore {
+		ok := s.gstore.PutIfMissing(k, br)
+		if !ok {
+			dlog.Printf("Key already exists %v\n", k)
+			return nil, EEXISTS
+		}
+	} else {
+		chunk := s.store[k[0]]
+		chunk.Lock()
+		_, ok := chunk.rows[k]
+		if ok {
+			chunk.Unlock()
+			dlog.Printf("Key already exists %v\n", k)
+			return nil, EEXISTS
+		}
+		chunk.rows[k] = br
 		chunk.Unlock()
-		dlog.Printf("Key already exists %v\n", k)
-		return nil, EEXISTS
 	}
-	chunk.rows[k] = br
-	chunk.Unlock()
 	return br, nil
 }
 
 func (s *Store) CreateMuRLockedKey(k Key, kt KeyType) (*BRecord, error) {
-	chunk := s.store[k[0]]
 	br := MakeBR(k, nil, kt)
 	br.SRLock()
-	chunk.Lock()
-	_, ok := chunk.rows[k]
-	if ok {
+	if *GStore {
+		ok := s.gstore.PutIfMissing(k, br)
+		if !ok {
+			dlog.Printf("Key already exists %v\n", k)
+			return nil, EEXISTS
+		}
+	} else {
+		chunk := s.store[k[0]]
+		chunk.Lock()
+		_, ok := chunk.rows[k]
+		if ok {
+			chunk.Unlock()
+			dlog.Printf("Key already exists %v\n", k)
+			return nil, EEXISTS
+		}
+		chunk.rows[k] = br
 		chunk.Unlock()
-		dlog.Printf("Key already exists %v\n", k)
-		return nil, EEXISTS
 	}
-	chunk.rows[k] = br
-	chunk.Unlock()
 	return br, nil
 }
 
@@ -207,6 +269,14 @@ func (s *Store) getKey(k Key) (*BRecord, error) {
 		log.Fatalf("[store] getKey(): Empty key\n")
 	}
 	//s.NChunksAccessed[k[0]]++
+	if *GStore {
+		x, err := s.gstore.Get(k)
+		if !err {
+			return nil, ENOKEY
+		} else {
+			return x.(*BRecord), nil
+		}
+	}
 	if !*UseRLocks {
 		x, err := s.getKeyStatic(k)
 		return x, err
