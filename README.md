@@ -1,5 +1,6 @@
 This is the code for Doppel, an in-memory key/value transactional
-database.  WARNING: This is research code.  Use at your own risk.
+database.  WARNING: This is research code, and does not include
+durability or RPC.  Use at your own risk.
 
 Doppel's design is described in ["Phase Reconciliation for Contended
 In-Memory Transactions"](http://pdos.csail.mit.edu/~neha/phaser.pdf),
