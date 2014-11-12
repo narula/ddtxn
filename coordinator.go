@@ -18,7 +18,6 @@ const (
 )
 
 var PhaseLength = flag.Int("phase", 20, "Phase length in milliseconds, default 20")
-var SpinPhase = flag.Bool("spin", false, "How to do phase transitions; spin or channels")
 
 type Coordinator struct {
 	n        int
@@ -204,107 +203,7 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 	return potential_dd_keys, to_remove
 }
 
-func (c *Coordinator) SpinPhaseTransition(force bool) {
-	start1 := time.Now()
-	c.PotentialPhaseChanges++
-	s := c.Workers[0].store
-	var move_dd, remove_dd map[Key]bool
-	if *AlwaysSplit {
-		c.Coordinate = true
-		s.any_dd = true
-	} else {
-		move_dd, remove_dd = c.Stats()
-	}
-	if !c.Coordinate && !force {
-		c.TotalCoordTime += time.Since(start1)
-		return
-	}
-	xx := time.Since(c.StartTime)
-	_ = xx
-
-	c.StartTime = time.Now()
-	next_epoch := c.NextGlobalTID()
-	_ = next_epoch
-	dlog.Printf("%v COORD changed to epoch %v; waiting for MERGE. c.n=%v; time since last start: %v\n", time.Now().UnixNano(), next_epoch, c.n, xx)
-
-	x := atomic.LoadUint64(&c.wcepoch)
-	for x < uint64(c.n) {
-		g := 0
-		for i := 0; i < len(c.Workers); i++ {
-			if !c.Finished[i] {
-				g++
-			}
-		}
-		if g != c.n {
-			c.n = g
-		}
-		x = atomic.LoadUint64(&c.wcepoch)
-	}
-	// All workers have merged, meaning all workers passed the last epoch and saw gosplit = 1
-	atomic.StoreUint64(&c.gosplit, 0)
-	atomic.StoreUint64(&c.wcdone, 0) // Workers won't start reading/writing this till c.gojoin is 1
-	c.MergeTime += time.Since(c.StartTime)
-
-	// All merged.  The previous epoch is now safe; tell everyone to
-	// do their reads.
-	dlog.Printf("%v COORD all workers MERGED epoch %v; took %v, saying go for JOIN\n", time.Now().UnixNano(), next_epoch, time.Since(c.StartTime))
-	sx := time.Now()
-	atomic.StoreInt32(&c.trigger, 0)
-	// Go for JOIN phase
-	atomic.StoreUint64(&c.gojoin, 1) // After this workers will read/write c.wcdone
-
-	dlog.Printf("%v %v COORD STARTING TO WAIT for wdone\n", time.Now().UnixNano(), next_epoch)
-	x = atomic.LoadUint64(&c.wcdone)
-	for x != uint64(c.n) {
-		g := 0
-		for i := 0; i < len(c.Workers); i++ {
-			if !c.Finished[i] {
-				g++
-			}
-		}
-		if g != c.n {
-			c.n = g
-		}
-		x = atomic.LoadUint64(&c.wcdone)
-	}
-	atomic.StoreUint64(&c.gojoin, 0) // All workers saw gojoin and did wcdone
-	dlog.Printf("COORD all workers did JOIN for epoch %v; took %v, changing DD\n", next_epoch, time.Now())
-	c.ReadTime += time.Since(sx)
-	sx = time.Now()
-	// Merge dd
-	if !*AlwaysSplit {
-		if move_dd != nil {
-			for k, _ := range move_dd {
-				br, _ := s.getKey(k)
-				dlog.Printf("COORD setting %v to dd for epoch %v\n", br.key, next_epoch)
-				br.dd = true
-				s.dd[k] = true
-				WMoved += 1
-			}
-		}
-
-		if remove_dd != nil {
-			for k, _ := range remove_dd {
-				br, _ := s.getKey(k)
-				dlog.Printf("COORD removing %v from dd for epoch %v\n", br.key, next_epoch)
-				br.dd = false
-				s.dd[k] = false
-				RMoved += 1
-			}
-		}
-	}
-	atomic.StoreUint64(&c.gosplit, 1)
-	c.GoTime += time.Since(sx)
-	dlog.Printf("%v COORD done with %v; took, Saying go for SPLIT\n", time.Now().UnixNano(), next_epoch)
-	atomic.StoreUint64(&c.wcepoch, 0) // Safe?
-	c.TotalCoordTime += time.Since(start1)
-}
-
 func (c *Coordinator) IncrementEpoch(force bool) {
-	if *SpinPhase {
-		c.SpinPhaseTransition(force)
-		return
-	}
 	start1 := time.Now()
 	c.PotentialPhaseChanges++
 	s := c.Workers[0].store
@@ -396,10 +295,8 @@ func (c *Coordinator) Process() {
 			if *SysType == DOPPEL && c.n > 1 && c.Workers[0].store.any_dd {
 				c.IncrementEpoch(true)
 			}
-			if !*SpinPhase {
-				for i := 0; i < c.n; i++ {
-					c.Workers[i].done <- true
-				}
+			for i := 0; i < c.n; i++ {
+				c.Workers[i].done <- true
 			}
 			x <- true
 			return

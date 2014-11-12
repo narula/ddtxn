@@ -158,9 +158,7 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 	w.Register(RUBIS_VIEWUSER, ViewUserInfoTxn)
 	w.Register(BIG_INCR, BigIncrTxn)
 	w.Register(BIG_RW, BigRWTxn)
-	if !*SpinPhase {
-		go w.run()
-	}
+	go w.run()
 	return w
 }
 
@@ -280,48 +278,7 @@ func (w *Worker) joinPhase() {
 	w.waiters.clear()
 }
 
-func (w *Worker) spinTransition() {
-	if *SysType == DOPPEL {
-		e := w.coordinator.GetEpoch()
-		if e <= w.epoch {
-			return
-		}
-		start := time.Now()
-		tt := time.Since(w.coordinator.StartTime)
-		w.Nnoticed += tt
-		dlog.Printf("%v %v Starting transition %v noticed after %v\n", time.Now().UnixNano(), w.ID, e, tt)
-		w.E.SetPhase(MERGE)
-		w.local_store.Merge()
-		atomic.AddUint64(&w.coordinator.wcepoch, 1)
-		tt = time.Since(start)
-		w.Nmerge += tt
-		dlog.Printf("%v %v Done merge %v, waiting; took %v\n", time.Now().UnixNano(), w.ID, e, tt)
-		ts := time.Now()
-		atomic.SpinLoop(&w.coordinator.gojoin, 1)
-		tt = time.Since(ts)
-		w.Nmergewait += tt
-		dlog.Printf("%v %v Done merge wait %v, entering JOIN phase; took %v\n", time.Now().UnixNano(), w.ID, e, tt)
-		w.E.SetPhase(JOIN)
-		ts = time.Now()
-		w.joinPhase()
-		tt = time.Since(ts)
-		w.Njoin += tt
-
-		w.E.SetPhase(SPLIT)
-		atomic.AddUint64(&w.coordinator.wcdone, 1)
-		dlog.Printf("%v %v Acked wcdone %v, waiting for split; took %v \n", time.Now().UnixNano(), w.ID, e, tt)
-		ts = time.Now()
-		atomic.SpinLoop(&w.coordinator.gosplit, 1)
-		tt = time.Since(ts)
-		w.Njoinwait += tt
-		dlog.Printf("%v %v Coordinator says %v done, moving to split; waited %v\n", time.Now().UnixNano(), w.ID, e, tt)
-	}
-}
-
 func (w *Worker) transition() {
-	if *SpinPhase {
-		panic("Should not call regular transition() when spin is true")
-	}
 	if *SysType == DOPPEL {
 		w.Lock()
 		defer w.Unlock()
@@ -405,13 +362,9 @@ func (w *Worker) One(t Query) (*Result, error) {
 	if *SysType == DOPPEL {
 		e := w.coordinator.GetEpoch()
 		if w.epoch != e {
-			if *SpinPhase {
-				w.spinTransition()
-			} else {
-				w.RUnlock()
-				w.tickle <- e
-				w.RLock()
-			}
+			w.RUnlock()
+			w.tickle <- e
+			w.RLock()
 		}
 	}
 	r, err := w.doTxn(t)
