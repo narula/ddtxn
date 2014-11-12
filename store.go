@@ -4,13 +4,15 @@ import (
 	"ddtxn/dlog"
 	"errors"
 	"flag"
+	"fmt"
 	"hash"
 	"hash/crc32"
 	"log"
+	"reflect"
 	"runtime/debug"
 	"sync"
 
-	"github.com/zond/gotomic"
+	"gotomic"
 )
 
 type TID uint64
@@ -20,13 +22,14 @@ type Value interface{}
 var hasher hash.Hash32
 
 func (k Key) Equals(t gotomic.Thing) bool {
-	return t.(Key) == k
+	if sk, ok := t.(Key); ok {
+		return sk == k
+	}
+	return false
 }
 
 func (k Key) HashCode() uint32 {
-	hasher.Reset()
-	hasher.Write(k[:])
-	return hasher.Sum32()
+	return crc32.ChecksumIEEE(k[:])
 }
 
 type Chunk struct {
@@ -94,17 +97,18 @@ func (s *Store) getOrCreateTypedKey(k Key, v Value, kt KeyType) *BRecord {
 	br, err := s.getKey(k)
 	if err == ENOKEY {
 		if *GStore {
-			br, ok := s.gstore.Get(k)
+			thing, ok := s.gstore.Get(k)
 			if !ok {
 				br = MakeBR(k, v, kt)
 				did := s.gstore.PutIfMissing(k, br)
 				if !did {
-					br, ok = s.gstore.Get(k)
+					thing, ok = s.gstore.Get(k)
 					if !ok {
 						log.Fatalf("Cannot put new key, but Get() says it isn't there %v\n", k)
 					}
 				}
 			}
+			br = thing.(*BRecord)
 		} else {
 			if !*UseRLocks {
 				log.Fatalf("Should have preallocated keys if not locking chunks\n")
@@ -127,7 +131,10 @@ func (s *Store) getOrCreateTypedKey(k Key, v Value, kt KeyType) *BRecord {
 func (s *Store) CreateKey(k Key, v Value, kt KeyType) *BRecord {
 	br := MakeBR(k, v, kt)
 	if *GStore {
-		s.gstore.Put(k, br)
+		x, ok := s.gstore.Put(k, br)
+		if ok {
+			fmt.Printf("Overwrote %v; already there? %v\n", k, x)
+		}
 	} else {
 		chunk := s.store[k[0]]
 		chunk.Lock()
@@ -146,7 +153,8 @@ func (s *Store) CreateLockedKey(k Key, kt KeyType) (*BRecord, error) {
 	if *GStore {
 		ok := s.gstore.PutIfMissing(k, br)
 		if !ok {
-			dlog.Printf("Key already exists %v\n", k)
+			debug.PrintStack()
+			dlog.Printf("CreateLockedKey() Key already exists %v\n", k)
 			return nil, EEXISTS
 		}
 	} else {
@@ -155,7 +163,7 @@ func (s *Store) CreateLockedKey(k Key, kt KeyType) (*BRecord, error) {
 		_, ok := chunk.rows[k]
 		if ok {
 			chunk.Unlock()
-			dlog.Printf("Key already exists %v\n", k)
+			dlog.Printf("CreateLockedKey() Key already exists %v\n", k)
 			return nil, EEXISTS
 		}
 		chunk.rows[k] = br
@@ -268,10 +276,24 @@ func (s *Store) getKey(k Key) (*BRecord, error) {
 		debug.PrintStack()
 		log.Fatalf("[store] getKey(): Empty key\n")
 	}
-	//s.NChunksAccessed[k[0]]++
 	if *GStore {
-		x, err := s.gstore.Get(k)
-		if !err {
+		x, ok := s.gstore.Get(k)
+		if !ok {
+			m := s.gstore.ToMap()
+			_, there := m[k]
+			if there {
+				dlog.Printf("In map, but not in hash map? %v %v %v %v %v\n", k, x, ok, len(m), reflect.TypeOf(m[k]))
+				x, ok = s.gstore.Get(k)
+				if !ok {
+					dlog.Printf("Really no key (tried twice)? %v %v %v %v %v %v\n", k, x, ok, k.HashCode(), len(m), m)
+					log.Fatalf("exiting.  key was in map..\n")
+				} else {
+					return x.(*BRecord), nil
+				}
+			} else {
+				dlog.Printf("Not in map, not in hash map. %v %v %v %v %v\n", k, x, there, len(m), reflect.TypeOf(m[k]))
+				log.Fatalf("exiting not in map..\n")
+			}
 			return nil, ENOKEY
 		} else {
 			return x.(*BRecord), nil

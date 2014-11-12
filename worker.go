@@ -332,13 +332,13 @@ func (w *Worker) transition() {
 		start := time.Now()
 		tt := time.Since(w.coordinator.StartTime)
 		w.Nnoticed += tt
-		dlog.Printf("%v %v Starting transition %v noticed after %v\n", time.Now().UnixNano(), w.ID, e, tt)
+		//dlog.Printf("%v %v Starting transition %v noticed after %v\n", time.Now().UnixNano(), w.ID, e, tt)
 		w.E.SetPhase(MERGE)
 		w.local_store.Merge()
 		w.coordinator.wepoch[w.ID] <- e
 		tt = time.Since(start)
 		w.Nmerge += tt
-		dlog.Printf("%v %v Done merge %v, waiting; took %v\n", time.Now().UnixNano(), w.ID, e, tt)
+		//dlog.Printf("%v %v Done merge %v, waiting; took %v\n", time.Now().UnixNano(), w.ID, e, tt)
 		ts := time.Now()
 		x := <-w.coordinator.wsafe[w.ID]
 		if x != e {
@@ -346,7 +346,7 @@ func (w *Worker) transition() {
 		}
 		tt = time.Since(ts)
 		w.Nmergewait += tt
-		dlog.Printf("%v %v Done merge wait %v, entering JOIN phase; took %v\n", time.Now().UnixNano(), w.ID, e, tt)
+		//dlog.Printf("%v %v Done merge wait %v, entering JOIN phase; took %v\n", time.Now().UnixNano(), w.ID, e, tt)
 		w.E.SetPhase(JOIN)
 		ts = time.Now()
 		w.joinPhase()
@@ -362,7 +362,7 @@ func (w *Worker) transition() {
 		}
 		tt = time.Since(ts)
 		w.Njoinwait += tt
-		dlog.Printf("%v %v Coordinator says %v done, moving to split; waited %v\n", time.Now().UnixNano(), w.ID, e, tt)
+		//dlog.Printf("%v %v Coordinator says %v done, moving to split; waited %v\n", time.Now().UnixNano(), w.ID, e, tt)
 		end := time.Since(start)
 		w.Nwait += end
 		w.epoch = e

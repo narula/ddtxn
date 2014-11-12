@@ -1,6 +1,7 @@
 package ddtxn
 
 import (
+	"ddtxn/dlog"
 	"ddtxn/spinlock"
 	"ddtxn/wfmutex"
 	"flag"
@@ -189,6 +190,9 @@ func (br *BRecord) Own(last uint64) bool {
 
 // Used during "merge" phase, along with br.mu
 func (br *BRecord) Apply(val Value) {
+	if br == nil {
+		dlog.Printf("Nil record %v %v\n", val, br)
+	}
 	switch br.key_type {
 	case SUM:
 		delta := val.(int32)

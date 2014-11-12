@@ -46,6 +46,7 @@ func main() {
 		log.Fatalf("Set contention to -1 to use Zipf distribution of keys")
 	}
 	s := ddtxn.NewStore()
+	sp := uint32(*nbidders / *nworkers)
 	for i := 0; i < *nbidders; i++ {
 		k := ddtxn.ProductKey(i)
 		s.CreateKey(k, int32(0), ddtxn.SUM)
@@ -65,7 +66,6 @@ func main() {
 
 	p := prof.StartProfile()
 	start := time.Now()
-	sp := uint32(*nbidders / *nworkers)
 	var wg sync.WaitGroup
 	pkey := int(sp - 1)
 	dlog.Printf("Partition size: %v; Contended key %v\n", sp/2, pkey)

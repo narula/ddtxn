@@ -130,19 +130,19 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 				// Higher threshold for the first one, since it kicks off phases
 				if o.ratio() > 1.33*(*WRRatio) && (o.writes > 1 || o.conflicts > 5) {
 					potential_dd_keys[o.k] = true
-					dlog.Printf("move %v to split1 r:%v w:%v c:%v s:%v ra:%v after: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), c.PotentialPhaseChanges)
+					//dlog.Printf("move %v to split1 r:%v w:%v c:%v s:%v ra:%v after: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), c.PotentialPhaseChanges)
 					s.any_dd = true
 				} else {
-					dlog.Printf("%v no move inertia r:%v w:%v c:%v s:%v ra:%v after: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), c.PotentialPhaseChanges)
+					//dlog.Printf("%v no move inertia r:%v w:%v c:%v s:%v ra:%v after: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), c.PotentialPhaseChanges)
 				}
 				continue
 			}
 			if o.ratio() > *WRRatio && (o.writes > 1 || o.conflicts > 1) {
 				potential_dd_keys[o.k] = true
-				dlog.Printf("move %v to split2 r:%v w:%v c:%v s:%v ra:%v after: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), c.PotentialPhaseChanges)
+				//dlog.Printf("move %v to split2 r:%v w:%v c:%v s:%v ra:%v after: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), c.PotentialPhaseChanges)
 				s.any_dd = true
 			} else {
-				dlog.Printf("too low; no move :%v; r:%v w:%v c:%v s:%v ra:%v; wr: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), *WRRatio)
+				//dlog.Printf("too low; no move :%v; r:%v w:%v c:%v s:%v ra:%v; wr: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), *WRRatio)
 			}
 		}
 	}
@@ -153,14 +153,14 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 		}
 		o, ok := s.cand.m[k]
 		if !ok {
-			dlog.Printf("Key %v was split but now is not in store candidates\n", k)
+			//dlog.Printf("Key %v was split but now is not in store candidates\n", k)
 			if x, ok := c.to_remove[k]; x && ok {
 				c.to_remove[k] = false
 				to_remove[k] = true
 			} else {
 				c.to_remove[k] = true
 			}
-			dlog.Printf("move %v from split2 \n", k)
+			//dlog.Printf("move %v from split2 \n", k)
 			continue
 		}
 		if o.ratio() < (*WRRatio)/2 {
@@ -170,7 +170,7 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 			} else {
 				c.to_remove[k] = true
 			}
-			dlog.Printf("move %v from split r:%v w:%v c:%v s:%v ratio:%v\n", k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
+			//dlog.Printf("move %v from split r:%v w:%v c:%v s:%v ratio:%v\n", k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
 		}
 	}
 	if len(s.dd) == 0 && len(potential_dd_keys) == 0 {
@@ -225,7 +225,7 @@ func (c *Coordinator) SpinPhaseTransition(force bool) {
 	c.StartTime = time.Now()
 	next_epoch := c.NextGlobalTID()
 	_ = next_epoch
-	dlog.Printf("%v COORD changed to epoch %v; waiting for MERGE. c.n=%v; time since last start: %v\n", time.Now().UnixNano(), next_epoch, c.n, xx)
+	//dlog.Printf("%v COORD changed to epoch %v; waiting for MERGE. c.n=%v; time since last start: %v\n", time.Now().UnixNano(), next_epoch, c.n, xx)
 
 	x := atomic.LoadUint64(&c.wcepoch)
 	for x < uint64(c.n) {
@@ -247,13 +247,13 @@ func (c *Coordinator) SpinPhaseTransition(force bool) {
 
 	// All merged.  The previous epoch is now safe; tell everyone to
 	// do their reads.
-	dlog.Printf("%v COORD all workers MERGED epoch %v; took %v, saying go for JOIN\n", time.Now().UnixNano(), next_epoch, time.Since(c.StartTime))
+	//dlog.Printf("%v COORD all workers MERGED epoch %v; took %v, saying go for JOIN\n", time.Now().UnixNano(), next_epoch, time.Since(c.StartTime))
 	sx := time.Now()
 	atomic.StoreInt32(&c.trigger, 0)
 	// Go for JOIN phase
 	atomic.StoreUint64(&c.gojoin, 1) // After this workers will read/write c.wcdone
 
-	dlog.Printf("%v %v COORD STARTING TO WAIT for wdone\n", time.Now().UnixNano(), next_epoch)
+	//dlog.Printf("%v %v COORD STARTING TO WAIT for wdone\n", time.Now().UnixNano(), next_epoch)
 	x = atomic.LoadUint64(&c.wcdone)
 	for x != uint64(c.n) {
 		g := 0
@@ -268,7 +268,7 @@ func (c *Coordinator) SpinPhaseTransition(force bool) {
 		x = atomic.LoadUint64(&c.wcdone)
 	}
 	atomic.StoreUint64(&c.gojoin, 0) // All workers saw gojoin and did wcdone
-	dlog.Printf("COORD all workers did JOIN for epoch %v; took %v, changing DD\n", next_epoch, time.Now())
+	//dlog.Printf("COORD all workers did JOIN for epoch %v; took %v, changing DD\n", next_epoch, time.Now())
 	c.ReadTime += time.Since(sx)
 	sx = time.Now()
 	// Merge dd
@@ -276,7 +276,7 @@ func (c *Coordinator) SpinPhaseTransition(force bool) {
 		if move_dd != nil {
 			for k, _ := range move_dd {
 				br, _ := s.getKey(k)
-				dlog.Printf("COORD setting %v to dd for epoch %v\n", br.key, next_epoch)
+				//dlog.Printf("COORD setting %v to dd for epoch %v\n", br.key, next_epoch)
 				br.dd = true
 				s.dd[k] = true
 				WMoved += 1
@@ -286,7 +286,7 @@ func (c *Coordinator) SpinPhaseTransition(force bool) {
 		if remove_dd != nil {
 			for k, _ := range remove_dd {
 				br, _ := s.getKey(k)
-				dlog.Printf("COORD removing %v from dd for epoch %v\n", br.key, next_epoch)
+				//dlog.Printf("COORD removing %v from dd for epoch %v\n", br.key, next_epoch)
 				br.dd = false
 				s.dd[k] = false
 				RMoved += 1
@@ -295,7 +295,7 @@ func (c *Coordinator) SpinPhaseTransition(force bool) {
 	}
 	atomic.StoreUint64(&c.gosplit, 1)
 	c.GoTime += time.Since(sx)
-	dlog.Printf("%v COORD done with %v; took, Saying go for SPLIT\n", time.Now().UnixNano(), next_epoch)
+	//dlog.Printf("%v COORD done with %v; took, Saying go for SPLIT\n", time.Now().UnixNano(), next_epoch)
 	atomic.StoreUint64(&c.wcepoch, 0) // Safe?
 	c.TotalCoordTime += time.Since(start1)
 }

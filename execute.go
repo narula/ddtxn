@@ -452,6 +452,11 @@ func (tx *OTransaction) Commit() TID {
 			}
 			// Data doesn't exist, create it
 			if w.br == nil || err == ENOKEY {
+				if w.br == nil {
+					dlog.Printf("w.br was nil %v\n", w.key)
+				} else if err == ENOKEY {
+					dlog.Printf("err==ENOKEY %v\n", w.key)
+				}
 				var err2 error
 				w.br, err2 = tx.s.CreateLockedKey(w.key, w.op)
 				if err2 != nil {
