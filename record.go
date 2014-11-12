@@ -1,12 +1,13 @@
 package ddtxn
 
 import (
-	"ddtxn/spinlock"
-	"ddtxn/wfmutex"
 	"flag"
 	"log"
 	"sync"
 	"sync/atomic"
+
+	"github.com/narula/ddtxn/spinlock"
+	"github.com/narula/ddtxn/wfmutex"
 )
 
 var Conflicts = flag.Bool("conflicts", false, "Measure conflicts\n")

@@ -2,12 +2,13 @@ package ddtxn
 
 import (
 	"container/heap"
-	"ddtxn/dlog"
 	"flag"
 	"fmt"
 	"log"
 	"sync/atomic"
 	"time"
+
+	"github.com/narula/ddtxn/dlog"
 )
 
 const (

@@ -1,9 +1,10 @@
 package ddtxn
 
 import (
-	"ddtxn/dlog"
 	"log"
 	"runtime/debug"
+
+	"github.com/narula/ddtxn/dlog"
 )
 
 // Local per-worker store. Specific types to more quickly apply local
