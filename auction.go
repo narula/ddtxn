@@ -1,10 +1,11 @@
 package ddtxn
 
 import (
-	"ddtxn/dlog"
 	"fmt"
 	"log"
 	"time"
+
+	"github.com/narula/ddtxn/dlog"
 )
 
 const (
