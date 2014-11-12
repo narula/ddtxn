@@ -36,7 +36,7 @@ ben_list_cpus = "thread==0 socket@0,1,2,7,3-6"
 LATENCY_PART = " -latency=%s" % options.latency
 VERSION_PART = " -v=%d" % options.version
 
-BASE_CMD = "GOGC=off numactl -C `list-cpus seq -n %d %s` ./%s -nprocs=%d -ngo=%d -nw=%d -nsec=%d -contention=%s -rr=%d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -atomic=%s -zipf=%s -out=data.out -ncrr=%s -cw=%.2f -rw=%.2f -split=%s" + LATENCY_PART + VERSION_PART
+BASE_CMD = "GOGC=off numactl -C `list-cpus seq -n %d %s` $GOPATH/bin/%s -nprocs=%d -ngo=%d -nw=%d -nsec=%d -contention=%s -rr=%d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -atomic=%s -zipf=%s -out=data.out -ncrr=%s -cw=%.2f -rw=%.2f -split=%s" + LATENCY_PART + VERSION_PART
 
 def do_param(bn, rr, contention, ncpu, sys, wratio=options.wratio, phase=options.phase, atomic=False, zipf=-1, ncrr=options.not_contended_read_rate, yval="total/sec", cw=options.conflict_weight, rw=options.read_weight, split=False):
     cmd = fill_cmd(bn, rr, contention, ncpu, sys, wratio, phase, atomic, zipf, ncrr, cw, rw, split)
@@ -269,7 +269,7 @@ if __name__ == "__main__":
 
     # figure 8
     if options.exp == "single" or options.exp == "all":
-        single_exp(0, options.default_ncores)        
+        single_exp(0, options.default_ncores)
     # figure 9
     if options.exp == "singlescale" or options.exp == "all":
         single_scale_exp(host, 100, 0, -1)
