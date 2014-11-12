@@ -1,12 +1,13 @@
 package ddtxn
 
 import (
-	"ddtxn/dlog"
 	"errors"
 	"flag"
 	"log"
 	"runtime/debug"
 	"sync"
+
+	"github.com/narula/ddtxn/dlog"
 )
 
 type TID uint64

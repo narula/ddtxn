@@ -6,20 +6,21 @@ Doppel's design is described in ["Phase Reconciliation for Contended
 In-Memory Transactions"](http://pdos.csail.mit.edu/~neha/phaser.pdf),
 presented at OSDI 2014.
 
-To run Doppel, install go from source following the instructions here:<br>
-`https://golang.org/doc/install/source`
+To run Doppel, install go from source following the instructions here:
+https://golang.org/doc/install/source.
 
-Clone the Doppel code into your $GOPATH/src/ directory:<br>
-`cd $GOPATH/src/`<br>
-`git clone https://github.com/narula/ddtxn.git`
+Then `go get` the code:
 
-Run the tests:<br>
-`cd ddtxn`<br>
-`go test`
+    go get github.com/narula/ddtxn/...
 
-Add bin/ to your PATH<br>
+The code will be at `$GOPATH/src/github.com/narula/ddtxn`.
 
-Run a benchmark:<br>
-`cd ddtxn/benchmarks`<br>
-`go build single.go`<br>
-`python bm.py --exp=single --rlock --ncores=N`
+To run the tests, use `go test`.
+
+Add `$GOPATH/bin` to your `PATH` environment variable.
+
+Run a benchmark:
+
+    cd $GOPATH/github.com/narula/ddtxn/benchmarks
+    go install ./single
+    python bm.py --exp=single --rlock --ncores=N
