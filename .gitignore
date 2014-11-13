@@ -3,3 +3,4 @@
 *.out
 *.err
 *.out.?
+benchmarks/tmp
