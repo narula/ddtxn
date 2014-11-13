@@ -1,0 +1,4 @@
+#!/bin/sh
+
+PATH=$(dirname "$0"):$PATH
+exec set-cpus --list "$@"
