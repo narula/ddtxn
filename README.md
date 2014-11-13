@@ -6,7 +6,8 @@ Doppel's design is described in ["Phase Reconciliation for Contended
 In-Memory Transactions"](http://pdos.csail.mit.edu/~neha/phaser.pdf),
 presented at OSDI 2014.
 
-To run Doppel, install go from source following the instructions here:<br>
+If you don't care about the benchmarks in the paper, you can use a released version of go.  
+To run the Doppel benchmarks, install go from source following the instructions here:<br>
 `https://golang.org/doc/install/source`
 
 Clone the Doppel code into your $GOPATH/src/ directory:<br>
