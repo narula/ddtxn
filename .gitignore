@@ -2,12 +2,5 @@
 *.test
 *.out
 *.err
-benchmarks/rubis
-benchmarks/buy
-benchmarks/tmp
-benchmarks/bench
-benchmarks/big
-benchmarks/single
 *.out.?
-benchmarks/time-single
-benchmarks/bid
+benchmarks/tmp
