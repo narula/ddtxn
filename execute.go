@@ -214,7 +214,13 @@ func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 	// ease of exposition.  That means it would have to put the key
 	// into the read set and potentially abort accordingly.  Doing so
 	// here, but not using the value until commit time.
-	br, err := tx.s.getKey(k)
+	var br *BRecord
+	var err error
+	if *GStore {
+		br, err = tx.s.getKeyGotomic(k, tx.w)
+	} else {
+		br, err = tx.s.getKey(k)
+	}
 	if *CountKeys {
 		p, r := UndoCKey(k)
 		if r == 'm' {
@@ -443,7 +449,11 @@ func (tx *OTransaction) Commit() TID {
 		w := &tx.writes[i]
 		if w.br == nil {
 			var err error
-			w.br, err = tx.s.getKey(w.key)
+			if *GStore {
+				w.br, err = tx.s.getKeyGotomic(w.key, tx.w)
+			} else {
+				w.br, err = tx.s.getKey(w.key)
+			}
 			if *CountKeys {
 				p, r := UndoCKey(w.key)
 				if r == 'm' {
@@ -507,7 +517,11 @@ func (tx *OTransaction) Commit() TID {
 		rk := &tx.read[i]
 		var err error
 		if rk.br == nil {
-			rk.br, err = tx.s.getKey(rk.key)
+			if *GStore {
+				rk.br, err = tx.s.getKey(rk.key)
+			} else {
+				rk.br, err = tx.s.getKeyGotomic(rk.key, tx.w)
+			}
 			if *CountKeys {
 				p, r := UndoCKey(rk.key)
 				if r == 'm' {
@@ -540,9 +554,9 @@ func (tx *OTransaction) Commit() TID {
 		if tx.isSplit(w.br) {
 			switch w.op {
 			case SUM:
-				tx.ls.Apply(w.key, w.op, w.vint32, w.op)
+				tx.ls.ApplyInt32(w.key, w.op, w.vint32, w.op)
 			case MAX:
-				tx.ls.Apply(w.key, w.op, w.vint32, w.op)
+				tx.ls.ApplyInt32(w.key, w.op, w.vint32, w.op)
 			case LIST:
 				tx.ls.ApplyList(w.key, w.ve)
 			case OOWRITE:

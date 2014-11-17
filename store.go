@@ -16,21 +16,12 @@ import (
 )
 
 type TID uint64
-type Key [16]byte
+
+//type Key [16]byte
+type Key gotomic.Key
 type Value interface{}
 
 var hasher hash.Hash32
-
-func (k Key) Equals(t gotomic.Thing) bool {
-	if sk, ok := t.(Key); ok {
-		return sk == k
-	}
-	return false
-}
-
-func (k Key) HashCode() uint32 {
-	return crc32.ChecksumIEEE(k[:])
-}
 
 type Chunk struct {
 	padding1 [128]byte
@@ -61,6 +52,7 @@ type Store struct {
 	gstore          *gotomic.Hash
 	NChunksAccessed []int64
 	dd              map[Key]bool
+	hash_codes      map[Key]uint32
 	any_dd          bool
 	cand            *Candidates
 	padding2        [128]byte
@@ -79,6 +71,7 @@ func NewStore() *Store {
 		gstore:          gotomic.NewHash(),
 		NChunksAccessed: make([]int64, CHUNKS),
 		dd:              make(map[Key]bool),
+		hash_codes:      make(map[Key]uint32),
 		cand:            &Candidates{make(map[Key]*OneStat), &sh},
 	}
 	var bb byte
@@ -93,16 +86,20 @@ func NewStore() *Store {
 	return s
 }
 
+func (s *Store) PrecomputeHashCode(k Key) {
+	s.hash_codes[k] = gotomic.Key(k).HashCode()
+}
+
 func (s *Store) getOrCreateTypedKey(k Key, v Value, kt KeyType) *BRecord {
 	br, err := s.getKey(k)
 	if err == ENOKEY {
 		if *GStore {
-			thing, ok := s.gstore.Get(k)
+			thing, ok := s.gstore.Get(gotomic.Key(k))
 			if !ok {
 				br = MakeBR(k, v, kt)
-				did := s.gstore.PutIfMissing(k, br)
+				did := s.gstore.PutIfMissing(gotomic.Key(k), br)
 				if !did {
-					thing, ok = s.gstore.Get(k)
+					thing, ok = s.gstore.Get(gotomic.Key(k))
 					if !ok {
 						log.Fatalf("Cannot put new key, but Get() says it isn't there %v\n", k)
 					}
@@ -131,10 +128,11 @@ func (s *Store) getOrCreateTypedKey(k Key, v Value, kt KeyType) *BRecord {
 func (s *Store) CreateKey(k Key, v Value, kt KeyType) *BRecord {
 	br := MakeBR(k, v, kt)
 	if *GStore {
-		x, ok := s.gstore.Put(k, br)
+		x, ok := s.gstore.Put(gotomic.Key(k), br)
 		if ok {
 			fmt.Printf("Overwrote %v; already there? %v\n", k, x)
 		}
+		s.PrecomputeHashCode(k)
 	} else {
 		chunk := s.store[k[0]]
 		chunk.Lock()
@@ -151,7 +149,7 @@ func (s *Store) CreateLockedKey(k Key, kt KeyType) (*BRecord, error) {
 	br := MakeBR(k, nil, kt)
 	br.Lock()
 	if *GStore {
-		ok := s.gstore.PutIfMissing(k, br)
+		ok := s.gstore.PutIfMissing(gotomic.Key(k), br)
 		if !ok {
 			debug.PrintStack()
 			dlog.Printf("CreateLockedKey() Key already exists %v\n", k)
@@ -176,7 +174,7 @@ func (s *Store) CreateMuLockedKey(k Key, kt KeyType) (*BRecord, error) {
 	br := MakeBR(k, nil, kt)
 	br.SLock()
 	if *GStore {
-		ok := s.gstore.PutIfMissing(k, br)
+		ok := s.gstore.PutIfMissing(gotomic.Key(k), br)
 		if !ok {
 			dlog.Printf("Key already exists %v\n", k)
 			return nil, EEXISTS
@@ -200,7 +198,7 @@ func (s *Store) CreateMuRLockedKey(k Key, kt KeyType) (*BRecord, error) {
 	br := MakeBR(k, nil, kt)
 	br.SRLock()
 	if *GStore {
-		ok := s.gstore.PutIfMissing(k, br)
+		ok := s.gstore.PutIfMissing(gotomic.Key(k), br)
 		if !ok {
 			dlog.Printf("Key already exists %v\n", k)
 			return nil, EEXISTS
@@ -277,21 +275,67 @@ func (s *Store) getKey(k Key) (*BRecord, error) {
 		log.Fatalf("[store] getKey(): Empty key\n")
 	}
 	if *GStore {
-		x, ok := s.gstore.Get(k)
+		x, ok := s.gstore.Get(gotomic.Key(k))
 		if !ok {
 			m := s.gstore.ToMap()
-			_, there := m[k]
+			_, there := m[gotomic.Key(k)]
 			if there {
-				dlog.Printf("In map, but not in hash map? %v %v %v %v %v\n", k, x, ok, len(m), reflect.TypeOf(m[k]))
-				x, ok = s.gstore.Get(k)
+				dlog.Printf("In map, but not in hash map? %v %v %v %v %v\n", k, x, ok, len(m), reflect.TypeOf(m[gotomic.Key(k)]))
+				x, ok = s.gstore.Get(gotomic.Key(k))
 				if !ok {
-					dlog.Printf("Really no key (tried twice)? %v %v %v %v %v %v\n", k, x, ok, k.HashCode(), len(m), m)
+					dlog.Printf("Really no key (tried twice)? %v %v %v %v %v %v\n", k, x, ok, gotomic.Key(k).HashCode(), len(m), m)
 					log.Fatalf("exiting.  key was in map..\n")
 				} else {
 					return x.(*BRecord), nil
 				}
 			} else {
-				dlog.Printf("Not in map, not in hash map. %v %v %v %v %v\n", k, x, there, len(m), reflect.TypeOf(m[k]))
+				dlog.Printf("Not in map, not in hash map. %v %v %v %v %v\n", k, x, there, len(m), reflect.TypeOf(m[gotomic.Key(k)]))
+				log.Fatalf("exiting not in map..\n")
+			}
+			return nil, ENOKEY
+		} else {
+			return x.(*BRecord), nil
+		}
+	}
+	if !*UseRLocks {
+		x, err := s.getKeyStatic(k)
+		return x, err
+	}
+	chunk := s.store[k[0]]
+	if chunk == nil {
+		log.Fatalf("[store] Didn't initialize chunk for key %v byte %v\n", k, k[0])
+	}
+	chunk.RLock()
+	vr, ok := chunk.rows[k]
+	if !ok || vr == nil {
+		chunk.RUnlock()
+		return vr, ENOKEY
+	}
+	chunk.RUnlock()
+	return vr, nil
+}
+
+func (s *Store) getKeyGotomic(k Key, w *Worker) (*BRecord, error) {
+	if len(k) == 0 {
+		debug.PrintStack()
+		log.Fatalf("[store] getKey(): Empty key\n")
+	}
+	if *GStore {
+		x, ok := s.gstore.GetHC(s.hash_codes[k], gotomic.Key(k), w.ld)
+		if !ok {
+			m := s.gstore.ToMap()
+			_, there := m[gotomic.Key(k)]
+			if there {
+				dlog.Printf("In map, but not in hash map? %v %v %v %v %v\n", k, x, ok, len(m), reflect.TypeOf(m[gotomic.Key(k)]))
+				x, ok = s.gstore.GetHC(s.hash_codes[k], gotomic.Key(k), w.ld)
+				if !ok {
+					dlog.Printf("Really no key (tried twice)? %v %v %v %v %v %v\n", k, x, ok, gotomic.Key(k).HashCode(), len(m), m)
+					log.Fatalf("exiting.  key was in map..\n")
+				} else {
+					return x.(*BRecord), nil
+				}
+			} else {
+				dlog.Printf("Not in map, not in hash map. %v %v %v %v %v\n", k, x, there, len(m), reflect.TypeOf(m[gotomic.Key(k)]))
 				log.Fatalf("exiting not in map..\n")
 			}
 			return nil, ENOKEY

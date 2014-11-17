@@ -3,6 +3,7 @@ package ddtxn
 import (
 	"ddtxn/dlog"
 	"flag"
+	"gotomic"
 	"log"
 	"runtime/debug"
 	"strconv"
@@ -88,6 +89,8 @@ type Worker struct {
 	E           ETransaction
 	txns        []TransactionFunc
 
+	ld *gotomic.LocalData
+
 	// Stats
 	Nstats       []int64
 	Nwait        time.Duration
@@ -126,6 +129,7 @@ func NewWorker(id int, s *Store, c *Coordinator) *Worker {
 		txns:         make([]TransactionFunc, LAST_TXN),
 		tickle:       make(chan TID),
 		PreAllocated: false,
+		ld:           gotomic.InitLocalData(),
 	}
 	if *SysType == DOPPEL {
 		w.waiters = TSInit(START_SIZE)
