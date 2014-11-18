@@ -141,7 +141,7 @@ func ReadTxn(t Query, tx ETransaction) (*Result, error) {
 // split phase or not.  This shouldn't be run in a mix with any other
 // transaction types.
 func AtomicIncr(t Query, tx ETransaction) (*Result, error) {
-	br, err := tx.Store().getKey(t.K1)
+	br, err := tx.Store().getKey(t.K1, tx.Worker().ld)
 	if err != nil || br == nil {
 		log.Fatalf("Why no key?")
 	}

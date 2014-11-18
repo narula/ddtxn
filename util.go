@@ -62,7 +62,7 @@ func Validate(c *Coordinator, s *Store, nkeys int, nproducts int, val []int32, n
 	for j := 0; j < nproducts; j++ {
 		var x int32
 		k := ProductKey(j)
-		v, err := s.getKey(k)
+		v, err := s.getKey(k, nil)
 		if err != nil {
 			if val[j] != 0 {
 				fmt.Printf("Validating key %v failed; store: none should have: %v\n", k, val[j])

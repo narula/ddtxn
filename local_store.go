@@ -1,10 +1,9 @@
 package ddtxn
 
 import (
+	"fmt"
 	"log"
 	"runtime/debug"
-
-	"github.com/narula/ddtxn/dlog"
 )
 
 // Local per-worker store. Specific types to more quickly apply local
@@ -61,10 +60,26 @@ func (ls *LocalStore) ApplyOO(key Key, a int32, v Value) {
 	}
 }
 
+func (ls *LocalStore) ApplyInt32(key Key, key_type KeyType, a int32, op KeyType) {
+	if op != key_type {
+		// Perhaps do something.  When is this set?
+		fmt.Printf("Different op types %v %v\n", key_type, op)
+	}
+	switch op {
+	case SUM:
+		ls.sums[key] += a
+	case MAX:
+		delta := a
+		if ls.max[key] < delta {
+			ls.max[key] = delta
+		}
+	}
+}
+
 func (ls *LocalStore) Apply(key Key, key_type KeyType, v Value, op KeyType) {
 	if op != key_type {
 		// Perhaps do something.  When is this set?
-		dlog.Printf("Different op types %v %v\n", key_type, op)
+		fmt.Printf("Different op types %v %v\n", key_type, op)
 	}
 	switch op {
 	case SUM:

@@ -48,6 +48,7 @@ type ETransaction interface {
 	SetPhase(int)
 	GetPhase() int
 	Store() *Store
+	Worker() *Worker
 
 	// Tell 2PL I am going to read and potentially write this key.
 	// This is because I don't know how to upgrade locks.
@@ -163,7 +164,7 @@ func (tx *OTransaction) Read(k Key) (*BRecord, error) {
 			}
 		}
 	}
-	br, err := tx.s.getKey(k)
+	br, err := tx.s.getKey(k, tx.w.ld)
 	if *CountKeys {
 		p, r := UndoCKey(k)
 		if r == 'm' {
@@ -215,7 +216,7 @@ func (tx *OTransaction) WriteInt32(k Key, a int32, op KeyType) error {
 	// ease of exposition.  That means it would have to put the key
 	// into the read set and potentially abort accordingly.  Doing so
 	// here, but not using the value until commit time.
-	br, err := tx.s.getKey(k)
+	br, err := tx.s.getKey(k, tx.w.ld)
 	if *CountKeys {
 		p, r := UndoCKey(k)
 		if r == 'm' {
@@ -290,7 +291,7 @@ func (tx *OTransaction) WriteList(k Key, l Entry, op KeyType) error {
 	// ease of exposition.  That means it would have to put the key
 	// into the read set and potentially abort accordingly.  Doing so
 	// here, but not using the value until commit time.
-	br, err := tx.s.getKey(k)
+	br, err := tx.s.getKey(k, tx.w.ld)
 	if *CountKeys {
 		p, r := UndoCKey(k)
 		if r == 'm' {
@@ -353,7 +354,7 @@ func (tx *OTransaction) WriteOO(k Key, a int32, v Value, op KeyType) error {
 	// ease of exposition.  That means it would have to put the key
 	// into the read set and potentially abort accordingly.  Doing so
 	// here, but not using the value until commit time.
-	br, err := tx.s.getKey(k)
+	br, err := tx.s.getKey(k, tx.w.ld)
 	if *CountKeys {
 		p, r := UndoCKey(k)
 		if r == 'm' {
@@ -417,6 +418,10 @@ func (tx *OTransaction) Store() *Store {
 	return tx.s
 }
 
+func (tx *OTransaction) Worker() *Worker {
+	return tx.w
+}
+
 func (tx *OTransaction) Abort() TID {
 	for i, _ := range tx.writes {
 		if tx.writes[i].locked {
@@ -444,7 +449,7 @@ func (tx *OTransaction) Commit() TID {
 		w := &tx.writes[i]
 		if w.br == nil {
 			var err error
-			w.br, err = tx.s.getKey(w.key)
+			w.br, err = tx.s.getKey(w.key, tx.w.ld)
 			if *CountKeys {
 				p, r := UndoCKey(w.key)
 				if r == 'm' {
@@ -453,6 +458,11 @@ func (tx *OTransaction) Commit() TID {
 			}
 			// Data doesn't exist, create it
 			if w.br == nil || err == ENOKEY {
+				if w.br == nil {
+					dlog.Printf("w.br was nil %v\n", w.key)
+				} else if err == ENOKEY {
+					dlog.Printf("err==ENOKEY %v\n", w.key)
+				}
 				var err2 error
 				w.br, err2 = tx.s.CreateLockedKey(w.key, w.op)
 				if err2 != nil {
@@ -503,7 +513,7 @@ func (tx *OTransaction) Commit() TID {
 		rk := &tx.read[i]
 		var err error
 		if rk.br == nil {
-			rk.br, err = tx.s.getKey(rk.key)
+			rk.br, err = tx.s.getKey(rk.key, tx.w.ld)
 			if *CountKeys {
 				p, r := UndoCKey(rk.key)
 				if r == 'm' {
@@ -536,9 +546,9 @@ func (tx *OTransaction) Commit() TID {
 		if tx.isSplit(w.br) {
 			switch w.op {
 			case SUM:
-				tx.ls.Apply(w.key, w.op, w.vint32, w.op)
+				tx.ls.ApplyInt32(w.key, w.op, w.vint32, w.op)
 			case MAX:
-				tx.ls.Apply(w.key, w.op, w.vint32, w.op)
+				tx.ls.ApplyInt32(w.key, w.op, w.vint32, w.op)
 			case LIST:
 				tx.ls.ApplyList(w.key, w.ve)
 			case OOWRITE:
@@ -648,7 +658,7 @@ func (tx *LTransaction) Read(k Key) (*BRecord, error) {
 		dlog.Printf("Returning ENOKEY for key %v supposedly at slot %v. %v\n", k, n, tx.keys[n])
 		return nil, ENOKEY
 	}
-	br, err := tx.s.getKey(k)
+	br, err := tx.s.getKey(k, tx.w.ld)
 	if *CountKeys {
 		p, r := UndoCKey(k)
 		if r == 'm' {
@@ -673,7 +683,7 @@ func (tx *LTransaction) Read(k Key) (*BRecord, error) {
 		return nil, ENOKEY
 	}
 	// Perhaps someone snuck in and created this key already.
-	if br, err = tx.s.getKey(k); err == nil {
+	if br, err = tx.s.getKey(k, tx.w.ld); err == nil {
 		br.SRLock()
 		tx.keys[n].br = br
 		return br, nil
@@ -688,7 +698,7 @@ func (tx *LTransaction) MaybeWrite(k Key) {
 	if exists, _ := tx.already_exists(k); exists {
 		log.Fatalf("Shouldn't already have a lock on this\n")
 	}
-	br, err := tx.s.getKey(k)
+	br, err := tx.s.getKey(k, tx.w.ld)
 	if *CountKeys {
 		p, r := UndoCKey(k)
 		if r == 'm' {
@@ -698,7 +708,7 @@ func (tx *LTransaction) MaybeWrite(k Key) {
 	if br == nil || err != nil {
 		if br, err = tx.s.CreateMuLockedKey(k, WRITE); err != nil {
 			// Perhaps someone snuck in and created this key already.
-			if br, err = tx.s.getKey(k); err != nil {
+			if br, err = tx.s.getKey(k, tx.w.ld); err != nil {
 				log.Fatalf("Can't create key %v and it's not there now\n", k)
 			}
 			br.SLock()
@@ -730,7 +740,7 @@ func (tx *LTransaction) already_exists(k Key) (bool, int) {
 }
 
 func (tx *LTransaction) make_or_get_key(k Key, op KeyType) *BRecord {
-	br, err := tx.s.getKey(k)
+	br, err := tx.s.getKey(k, tx.w.ld)
 	if *CountKeys {
 		p, r := UndoCKey(k)
 		if r == 'm' {
@@ -750,7 +760,7 @@ func (tx *LTransaction) make_or_get_key(k Key, op KeyType) *BRecord {
 		}
 	}
 	if br == nil || err2 != nil {
-		br, err = tx.s.getKey(k)
+		br, err = tx.s.getKey(k, tx.w.ld)
 		if err != nil {
 			log.Fatalf("Should exist\n")
 		}
@@ -875,6 +885,10 @@ func (tx *LTransaction) GetPhase() int {
 
 func (tx *LTransaction) Store() *Store {
 	return tx.s
+}
+
+func (tx *LTransaction) Worker() *Worker {
+	return tx.w
 }
 
 func (tx *LTransaction) Abort() TID {

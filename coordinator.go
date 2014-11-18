@@ -124,7 +124,7 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 	xx := len(*s.cand.h)
 	for i := 0; i < xx; i++ {
 		o := heap.Pop(s.cand.h).(*OneStat)
-		br, _ := s.getKey(o.k)
+		br, _ := s.getKey(o.k, nil)
 		if !br.dd {
 			if !s.any_dd {
 				// Higher threshold for the first one, since it kicks off phases
@@ -250,7 +250,7 @@ func (c *Coordinator) IncrementEpoch(force bool) {
 	if !*AlwaysSplit {
 		if move_dd != nil {
 			for k, _ := range move_dd {
-				br, _ := s.getKey(k)
+				br, _ := s.getKey(k, nil)
 				br.dd = true
 				s.dd[k] = true
 				WMoved += 1
@@ -258,7 +258,7 @@ func (c *Coordinator) IncrementEpoch(force bool) {
 		}
 		if remove_dd != nil {
 			for k, _ := range remove_dd {
-				br, _ := s.getKey(k)
+				br, _ := s.getKey(k, nil)
 				br.dd = false
 				s.dd[k] = false
 				RMoved += 1

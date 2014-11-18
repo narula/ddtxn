@@ -3,16 +3,25 @@ package ddtxn
 import (
 	"errors"
 	"flag"
+	"fmt"
+	"hash"
+	"hash/crc32"
 	"log"
 	"runtime/debug"
 	"sync"
+
+	"github.com/narula/gotomic"
 
 	"github.com/narula/ddtxn/dlog"
 )
 
 type TID uint64
-type Key [16]byte
+
+//type Key [16]byte
+type Key gotomic.Key
 type Value interface{}
+
+var hasher hash.Hash32
 
 type Chunk struct {
 	padding1 [128]byte
@@ -22,6 +31,7 @@ type Chunk struct {
 }
 
 var UseRLocks = flag.Bool("rlock", true, "Use Rlocks\n")
+var GStore = flag.Bool("gstore", false, "Use Gotomic Hash Map instead of Go maps\n")
 
 var (
 	ENOKEY   = errors.New("doppel: no key")
@@ -39,8 +49,10 @@ const (
 type Store struct {
 	padding1        [128]byte
 	store           []*Chunk
+	gstore          *gotomic.Hash
 	NChunksAccessed []int64
 	dd              map[Key]bool
+	hash_codes      map[Key]uint32
 	any_dd          bool
 	cand            *Candidates
 	padding2        [128]byte
@@ -51,12 +63,15 @@ func (s *Store) DD() map[Key]bool {
 }
 
 func NewStore() *Store {
+	hasher = crc32.NewIEEE()
 	x := make([]*OneStat, 0)
 	sh := StatsHeap(x)
 	s := &Store{
 		store:           make([]*Chunk, CHUNKS),
+		gstore:          gotomic.NewHash(),
 		NChunksAccessed: make([]int64, CHUNKS),
 		dd:              make(map[Key]bool),
+		hash_codes:      make(map[Key]uint32),
 		cand:            &Candidates{make(map[Key]*OneStat), &sh},
 	}
 	var bb byte
@@ -71,32 +86,59 @@ func NewStore() *Store {
 	return s
 }
 
+func (s *Store) PrecomputeHashCode(k Key) {
+	s.hash_codes[k] = gotomic.Key(k).HashCode()
+}
+
 func (s *Store) getOrCreateTypedKey(k Key, v Value, kt KeyType) *BRecord {
-	br, err := s.getKey(k)
+	br, err := s.getKey(k, nil)
 	if err == ENOKEY {
-		if !*UseRLocks {
-			log.Fatalf("Should have preallocated keys if not locking chunks\n")
+		if *GStore {
+			thing, ok := s.gstore.Get(gotomic.Key(k))
+			if !ok {
+				br = MakeBR(k, v, kt)
+				did := s.gstore.PutIfMissing(gotomic.Key(k), br)
+				if !did {
+					thing, ok = s.gstore.Get(gotomic.Key(k))
+					if !ok {
+						log.Fatalf("Cannot put new key, but Get() says it isn't there %v\n", k)
+					}
+				}
+			}
+			br = thing.(*BRecord)
+		} else {
+			if !*UseRLocks {
+				log.Fatalf("Should have preallocated keys if not locking chunks\n")
+			}
+			// Create key
+			chunk := s.store[k[0]]
+			var ok bool
+			chunk.Lock()
+			br, ok = chunk.rows[k]
+			if !ok {
+				br = MakeBR(k, v, kt)
+				chunk.rows[k] = br
+			}
+			chunk.Unlock()
 		}
-		// Create key
-		chunk := s.store[k[0]]
-		var ok bool
-		chunk.Lock()
-		br, ok = chunk.rows[k]
-		if !ok {
-			br = MakeBR(k, v, kt)
-			chunk.rows[k] = br
-		}
-		chunk.Unlock()
 	}
 	return br
 }
 
 func (s *Store) CreateKey(k Key, v Value, kt KeyType) *BRecord {
-	chunk := s.store[k[0]]
 	br := MakeBR(k, v, kt)
-	chunk.Lock()
-	chunk.rows[k] = br
-	chunk.Unlock()
+	if *GStore {
+		x, ok := s.gstore.Put(gotomic.Key(k), br)
+		if ok {
+			fmt.Printf("Overwrote %v; already there? %v\n", k, x)
+		}
+		s.PrecomputeHashCode(k)
+	} else {
+		chunk := s.store[k[0]]
+		chunk.Lock()
+		chunk.rows[k] = br
+		chunk.Unlock()
+	}
 	return br
 }
 
@@ -104,50 +146,75 @@ func (s *Store) CreateKey(k Key, v Value, kt KeyType) *BRecord {
 // record is locked and inserted while holding the lock on the chunk.
 
 func (s *Store) CreateLockedKey(k Key, kt KeyType) (*BRecord, error) {
-	chunk := s.store[k[0]]
 	br := MakeBR(k, nil, kt)
 	br.Lock()
-	chunk.Lock()
-	_, ok := chunk.rows[k]
-	if ok {
+	if *GStore {
+		ok := s.gstore.PutIfMissing(gotomic.Key(k), br)
+		if !ok {
+			debug.PrintStack()
+			dlog.Printf("CreateLockedKey() Key already exists %v\n", k)
+			return nil, EEXISTS
+		}
+	} else {
+		chunk := s.store[k[0]]
+		chunk.Lock()
+		_, ok := chunk.rows[k]
+		if ok {
+			chunk.Unlock()
+			dlog.Printf("CreateLockedKey() Key already exists %v\n", k)
+			return nil, EEXISTS
+		}
+		chunk.rows[k] = br
 		chunk.Unlock()
-		dlog.Printf("Key already exists %v\n", k)
-		return nil, EEXISTS
 	}
-	chunk.rows[k] = br
-	chunk.Unlock()
 	return br, nil
 }
 
 func (s *Store) CreateMuLockedKey(k Key, kt KeyType) (*BRecord, error) {
-	chunk := s.store[k[0]]
 	br := MakeBR(k, nil, kt)
 	br.SLock()
-	chunk.Lock()
-	_, ok := chunk.rows[k]
-	if ok {
+	if *GStore {
+		ok := s.gstore.PutIfMissing(gotomic.Key(k), br)
+		if !ok {
+			dlog.Printf("Key already exists %v\n", k)
+			return nil, EEXISTS
+		}
+	} else {
+		chunk := s.store[k[0]]
+		chunk.Lock()
+		_, ok := chunk.rows[k]
+		if ok {
+			chunk.Unlock()
+			dlog.Printf("Key already exists %v\n", k)
+			return nil, EEXISTS
+		}
+		chunk.rows[k] = br
 		chunk.Unlock()
-		dlog.Printf("Key already exists %v\n", k)
-		return nil, EEXISTS
 	}
-	chunk.rows[k] = br
-	chunk.Unlock()
 	return br, nil
 }
 
 func (s *Store) CreateMuRLockedKey(k Key, kt KeyType) (*BRecord, error) {
-	chunk := s.store[k[0]]
 	br := MakeBR(k, nil, kt)
 	br.SRLock()
-	chunk.Lock()
-	_, ok := chunk.rows[k]
-	if ok {
+	if *GStore {
+		ok := s.gstore.PutIfMissing(gotomic.Key(k), br)
+		if !ok {
+			dlog.Printf("Key already exists %v\n", k)
+			return nil, EEXISTS
+		}
+	} else {
+		chunk := s.store[k[0]]
+		chunk.Lock()
+		_, ok := chunk.rows[k]
+		if ok {
+			chunk.Unlock()
+			dlog.Printf("Key already exists %v\n", k)
+			return nil, EEXISTS
+		}
+		chunk.rows[k] = br
 		chunk.Unlock()
-		dlog.Printf("Key already exists %v\n", k)
-		return nil, EEXISTS
 	}
-	chunk.rows[k] = br
-	chunk.Unlock()
 	return br, nil
 }
 
@@ -199,15 +266,30 @@ func (s *Store) Set(br *BRecord, v Value, op KeyType) {
 }
 
 func (s *Store) Get(k Key) (*BRecord, error) {
-	return s.getKey(k)
+	return s.getKey(k, nil)
 }
 
-func (s *Store) getKey(k Key) (*BRecord, error) {
+func (s *Store) getKey(k Key, ld *gotomic.LocalData) (*BRecord, error) {
 	if len(k) == 0 {
 		debug.PrintStack()
 		log.Fatalf("[store] getKey(): Empty key\n")
 	}
-	//s.NChunksAccessed[k[0]]++
+	if *GStore {
+		var x interface{}
+		var ok bool
+		hc, present := s.hash_codes[k]
+		if ld == nil || !present {
+			x, ok = s.gstore.Get(gotomic.Key(k))
+		} else {
+			x, ok = s.gstore.GetHC(hc, gotomic.Key(k), ld)
+		}
+		if !ok {
+			dlog.Printf("Not in hash map. %v %v %v\n", k, x, ok)
+			return nil, ENOKEY
+		} else {
+			return x.(*BRecord), nil
+		}
+	}
 	if !*UseRLocks {
 		x, err := s.getKeyStatic(k)
 		return x, err
