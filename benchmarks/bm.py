@@ -27,6 +27,7 @@ parser.add_option("--ncrr", action="store", type="float", dest="not_contended_re
 parser.add_option("--cw", action="store", type="float", dest="conflict_weight", default=2.0)
 parser.add_option("--rw", action="store", type="float", dest="read_weight", default=0.5)
 parser.add_option("--version", action="store", type="int", dest="version", default=0)
+parser.add_option("--gstore", action="store_true", dest="gstore", default=False)
 
 (options, args) = parser.parse_args()
 
@@ -35,8 +36,9 @@ ben_list_cpus = "thread==0 socket@0,1,2,7,3-6"
 
 LATENCY_PART = " -latency=%s" % options.latency
 VERSION_PART = " -v=%d" % options.version
+GSTORE_PART = " -gstore=%s" % options.gstore
 
-BASE_CMD = "GOGC=off numactl -C `list-cpus seq -n %d %s` ./%s -nprocs=%d -ngo=%d -nw=%d -nsec=%d -contention=%s -rr=%d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -atomic=%s -zipf=%s -out=data.out -ncrr=%s -cw=%.2f -rw=%.2f -split=%s" + LATENCY_PART + VERSION_PART
+BASE_CMD = "GOGC=off numactl -C `list-cpus seq -n %d %s` ./%s -nprocs=%d -ngo=%d -nw=%d -nsec=%d -contention=%s -rr=%d -allocate=%s -sys=%d -rlock=%s -wr=%s -phase=%s -sr=%d -atomic=%s -zipf=%s -out=data.out -ncrr=%s -cw=%.2f -rw=%.2f -split=%s" + LATENCY_PART + VERSION_PART + GSTORE_PART
 
 def do_param(bn, rr, contention, ncpu, sys, wratio=options.wratio, phase=options.phase, atomic=False, zipf=-1, ncrr=options.not_contended_read_rate, yval="total/sec", cw=options.conflict_weight, rw=options.read_weight, split=False):
     cmd = fill_cmd(bn, rr, contention, ncpu, sys, wratio, phase, atomic, zipf, ncrr, cw, rw, split)

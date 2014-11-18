@@ -10,6 +10,7 @@ import (
 	"log"
 	"runtime/debug"
 	"sync"
+	"unsafe"
 
 	"gotomic"
 )
@@ -96,7 +97,7 @@ func (s *Store) getOrCreateTypedKey(k Key, v Value, kt KeyType) *BRecord {
 			thing, ok := s.gstore.Get(gotomic.Key(k))
 			if !ok {
 				br = MakeBR(k, v, kt)
-				did := s.gstore.PutIfMissing(gotomic.Key(k), br)
+				did := s.gstore.PutIfMissing(gotomic.Key(k), unsafe.Pointer(br))
 				if !did {
 					thing, ok = s.gstore.Get(gotomic.Key(k))
 					if !ok {
@@ -104,7 +105,7 @@ func (s *Store) getOrCreateTypedKey(k Key, v Value, kt KeyType) *BRecord {
 					}
 				}
 			}
-			br = thing.(*BRecord)
+			br = (*BRecord)(thing)
 		} else {
 			if !*UseRLocks {
 				log.Fatalf("Should have preallocated keys if not locking chunks\n")
@@ -127,7 +128,7 @@ func (s *Store) getOrCreateTypedKey(k Key, v Value, kt KeyType) *BRecord {
 func (s *Store) CreateKey(k Key, v Value, kt KeyType) *BRecord {
 	br := MakeBR(k, v, kt)
 	if *GStore {
-		x, ok := s.gstore.Put(gotomic.Key(k), br)
+		x, ok := s.gstore.Put(gotomic.Key(k), unsafe.Pointer(br))
 		if ok {
 			fmt.Printf("Overwrote %v; already there? %v\n", k, x)
 		}
@@ -148,9 +149,8 @@ func (s *Store) CreateLockedKey(k Key, kt KeyType) (*BRecord, error) {
 	br := MakeBR(k, nil, kt)
 	br.Lock()
 	if *GStore {
-		ok := s.gstore.PutIfMissing(gotomic.Key(k), br)
+		ok := s.gstore.PutIfMissing(gotomic.Key(k), unsafe.Pointer(br))
 		if !ok {
-			debug.PrintStack()
 			dlog.Printf("CreateLockedKey() Key already exists %v\n", k)
 			return nil, EEXISTS
 		}
@@ -173,7 +173,7 @@ func (s *Store) CreateMuLockedKey(k Key, kt KeyType) (*BRecord, error) {
 	br := MakeBR(k, nil, kt)
 	br.SLock()
 	if *GStore {
-		ok := s.gstore.PutIfMissing(gotomic.Key(k), br)
+		ok := s.gstore.PutIfMissing(gotomic.Key(k), unsafe.Pointer(br))
 		if !ok {
 			dlog.Printf("Key already exists %v\n", k)
 			return nil, EEXISTS
@@ -197,7 +197,7 @@ func (s *Store) CreateMuRLockedKey(k Key, kt KeyType) (*BRecord, error) {
 	br := MakeBR(k, nil, kt)
 	br.SRLock()
 	if *GStore {
-		ok := s.gstore.PutIfMissing(gotomic.Key(k), br)
+		ok := s.gstore.PutIfMissing(gotomic.Key(k), unsafe.Pointer(br))
 		if !ok {
 			dlog.Printf("Key already exists %v\n", k)
 			return nil, EEXISTS
@@ -274,7 +274,7 @@ func (s *Store) getKey(k Key, ld *gotomic.LocalData) (*BRecord, error) {
 		log.Fatalf("[store] getKey(): Empty key\n")
 	}
 	if *GStore {
-		var x interface{}
+		var x unsafe.Pointer
 		var ok bool
 		hc, present := s.hash_codes[k]
 		if ld == nil || !present {
@@ -286,7 +286,10 @@ func (s *Store) getKey(k Key, ld *gotomic.LocalData) (*BRecord, error) {
 			dlog.Printf("Not in hash map. %v %v %v\n", k, x, ok)
 			return nil, ENOKEY
 		} else {
-			return x.(*BRecord), nil
+			if x == nil {
+				fmt.Printf("Nil brecord! %v\n", k)
+			}
+			return (*BRecord)(x), nil
 		}
 	}
 	if !*UseRLocks {
