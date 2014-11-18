@@ -8,7 +8,6 @@ import (
 	"hash"
 	"hash/crc32"
 	"log"
-	"reflect"
 	"runtime/debug"
 	"sync"
 
@@ -91,7 +90,7 @@ func (s *Store) PrecomputeHashCode(k Key) {
 }
 
 func (s *Store) getOrCreateTypedKey(k Key, v Value, kt KeyType) *BRecord {
-	br, err := s.getKey(k)
+	br, err := s.getKey(k, nil)
 	if err == ENOKEY {
 		if *GStore {
 			thing, ok := s.gstore.Get(gotomic.Key(k))
@@ -266,78 +265,25 @@ func (s *Store) Set(br *BRecord, v Value, op KeyType) {
 }
 
 func (s *Store) Get(k Key) (*BRecord, error) {
-	return s.getKey(k)
+	return s.getKey(k, nil)
 }
 
-func (s *Store) getKey(k Key) (*BRecord, error) {
+func (s *Store) getKey(k Key, ld *gotomic.LocalData) (*BRecord, error) {
 	if len(k) == 0 {
 		debug.PrintStack()
 		log.Fatalf("[store] getKey(): Empty key\n")
 	}
 	if *GStore {
-		x, ok := s.gstore.Get(gotomic.Key(k))
-		if !ok {
-			m := s.gstore.ToMap()
-			_, there := m[gotomic.Key(k)]
-			if there {
-				dlog.Printf("In map, but not in hash map? %v %v %v %v %v\n", k, x, ok, len(m), reflect.TypeOf(m[gotomic.Key(k)]))
-				x, ok = s.gstore.Get(gotomic.Key(k))
-				if !ok {
-					dlog.Printf("Really no key (tried twice)? %v %v %v %v %v %v\n", k, x, ok, gotomic.Key(k).HashCode(), len(m), m)
-					log.Fatalf("exiting.  key was in map..\n")
-				} else {
-					return x.(*BRecord), nil
-				}
-			} else {
-				dlog.Printf("Not in map, not in hash map. %v %v %v %v %v\n", k, x, there, len(m), reflect.TypeOf(m[gotomic.Key(k)]))
-				log.Fatalf("exiting not in map..\n")
-			}
-			return nil, ENOKEY
+		var x interface{}
+		var ok bool
+		hc, present := s.hash_codes[k]
+		if ld == nil || !present {
+			x, ok = s.gstore.Get(gotomic.Key(k))
 		} else {
-			return x.(*BRecord), nil
+			x, ok = s.gstore.GetHC(hc, gotomic.Key(k), ld)
 		}
-	}
-	if !*UseRLocks {
-		x, err := s.getKeyStatic(k)
-		return x, err
-	}
-	chunk := s.store[k[0]]
-	if chunk == nil {
-		log.Fatalf("[store] Didn't initialize chunk for key %v byte %v\n", k, k[0])
-	}
-	chunk.RLock()
-	vr, ok := chunk.rows[k]
-	if !ok || vr == nil {
-		chunk.RUnlock()
-		return vr, ENOKEY
-	}
-	chunk.RUnlock()
-	return vr, nil
-}
-
-func (s *Store) getKeyGotomic(k Key, w *Worker) (*BRecord, error) {
-	if len(k) == 0 {
-		debug.PrintStack()
-		log.Fatalf("[store] getKey(): Empty key\n")
-	}
-	if *GStore {
-		x, ok := s.gstore.GetHC(s.hash_codes[k], gotomic.Key(k), w.ld)
 		if !ok {
-			m := s.gstore.ToMap()
-			_, there := m[gotomic.Key(k)]
-			if there {
-				dlog.Printf("In map, but not in hash map? %v %v %v %v %v\n", k, x, ok, len(m), reflect.TypeOf(m[gotomic.Key(k)]))
-				x, ok = s.gstore.GetHC(s.hash_codes[k], gotomic.Key(k), w.ld)
-				if !ok {
-					dlog.Printf("Really no key (tried twice)? %v %v %v %v %v %v\n", k, x, ok, gotomic.Key(k).HashCode(), len(m), m)
-					log.Fatalf("exiting.  key was in map..\n")
-				} else {
-					return x.(*BRecord), nil
-				}
-			} else {
-				dlog.Printf("Not in map, not in hash map. %v %v %v %v %v\n", k, x, there, len(m), reflect.TypeOf(m[gotomic.Key(k)]))
-				log.Fatalf("exiting not in map..\n")
-			}
+			dlog.Printf("Not in hash map. %v %v %v\n", k, x, ok)
 			return nil, ENOKEY
 		} else {
 			return x.(*BRecord), nil

@@ -123,25 +123,25 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 	xx := len(*s.cand.h)
 	for i := 0; i < xx; i++ {
 		o := heap.Pop(s.cand.h).(*OneStat)
-		br, _ := s.getKey(o.k)
+		br, _ := s.getKey(o.k, nil)
 		if !br.dd {
 			if !s.any_dd {
 				// Higher threshold for the first one, since it kicks off phases
 				if o.ratio() > 1.33*(*WRRatio) && (o.writes > 1 || o.conflicts > 5) {
 					potential_dd_keys[o.k] = true
-					//dlog.Printf("move %v to split1 r:%v w:%v c:%v s:%v ra:%v after: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), c.PotentialPhaseChanges)
+					dlog.Printf("move %v to split1 r:%v w:%v c:%v s:%v ra:%v after: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), c.PotentialPhaseChanges)
 					s.any_dd = true
 				} else {
-					//dlog.Printf("%v no move inertia r:%v w:%v c:%v s:%v ra:%v after: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), c.PotentialPhaseChanges)
+					dlog.Printf("%v no move inertia r:%v w:%v c:%v s:%v ra:%v after: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), c.PotentialPhaseChanges)
 				}
 				continue
 			}
 			if o.ratio() > *WRRatio && (o.writes > 1 || o.conflicts > 1) {
 				potential_dd_keys[o.k] = true
-				//dlog.Printf("move %v to split2 r:%v w:%v c:%v s:%v ra:%v after: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), c.PotentialPhaseChanges)
+				dlog.Printf("move %v to split2 r:%v w:%v c:%v s:%v ra:%v after: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), c.PotentialPhaseChanges)
 				s.any_dd = true
 			} else {
-				//dlog.Printf("too low; no move :%v; r:%v w:%v c:%v s:%v ra:%v; wr: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), *WRRatio)
+				dlog.Printf("too low; no move :%v; r:%v w:%v c:%v s:%v ra:%v; wr: %v\n", o.k, o.reads, o.writes, o.conflicts, o.stash, o.ratio(), *WRRatio)
 			}
 		}
 	}
@@ -152,14 +152,14 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 		}
 		o, ok := s.cand.m[k]
 		if !ok {
-			//dlog.Printf("Key %v was split but now is not in store candidates\n", k)
+			dlog.Printf("Key %v was split but now is not in store candidates\n", k)
 			if x, ok := c.to_remove[k]; x && ok {
 				c.to_remove[k] = false
 				to_remove[k] = true
 			} else {
 				c.to_remove[k] = true
 			}
-			//dlog.Printf("move %v from split2 \n", k)
+			dlog.Printf("move %v from split2 \n", k)
 			continue
 		}
 		if o.ratio() < (*WRRatio)/2 {
@@ -169,7 +169,7 @@ func (c *Coordinator) Stats() (map[Key]bool, map[Key]bool) {
 			} else {
 				c.to_remove[k] = true
 			}
-			//dlog.Printf("move %v from split r:%v w:%v c:%v s:%v ratio:%v\n", k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
+			dlog.Printf("move %v from split r:%v w:%v c:%v s:%v ratio:%v\n", k, o.reads, o.writes, o.conflicts, o.stash, o.ratio())
 		}
 	}
 	if len(s.dd) == 0 && len(potential_dd_keys) == 0 {
@@ -249,7 +249,7 @@ func (c *Coordinator) IncrementEpoch(force bool) {
 	if !*AlwaysSplit {
 		if move_dd != nil {
 			for k, _ := range move_dd {
-				br, _ := s.getKey(k)
+				br, _ := s.getKey(k, nil)
 				br.dd = true
 				s.dd[k] = true
 				WMoved += 1
@@ -257,7 +257,7 @@ func (c *Coordinator) IncrementEpoch(force bool) {
 		}
 		if remove_dd != nil {
 			for k, _ := range remove_dd {
-				br, _ := s.getKey(k)
+				br, _ := s.getKey(k, nil)
 				br.dd = false
 				s.dd[k] = false
 				RMoved += 1
