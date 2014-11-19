@@ -55,6 +55,7 @@ type Store struct {
 	hash_codes      map[Key]uint32
 	any_dd          bool
 	cand            *Candidates
+	mu              sync.RWMutex
 	padding2        [128]byte
 }
 
@@ -87,7 +88,9 @@ func NewStore() *Store {
 }
 
 func (s *Store) PrecomputeHashCode(k Key) {
+	s.mu.Lock()
 	s.hash_codes[k] = gotomic.Key(k).HashCode()
+	s.mu.Unlock()
 }
 
 func (s *Store) getOrCreateTypedKey(k Key, v Value, kt KeyType) *BRecord {
@@ -277,8 +280,10 @@ func (s *Store) getKey(k Key, ld *gotomic.LocalData) (*BRecord, error) {
 		var x unsafe.Pointer
 		var ok bool
 		hc, present := s.hash_codes[k]
-		if ld == nil || !present {
+		if ld == nil {
 			x, ok = s.gstore.Get(gotomic.Key(k))
+		} else if !present {
+			x, ok = s.gstore.GetHC(gotomic.Key(k).HashCode(), gotomic.Key(k), ld)
 		} else {
 			x, ok = s.gstore.GetHC(hc, gotomic.Key(k), ld)
 		}
