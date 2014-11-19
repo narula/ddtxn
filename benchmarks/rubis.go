@@ -72,7 +72,7 @@ func main() {
 	rubis.Populate(s, coord)
 	fmt.Printf("Done populating rubis\n")
 
-	if !*ddtxn.Allocate {
+	if !*ddtxn.Allocate && !*ddtxn.GStore {
 		tmp := *ddtxn.UseRLocks
 		*ddtxn.UseRLocks = true
 		rubis.PreAllocate(coord, bidrate, *rounds)
@@ -164,7 +164,7 @@ func main() {
 		gave_up[0] = gave_up[0] + gave_up[i]
 	}
 
-	if !*ddtxn.Allocate {
+	if !*ddtxn.Allocate && coord.Workers[0].PreAllocated {
 		keys := []rune{'b', 'c', 'd', 'i', 'k', 'u'}
 		for i := 0; i < *nworkers; i++ {
 			dlog.Printf("w: %v ", i)

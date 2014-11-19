@@ -116,6 +116,7 @@ func (b *Rubis) Populate(s *ddtxn.Store, c *ddtxn.Coordinator) {
 	}
 	*ddtxn.Allocate = tmp
 	*dlog.Debug = tmp2
+	fmt.Println("Done with Init()")
 }
 
 func (b *Rubis) PopulateBids(s *ddtxn.Store, c *ddtxn.Coordinator) {
