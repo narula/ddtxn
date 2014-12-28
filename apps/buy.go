@@ -1,12 +1,13 @@
 package apps
 
 import (
-	"ddtxn"
-	"ddtxn/dlog"
 	"flag"
 	"fmt"
 	"math/rand"
 	"sync/atomic"
+
+	"github.com/narula/ddtxn"
+	"github.com/narula/ddtxn/dlog"
 )
 
 var partition = flag.Bool("partition", false, "Whether or not to partition the non-contended keys amongst the cores")

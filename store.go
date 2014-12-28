@@ -1,7 +1,6 @@
 package ddtxn
 
 import (
-	"ddtxn/dlog"
 	"errors"
 	"flag"
 	"fmt"
@@ -12,7 +11,8 @@ import (
 	"sync"
 	"unsafe"
 
-	"gotomic"
+	"github.com/narula/ddtxn/dlog"
+	"github.com/narula/gotomic"
 )
 
 type TID uint64
