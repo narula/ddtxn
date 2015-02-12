@@ -6,9 +6,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/narula/ddtxn/dlog"
+	"github.com/narula/dlog"
 	"github.com/narula/ddtxn/spinlock"
-	"github.com/narula/ddtxn/wfmutex"
+	"github.com/narula/wfmutex"
 )
 
 var Conflicts = flag.Bool("conflicts", false, "Measure conflicts\n")

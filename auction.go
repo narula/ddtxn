@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/narula/ddtxn/dlog"
+	"github.com/narula/dlog"
 )
 
 const (

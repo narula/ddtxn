@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/narula/ddtxn/dlog"
+	"github.com/narula/dlog"
 )
 
 func BenchmarkMany(b *testing.B) {

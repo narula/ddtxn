@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/narula/ddtxn/dlog"
+	"github.com/narula/dlog"
 )
 
 func TestBasic(t *testing.T) {

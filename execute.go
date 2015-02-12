@@ -5,7 +5,7 @@ import (
 	"log"
 	"math/rand"
 
-	"github.com/narula/ddtxn/dlog"
+	"github.com/narula/dlog"
 )
 
 var SampleRate = flag.Int64("sr", 500, "Sample every sr transactions\n")

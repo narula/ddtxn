@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/narula/ddtxn/dlog"
+	"github.com/narula/dlog"
 )
 
 type Exp2 struct {

@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/narula/ddtxn/dlog"
+	"github.com/narula/dlog"
 	"github.com/narula/gotomic"
 )
 

@@ -13,7 +13,7 @@ import (
 
 	"github.com/narula/gotomic"
 
-	"github.com/narula/ddtxn/dlog"
+	"github.com/narula/dlog"
 )
 
 type TID uint64

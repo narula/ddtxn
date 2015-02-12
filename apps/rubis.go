@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/narula/ddtxn"
-	"github.com/narula/ddtxn/dlog"
+	"github.com/narula/dlog"
 )
 
 type Rubis struct {

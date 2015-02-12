@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/narula/ddtxn"
-	"github.com/narula/ddtxn/dlog"
-	"github.com/narula/ddtxn/prof"
+	"github.com/narula/dlog"
+	"github.com/narula/prof"
 )
 
 var nprocs = flag.Int("nprocs", 2, "GOMAXPROCS default 2")

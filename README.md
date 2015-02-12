@@ -11,11 +11,9 @@ To run the Doppel benchmarks, install go from source following the instructions 
 
     https://golang.org/doc/install/source
 
-Then `go get` the code:
+Right now the only way to install ddtxn is to clone the repository.
 
-    go get github.com/narula/ddtxn/...
-
-The code will be at `$GOPATH/src/github.com/narula/ddtxn`.
+Assuming the code will be at `$GOPATH/src/ddtxn`:
 
 To run the tests, use `go test`.
 
@@ -23,6 +21,6 @@ Add `$GOPATH/bin` to your `PATH` environment variable.
 
 Run a benchmark:
 
-    cd $GOPATH/github.com/narula/ddtxn/benchmarks
+    cd $GOPATH/src/ddtxn/benchmarks
     go install ./single
     python bm.py --exp=single --rlock --ncores=N
