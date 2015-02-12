@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/narula/ddtxn"
+	"ddtxn"
 	"github.com/narula/dlog"
 	"github.com/narula/prof"
 )
