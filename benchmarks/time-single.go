@@ -1,9 +1,10 @@
-// +build timesingle
-
 package main
 
 import (
 	"container/heap"
+	"ddtxn"
+	"ddtxn/dlog"
+	"ddtxn/prof"
 	"flag"
 	"fmt"
 	"log"
@@ -12,10 +13,6 @@ import (
 	"runtime"
 	"sync"
 	"time"
-
-	"github.com/narula/ddtxn"
-	"github.com/narula/ddtxn/dlog"
-	"github.com/narula/ddtxn/prof"
 )
 
 var nprocs = flag.Int("nprocs", 2, "GOMAXPROCS default 2")

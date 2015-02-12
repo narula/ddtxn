@@ -1,16 +1,15 @@
 package ddtxn
 
 import (
+	"ddtxn/dlog"
 	"flag"
+	"gotomic"
 	"log"
 	"runtime/debug"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/narula/ddtxn/dlog"
-	"github.com/narula/gotomic"
 )
 
 const (

@@ -1,14 +1,13 @@
 package ddtxn
 
 import (
+	"ddtxn/dlog"
 	"math/rand"
 	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
-
-	"github.com/narula/ddtxn/dlog"
 )
 
 func BenchmarkMany(b *testing.B) {

@@ -1,9 +1,8 @@
 package apps
 
 import (
+	"ddtxn"
 	"flag"
-
-	"github.com/narula/ddtxn"
 )
 
 var incr = flag.Bool("incr", true, "Do incr or RW workload")
