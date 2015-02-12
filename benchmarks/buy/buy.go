@@ -12,8 +12,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"ddtxn"
-	"ddtxn/apps"
+	"github.com/narula/ddtxn"
+	"github.com/narula/ddtxn/apps"
 	"github.com/narula/dlog"
 	"github.com/narula/prof"
 )
