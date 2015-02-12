@@ -7,6 +7,7 @@ In-Memory Transactions"](http://pdos.csail.mit.edu/~neha/phaser.pdf),
 presented at OSDI 2014.
 
 Get the code:
+
     go get github.com/narula/dlog
     go get github.com/narula/prof
     go get github.com/narula/wfmutex
