@@ -2,6 +2,7 @@ package ddtxn
 
 import (
 	crand "crypto/rand"
+	"ddtxn/dlog"
 	"fmt"
 	"log"
 	"math"
@@ -9,8 +10,6 @@ import (
 	"os/exec"
 	"strings"
 	"time"
-
-	"github.com/narula/ddtxn/dlog"
 )
 
 type Exp2 struct {

@@ -1,10 +1,9 @@
 package ddtxn
 
 import (
+	"ddtxn/dlog"
 	"fmt"
 	"testing"
-
-	"github.com/narula/ddtxn/dlog"
 )
 
 func TestBasic(t *testing.T) {

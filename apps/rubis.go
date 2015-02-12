@@ -1,15 +1,14 @@
 package apps
 
 import (
+	"ddtxn"
+	"ddtxn/dlog"
 	"fmt"
 	"log"
 	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/narula/ddtxn"
-	"github.com/narula/ddtxn/dlog"
 )
 
 type Rubis struct {

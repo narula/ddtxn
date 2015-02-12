@@ -1,8 +1,10 @@
-// +build big
-
 package main
 
 import (
+	"ddtxn"
+	"ddtxn/apps"
+	"ddtxn/dlog"
+	"ddtxn/prof"
 	"flag"
 	"fmt"
 	"log"
@@ -11,11 +13,6 @@ import (
 	"runtime"
 	"sync"
 	"time"
-
-	"github.com/narula/ddtxn"
-	"github.com/narula/ddtxn/apps"
-	"github.com/narula/ddtxn/dlog"
-	"github.com/narula/ddtxn/prof"
 )
 
 var nprocs = flag.Int("nprocs", 2, "GOMAXPROCS default 2")
