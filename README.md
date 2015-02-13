@@ -15,7 +15,11 @@ Get the code:
     
 To run the tests, use `go test`.
 
-Add `$GOPATH/bin` to your `PATH` environment variable.
+Clone the list-cpus repo and add it to your path:
+
+    git clone git@github.com:narula/list-cpus.git
+
+Add `$GOPATH/bin` and the list-cpus repo to your `PATH` environment variable
 
 Run a benchmark:
 
