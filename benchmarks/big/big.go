@@ -58,7 +58,7 @@ func main() {
 
 	big_app := &apps.Big{}
 	big_app.Init(*nbidders, nproducts, *nworkers, *readrate, *clientGoRoutines, *notcontended_readrate)
-	big_app.Populate(s, &coord.Workers[0].E)
+	big_app.Populate(s, coord.Workers[0].E)
 
 	dlog.Printf("Done initializing buy\n")
 
