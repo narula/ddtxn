@@ -194,7 +194,7 @@ func main() {
 	p.Stop()
 
 	stats := make([]int64, ddtxn.LAST_STAT)
-	nitr, nwait, _ := ddtxn.CollectCounts(coord, stats)
+	nitr, nwait, _, _, _, _, _ := ddtxn.CollectCounts(coord, stats)
 
 	for i := 1; i < *clientGoRoutines; i++ {
 		gave_up[0] = gave_up[0] + gave_up[i]

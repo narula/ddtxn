@@ -192,7 +192,7 @@ func main() {
 	end := time.Since(start)
 	p.Stop()
 	stats := make([]int64, ddtxn.LAST_STAT)
-	nitr, nwait, nwait2 := ddtxn.CollectCounts(coord, stats)
+	nitr, nwait, nwait2, _, _, _, _ := ddtxn.CollectCounts(coord, stats)
 	_ = nwait2
 
 	if *doValidate {

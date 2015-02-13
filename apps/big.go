@@ -27,7 +27,7 @@ func (b *Big) Init(ni, np, nw, rr, ngo int, ncrr float64) {
 	b.ncontended_rate = int(ncrr * float64(rr))
 }
 
-func (b *Big) Populate(s *ddtxn.Store, ex *ddtxn.ETransaction) {
+func (b *Big) Populate(s *ddtxn.Store, ex ddtxn.ETransaction) {
 	for i := 0; i < int(b.ni); i++ {
 		k := ddtxn.BidKey(uint64(i))
 		s.CreateKey(k, int32(0), ddtxn.SUM)

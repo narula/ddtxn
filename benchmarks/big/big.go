@@ -58,7 +58,7 @@ func main() {
 
 	big_app := &apps.Big{}
 	big_app.Init(*nbidders, nproducts, *nworkers, *readrate, *clientGoRoutines, *notcontended_readrate)
-	big_app.Populate(s, coord.Workers[0].E)
+	big_app.Populate(s, &coord.Workers[0].E)
 
 	dlog.Printf("Done initializing buy\n")
 
@@ -79,25 +79,21 @@ func main() {
 			var t ddtxn.Query
 			for duration.After(time.Now()) {
 				big_app.MakeOne(w.ID, &local_seed, &t)
-				if *apps.Latency || *doValidate {
+				if *ddtxn.Latency {
+					t.S = time.Now()
+				}
+				if *doValidate {
 					t.W = make(chan struct {
 						R *ddtxn.Result
 						E error
 					})
-					txn_start := time.Now()
 					_, err := w.One(t)
 					if err == ddtxn.ESTASH {
 						x := <-t.W
 						err = x.E
 					}
-					txn_end := time.Since(txn_start)
-					if *apps.Latency {
-						big_app.Time(&t, txn_end, n)
-					}
-					if *doValidate {
-						if err == nil {
-							big_app.Add(t)
-						}
+					if err == nil {
+						big_app.Add(t)
 					}
 				} else {
 					w.One(t)
@@ -112,7 +108,7 @@ func main() {
 	p.Stop()
 
 	stats := make([]int64, ddtxn.LAST_STAT)
-	nitr, nwait, nwait2 := ddtxn.CollectCounts(coord, stats)
+	nitr, nwait, nwait2, _, _, _, _ := ddtxn.CollectCounts(coord, stats)
 
 	if *doValidate {
 		big_app.Validate(s, int(nitr))
@@ -129,7 +125,7 @@ func main() {
 
 	ddtxn.PrintStats(out, stats, f, coord, s, *nbidders)
 
-	x, y := big_app.LatencyString()
+	x, y :=coord.Latency()
 	f.WriteString(x)
 	f.WriteString(y)
 	f.WriteString("\n")
